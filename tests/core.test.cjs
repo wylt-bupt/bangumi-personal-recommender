@@ -77,8 +77,8 @@ test("extracts creator and production evidence from subject infobox", () => {
   assert.deepEqual(Core.selectContentTags({
     id: 14,
     type: 2,
-    tags: ["新房昭之", "催泪", "gal改", "恋爱", "校园", "治愈"],
-  }).map((entry) => entry.label), ["催泪", "gal改", "恋爱", "校园", "治愈"]);
+    tags: ["新房昭之", "轻小说", "輕小說", "催泪", "gal改", "恋爱", "校园", "治愈"],
+  }).map((entry) => entry.label), ["轻小说", "催泪", "gal改", "恋爱", "校园", "治愈"]);
 });
 
 test("learns positive and negative tag preference from rating residuals", () => {

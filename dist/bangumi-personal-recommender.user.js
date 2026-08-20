@@ -595,11 +595,20 @@
     const descriptive = ranked.filter((entry) => CONTENT_TAG_PATTERN.test(entry.label));
     const displayPool = descriptive.length ? descriptive : ranked;
     const selected = [];
+    const seenFamilies = new Set();
     let usedCharacters = 0;
     for (const entry of displayPool) {
+      const normalizedLabel = creditAlias(entry.label).replace(/[.!！。]+$/g, "");
+      const family = /(?:轻小说|輕小說|ライトノベル)/i.test(normalizedLabel)
+        ? "light-novel"
+        : /群像/.test(normalizedLabel)
+          ? "ensemble"
+          : normalizedLabel;
+      if (seenFamilies.has(family)) continue;
       const cost = [...entry.label].length + (selected.length ? 1 : 0);
       if (selected.length && usedCharacters + cost > characterBudget) continue;
       selected.push(entry);
+      seenFamilies.add(family);
       usedCharacters += cost;
     }
     return selected;
