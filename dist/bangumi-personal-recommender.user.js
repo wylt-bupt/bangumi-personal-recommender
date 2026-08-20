@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.2.3
+// @version      0.2.4
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -938,29 +938,26 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.3";
+  const APP_VERSION = "0.2.4";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "13";
+  const RECOMMENDATION_MODEL_VERSION = "14";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
-  const MODE_LABELS = Object.freeze({
-    stable: "稳妥",
-    balanced: "均衡",
-    explore: "探索",
-  });
+  const RECOMMENDATION_MODE = "balanced";
 
   const ICONS = Object.freeze({
     spark: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.45 5.05L18.5 8.5l-5.05 1.45L12 15l-1.45-5.05L5.5 8.5l5.05-1.45L12 2Zm6 11 .9 3.1L22 17l-3.1.9L18 21l-.9-3.1L14 17l3.1-.9L18 13Z"/></svg>`,
     discover: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.25"/><path d="m15.55 8.45-2.18 4.92-4.92 2.18 2.18-4.92 4.92-2.18Z"/><circle cx="12" cy="12" r="1.15"/></svg>`,
     launchArrow: `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.75 5.25 5.25-5.25 5.25"/></svg>`,
+    layers: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8 4-8 4-8-4 8-4Z"/><path d="m4 12 8 4 8-4M4 16.5l8 4 8-4"/></svg>`,
     close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h8V3l-3.35 3.35Z"/></svg>`,
     arrow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 5-1.4 1.4 4.6 4.6H5v2h11.2l-4.6 4.6L13 19l7-7-7-7Z"/></svg>`,
@@ -1412,9 +1409,9 @@
       this.config = {
         username: DEFAULT_USER,
         subjectType: 2,
-        mode: "balanced",
         ...loadJson(CONFIG_KEY, {}),
       };
+      delete this.config.mode;
       this.client = new BangumiDataClient(
         this.store,
         this.config.username,
@@ -1484,16 +1481,17 @@
             <button class="icon-button close" type="button" aria-label="关闭推荐面板">${ICONS.close}</button>
           </header>
           <section class="controls" aria-label="推荐设置">
-            <label class="select-label">类型
-              <select data-role="type-select">${typeOptions}</select>
+            <label class="type-picker">
+              <span class="type-picker-icon">${ICONS.layers}</span>
+              <span class="type-picker-copy">
+                <strong>推荐类型</strong>
+                <small>选择要分析的收藏分类</small>
+              </span>
+              <span class="type-select-shell">
+                <select data-role="type-select" aria-label="推荐类型">${typeOptions}</select>
+                <span class="type-select-arrow">${ICONS.chevron}</span>
+              </span>
             </label>
-            <div class="mode-group" role="group" aria-label="推荐模式">
-              ${Object.entries(MODE_LABELS)
-                .map(
-                  ([mode, label]) => `<button type="button" data-mode="${mode}" aria-pressed="${mode === this.config.mode}">${label}</button>`,
-                )
-                .join("")}
-            </div>
           </section>
           <section class="progress-region" aria-live="polite">
             <div class="progress-copy"><span data-role="progress-text">准备就绪</span><span data-role="progress-count"></span></div>
@@ -1538,15 +1536,6 @@
         this.resetViewForType();
         this.ensureRecommendations({ force: false });
       });
-      for (const button of this.shadow.querySelectorAll("[data-mode]")) {
-        button.addEventListener("click", () => {
-          this.config.mode = button.dataset.mode;
-          this.persistConfig();
-          this.updateModeButtons();
-          if (this.state.profile && this.state.candidates.length) this.recompute();
-          else this.ensureRecommendations({ force: false });
-        });
-      }
       this.shadow.addEventListener("click", (event) => {
         const dismiss = event.composedPath().find(
           (element) => element instanceof Element && element.matches?.("[data-dismiss-id]"),
@@ -1620,12 +1609,6 @@
       }
     }
 
-    updateModeButtons() {
-      for (const button of this.shadow.querySelectorAll("[data-mode]")) {
-        button.setAttribute("aria-pressed", String(button.dataset.mode === this.config.mode));
-      }
-    }
-
     resetViewForType() {
       this.state.baseProfile = null;
       this.state.profile = null;
@@ -1639,7 +1622,7 @@
     }
 
     cacheKey() {
-      return `result:v${RECOMMENDATION_MODEL_VERSION}:${this.config.username}:${this.config.subjectType}:${this.config.mode}`;
+      return `result:v${RECOMMENDATION_MODEL_VERSION}:${this.config.username}:${this.config.subjectType}:${RECOMMENDATION_MODE}`;
     }
 
     async loadCachedResult() {
@@ -1751,13 +1734,13 @@
     recompute({ enforceJapanese = true, render = true } = {}) {
       const scored = this.state.candidates
         .map((subject) => {
-          const supplementalScore = Core.scoreSubject(subject, this.state.profile, this.config.mode);
+          const supplementalScore = Core.scoreSubject(subject, this.state.profile, RECOMMENDATION_MODE);
           const scoredSubject = this.state.baseProfile !== this.state.profile
             ? Core.blendSupplementalScore(
                 Core.scoreSubject(
                   { ...subject, persons: [], characters: [] },
                   this.state.baseProfile,
-                  this.config.mode,
+                  RECOMMENDATION_MODE,
                 ),
                 supplementalScore,
               )
@@ -1784,7 +1767,7 @@
       const selected = Core.diversify(
         source,
         5,
-        this.config.mode,
+        RECOMMENDATION_MODE,
         `${Core.recommendationSalt()}:${this.excludedBatch.size}`,
       );
       this.state.current = selected;
@@ -2067,12 +2050,31 @@
         .subline { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; }
         .icon-button { width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); display: grid; place-items: center; }
         .icon-button:hover { border-color: var(--primary); color: var(--primary); }
-        .controls { padding: 14px 24px; display: flex; align-items: end; gap: 12px; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
-        .select-label { display: grid; gap: 5px; color: var(--text-muted); font-size: 12px; font-weight: 700; }
-        select { min-width: 96px; height: 44px; padding: 0 32px 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-        .mode-group { display: grid; grid-template-columns: repeat(3, 1fr); flex: 1; border: 1px solid var(--border); border-radius: 11px; padding: 3px; background: var(--surface); }
-        .mode-group button { min-height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 700; }
-        .mode-group button[aria-pressed="true"] { background: var(--text); color: var(--surface); }
+        .controls { padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
+        .type-picker {
+          min-height: 68px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised);
+          display: grid; grid-template-columns: 40px minmax(0, 1fr) 124px; align-items: center; gap: 10px;
+          transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out;
+        }
+        .type-picker:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+        .type-picker:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
+        .type-picker-icon {
+          width: 40px; height: 40px; border-radius: 11px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary);
+          display: grid; place-items: center;
+        }
+        .type-picker-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+        .type-picker-copy { min-width: 0; display: grid; gap: 2px; }
+        .type-picker-copy strong { font-size: 13px; line-height: 1.35; }
+        .type-picker-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+        .type-select-shell { position: relative; min-width: 0; }
+        .type-select-shell select {
+          width: 100%; height: 44px; padding: 0 34px 0 12px; border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border)); border-radius: 10px;
+          appearance: none; -webkit-appearance: none; background: var(--surface-alt); color: var(--text); font-size: 13px; font-weight: 750; cursor: pointer;
+          transition: border-color 180ms ease-out, background 180ms ease-out;
+        }
+        .type-select-shell select:hover { border-color: color-mix(in srgb, var(--primary) 48%, var(--border)); background: var(--surface); }
+        .type-select-arrow { position: absolute; right: 10px; top: 50%; width: 18px; height: 18px; color: var(--primary); pointer-events: none; transform: translateY(-50%); display: grid; place-items: center; }
+        .type-select-arrow svg { width: 17px; height: 17px; fill: currentColor; }
         .progress-region { padding: 10px 24px 0; min-height: 42px; background: var(--surface); }
         .progress-copy { display: flex; justify-content: space-between; gap: 16px; color: var(--text-muted); font-size: 12px; }
         .progress-track { height: 3px; margin-top: 7px; overflow: hidden; background: var(--surface-alt); border-radius: 99px; }
@@ -2165,9 +2167,7 @@
         @media (max-width: 560px) {
           .drawer-header { padding: 18px 16px 14px; }
           h2 { font-size: 22px; }
-          .controls { padding: 12px 16px; align-items: stretch; flex-direction: column; }
-          .select-label { grid-template-columns: 42px 1fr; align-items: center; }
-          select { width: 100%; }
+          .controls { padding: 12px 16px; }
           .progress-region { padding-inline: 16px; }
           .content { padding: 15px 16px 24px; }
           .drawer-footer { padding-inline: 16px; }
@@ -2181,6 +2181,8 @@
           .launcher { right: 12px; bottom: max(68px, calc(env(safe-area-inset-bottom) + 12px)); width: 52px; min-height: 52px; padding: 6px; border-radius: 16px; }
           .launcher-mark { width: 38px; height: 38px; }
           .launcher-copy, .launcher-arrow { display: none; }
+          .type-picker { grid-template-columns: 40px minmax(0, 1fr) 110px; padding-inline: 10px; }
+          .type-picker-copy small { display: none; }
           .recommendation-card { grid-template-columns: 64px minmax(0, 1fr); }
           .cover { width: 64px; height: 90px; }
           .title-row { gap: 6px; }
