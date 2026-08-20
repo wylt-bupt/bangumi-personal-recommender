@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.3.1
+// @version      0.3.2
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -986,14 +986,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.1";
+  const APP_VERSION = "0.3.2";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "20";
+  const RECOMMENDATION_MODEL_VERSION = "21";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -1382,7 +1382,7 @@
       const directTags = [...options.directCandidateTags];
       const supplementalTags = [...(options.supplementalCandidateTags || [])];
       const allTags = [...new Set([...directTags, ...supplementalTags].map(Core.normalizeText))];
-      const key = `candidates:special:v3:${options.id || subjectType}:${allTags.sort().join("|")}`;
+      const key = `candidates:special:v4:${options.id || subjectType}:${allTags.sort().join("|")}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
@@ -1425,12 +1425,12 @@
       );
       this.progress(`正在补充“${tag}”API 候选…`, 0, 1);
       const first = await fetchPage(0);
-      const withSourceTag = (rows) => (Array.isArray(rows) ? rows : []).map((row) => ({
+      const withVerifiedEvidence = (rows) => (Array.isArray(rows) ? rows : []).map((row) => ({
         ...row,
-        tags: [...(Array.isArray(row.tags) ? row.tags : []), { name: tag }],
         adultEvidenceVerified: true,
+        adultEvidenceMetadata: Core.normalizeSubject(row),
       }));
-      const firstRows = withSourceTag(first.data);
+      const firstRows = withVerifiedEvidence(first.data);
       const pageSize = Math.max(1, firstRows.length || 20);
       const total = Math.max(firstRows.length, Number(first.total || 0));
       const offsets = Array.from(
@@ -1444,7 +1444,7 @@
         const page = await fetchPage(offset);
         completed += 1;
         this.progress(`正在补充“${tag}”API 候选…`, completed, totalRequests);
-        return withSourceTag(page.data);
+        return withVerifiedEvidence(page.data);
       });
       return this.dedupeSubjects([...firstRows, ...remaining.flat()]);
     }
@@ -1453,6 +1453,9 @@
       const map = new Map();
       for (const raw of subjects) {
         const subject = Core.normalizeSubject(raw);
+        if (raw?.adultEvidenceMetadata) {
+          subject.adultEvidenceMetadata = Core.normalizeSubject(raw.adultEvidenceMetadata);
+        }
         if (!subject.id) continue;
         const previous = map.get(subject.id) || {};
         map.set(subject.id, mergeTags
@@ -1478,6 +1481,8 @@
               adultEvidenceVerified: Boolean(
                 previous.adultEvidenceVerified || subject.adultEvidenceVerified,
               ),
+              adultEvidenceMetadata:
+                subject.adultEvidenceMetadata || previous.adultEvidenceMetadata,
             }
           : { ...previous, ...subject });
       }
@@ -1889,9 +1894,7 @@
           this.state.candidates = this.state.candidates.filter((subject) => {
             const evidence = subject.originMetadata?.adultEvidenceVerified === true
               ? subject.originMetadata
-              : subject.adultEvidenceVerified === true
-                ? subject
-                : null;
+              : subject.adultEvidenceMetadata || null;
             return evidence && Core.isAdultRecommendationCandidate(evidence);
           });
         }
