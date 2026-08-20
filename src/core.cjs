@@ -61,6 +61,15 @@
 
   const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年(?:[147]|10)月)?$|^(?:19|20)\d0s$/i;
   const FORMAT_TAGS = new Set(["tv", "剧场版", "劇場版", "ova", "oad", "web", "泡面番"]);
+  const ADULT_RECOMMENDATION_TAGS = Object.freeze({
+    profile: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画", "r18", "18x", "18禁"]),
+    direct: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画"]),
+    supplemental: Object.freeze(["r18", "18x", "18禁"]),
+    corroborating: Object.freeze([
+      "实用", "无码", "本番", "里番下限", "poro", "ピンクパイナップル", "queenbee",
+      "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
+    ]),
+  });
   const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃疼|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
 
   function clamp(value, min, max) {
@@ -91,6 +100,31 @@
       .map(normalizeText)
       .filter(Boolean);
     return [...new Set(normalized)];
+  }
+
+  function subjectHasTag(subjectInput, tagInput) {
+    const target = normalizeText(tagInput);
+    if (!target) return false;
+    const subject = normalizeSubject(subjectInput);
+    return [...subject.tags, ...subject.metaTags].includes(target);
+  }
+
+  function collectionHasTag(collectionInput, tagInput) {
+    const target = normalizeText(tagInput);
+    if (!target) return false;
+    const collection = normalizeCollection(collectionInput);
+    return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
+  }
+
+  function isAdultRecommendationCandidate(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const tags = new Set([...subject.tags, ...subject.metaTags]);
+    const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
+    if (containsAny(ADULT_RECOMMENDATION_TAGS.direct)) return true;
+    const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
+      .filter((value) => tags.has(normalizeText(value))).length;
+    if (supplementalCount >= 2) return true;
+    return supplementalCount === 1 && containsAny(ADULT_RECOMMENDATION_TAGS.corroborating);
   }
 
   function infoboxValueText(value) {
@@ -884,9 +918,13 @@
     SUBJECT_TYPES,
     COLLECTION_STATUS,
     ROLE_WEIGHTS,
+    ADULT_RECOMMENDATION_TAGS,
     clamp,
     normalizeText,
     normalizeTagList,
+    subjectHasTag,
+    collectionHasTag,
+    isAdultRecommendationCandidate,
     normalizeInfoboxEntries,
     normalizeSubject,
     classifyJapaneseOrigin,

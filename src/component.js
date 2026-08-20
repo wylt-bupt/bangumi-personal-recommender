@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.4";
+  const APP_VERSION = "0.2.5";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -16,8 +16,26 @@
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
 
-  const TYPE_OPTIONS = [2, 1, 4, 3, 6];
+  const RECOMMENDATION_TYPES = Object.freeze([
+    { id: "2", label: "动画", subjectType: 2 },
+    {
+      id: "anime_hentai",
+      label: "里番",
+      subjectType: 2,
+      profileTags: Core.ADULT_RECOMMENDATION_TAGS.profile,
+      directCandidateTags: Core.ADULT_RECOMMENDATION_TAGS.direct,
+      supplementalCandidateTags: Core.ADULT_RECOMMENDATION_TAGS.supplemental,
+    },
+    { id: "1", label: "书籍", subjectType: 1 },
+    { id: "4", label: "游戏", subjectType: 4 },
+    { id: "3", label: "音乐", subjectType: 3 },
+    { id: "6", label: "三次元", subjectType: 6 },
+  ]);
   const RECOMMENDATION_MODE = "balanced";
+
+  function recommendationType(value) {
+    return RECOMMENDATION_TYPES.find((entry) => entry.id === String(value)) || RECOMMENDATION_TYPES[0];
+  }
 
   const ICONS = Object.freeze({
     spark: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.45 5.05L18.5 8.5l-5.05 1.45L12 15l-1.45-5.05L5.5 8.5l5.05-1.45L12 2Zm6 11 .9 3.1L22 17l-3.1.9L18 21l-.9-3.1L14 17l3.1-.9L18 13Z"/></svg>`,
@@ -319,7 +337,10 @@
       return collections;
     }
 
-    async getCandidates(subjectType, profile, force = false) {
+    async getCandidates(subjectType, profile, force = false, options = {}) {
+      if (options.directCandidateTags?.length) {
+        return this.getSpecialCandidates(subjectType, options, force);
+      }
       const tags = Core.topRetrievalTags(profile, CANDIDATE_TAG_COUNT);
       const signature = tags.map(Core.normalizeText).sort().join("|");
       const key = `candidates:v3:${subjectType}:${signature}`;
@@ -375,11 +396,103 @@
       );
     }
 
-    dedupeSubjects(subjects) {
+    async getSpecialCandidates(subjectType, options, force = false) {
+      const directTags = [...options.directCandidateTags];
+      const supplementalTags = [...(options.supplementalCandidateTags || [])];
+      const allTags = [...new Set([...directTags, ...supplementalTags].map(Core.normalizeText))];
+      const key = `candidates:special:v2:${options.id || subjectType}:${allTags.sort().join("|")}`;
+      return this.cached(
+        key,
+        CANDIDATE_TTL,
+        async () => {
+          const pools = [];
+          for (const tag of allTags) {
+            try {
+              pools.push(...await this.getTaggedCandidatesFromApi(subjectType, tag));
+            } catch {
+              this.progress(`“${tag}”API 索引不可用，继续读取站内标签池…`, 0, 0);
+            }
+          }
+          for (const tag of directTags) {
+            try {
+              pools.push(...await this.getTaggedCandidatesFromSite(subjectType, tag));
+            } catch {
+              this.progress(`“${tag}”站内标签页不可用，保留其余候选来源…`, 0, 0);
+            }
+          }
+          const candidates = this.dedupeSubjects(pools, true).filter(Core.isAdultRecommendationCandidate);
+          if (!candidates.length) throw new Error("没有读取到可确认的里番候选条目。");
+          return candidates;
+        },
+        force,
+      );
+    }
+
+    async getTaggedCandidatesFromApi(subjectType, tag) {
+      const fetchPage = (offset) => this.requestJson(
+        `/v0/search/subjects?limit=20&offset=${offset}`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            keyword: "",
+            sort: "heat",
+            filter: { type: [subjectType], tag: [tag] },
+          }),
+        },
+      );
+      this.progress(`正在补充“${tag}”API 候选…`, 0, 1);
+      const first = await fetchPage(0);
+      const withSourceTag = (rows) => (Array.isArray(rows) ? rows : []).map((row) => ({
+        ...row,
+        tags: [...(Array.isArray(row.tags) ? row.tags : []), { name: tag }],
+      }));
+      const firstRows = withSourceTag(first.data);
+      const pageSize = Math.max(1, firstRows.length || 20);
+      const total = Math.max(firstRows.length, Number(first.total || 0));
+      const offsets = Array.from(
+        { length: Math.max(0, Math.ceil(total / pageSize) - 1) },
+        (_, index) => (index + 1) * pageSize,
+      );
+      let completed = 1;
+      const totalRequests = offsets.length + 1;
+      this.progress(`正在补充“${tag}”API 候选…`, completed, totalRequests);
+      const remaining = await concurrentMap(offsets, 3, async (offset) => {
+        const page = await fetchPage(offset);
+        completed += 1;
+        this.progress(`正在补充“${tag}”API 候选…`, completed, totalRequests);
+        return withSourceTag(page.data);
+      });
+      return this.dedupeSubjects([...firstRows, ...remaining.flat()]);
+    }
+
+    dedupeSubjects(subjects, mergeTags = false) {
       const map = new Map();
       for (const raw of subjects) {
         const subject = Core.normalizeSubject(raw);
-        if (subject.id) map.set(subject.id, { ...(map.get(subject.id) || {}), ...subject });
+        if (!subject.id) continue;
+        const previous = map.get(subject.id) || {};
+        map.set(subject.id, mergeTags
+          ? {
+              ...previous,
+              ...subject,
+              name: subject.name || previous.name || "",
+              nameCn: subject.nameCn || previous.nameCn || "",
+              date: subject.date || previous.date || "",
+              image: subject.image || previous.image || "",
+              tags: [...new Set([...(previous.tags || []), ...subject.tags])],
+              metaTags: [...new Set([...(previous.metaTags || []), ...subject.metaTags])],
+              rating: Number(subject.rating?.total || 0) >= Number(previous.rating?.total || 0)
+                ? subject.rating
+                : previous.rating,
+              rank: subject.rank || previous.rank || 0,
+              infobox: subject.infobox?.length ? subject.infobox : (previous.infobox || []),
+              summary: subject.summary || previous.summary || "",
+              persons: subject.persons?.length ? subject.persons : (previous.persons || []),
+              characters: subject.characters?.length ? subject.characters : (previous.characters || []),
+              relation: subject.relation || previous.relation || "",
+              sourceUrl: subject.sourceUrl || previous.sourceUrl || "",
+            }
+          : { ...previous, ...subject });
       }
       return [...map.values()];
     }
@@ -408,6 +521,23 @@
         await sleep(220);
       }
       return this.dedupeSubjects(pools);
+    }
+
+    async getTaggedCandidatesFromSite(subjectType, tag) {
+      const type = Core.SUBJECT_TYPES[subjectType];
+      if (!type) throw new Error("不支持的条目类型");
+      const base = `${location.origin}/${type.slug}/tag/${encodeURIComponent(tag)}?sort=collects`;
+      const first = await this.getHtmlDocument(`${base}&page=1`);
+      const pages = this.maxPage(first);
+      const pools = this.parseListItems(first, subjectType, 0, tag).map((item) => item.subject);
+      this.progress(`正在读取“${tag}”完整标签页…`, 1, pages);
+      for (let page = 2; page <= pages; page += 1) {
+        await sleep(220);
+        const documentNode = await this.getHtmlDocument(`${base}&page=${page}`);
+        pools.push(...this.parseListItems(documentNode, subjectType, 0, tag).map((item) => item.subject));
+        this.progress(`正在读取“${tag}”完整标签页…`, page, pages);
+      }
+      return this.dedupeSubjects(pools).filter((subject) => Core.subjectHasTag(subject, tag));
     }
 
     async getPersons(subjectId) {
@@ -474,7 +604,7 @@
       this.store = new KeyValueStore();
       this.config = {
         username: DEFAULT_USER,
-        subjectType: 2,
+        subjectType: "2",
         ...loadJson(CONFIG_KEY, {}),
       };
       delete this.config.mode;
@@ -527,8 +657,9 @@
     }
 
     shell() {
-      const typeOptions = TYPE_OPTIONS.map(
-        (type) => `<option value="${type}" ${type === Number(this.config.subjectType) ? "selected" : ""}>${Core.SUBJECT_TYPES[type].label}</option>`,
+      const selectedType = recommendationType(this.config.subjectType);
+      const typeOptions = RECOMMENDATION_TYPES.map(
+        (type) => `<option value="${type.id}" ${type.id === selectedType.id ? "selected" : ""}>${type.label}</option>`,
       ).join("");
       return `
         <button class="launcher" type="button" aria-label="打开 Bangumi 个性推荐" aria-haspopup="dialog">
@@ -597,7 +728,7 @@
       this.$(".refresh-data").addEventListener("click", () => this.ensureRecommendations({ force: true }));
       this.$(".next-batch").addEventListener("click", () => this.nextBatch());
       this.$('[data-role="type-select"]').addEventListener("change", (event) => {
-        this.config.subjectType = Number(event.target.value);
+        this.config.subjectType = event.target.value;
         this.persistConfig();
         this.resetViewForType();
         this.ensureRecommendations({ force: false });
@@ -688,7 +819,8 @@
     }
 
     cacheKey() {
-      return `result:v${RECOMMENDATION_MODEL_VERSION}:${this.config.username}:${this.config.subjectType}:${RECOMMENDATION_MODE}`;
+      const type = recommendationType(this.config.subjectType);
+      return `result:v${RECOMMENDATION_MODEL_VERSION}:${this.config.username}:${type.id}:${RECOMMENDATION_MODE}`;
     }
 
     async loadCachedResult() {
@@ -733,16 +865,20 @@
       this.$('[data-role="welcome"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
       try {
-        const type = Number(this.config.subjectType);
-        const collections = await this.client.getCollections(type, force);
+        const selectedType = recommendationType(this.config.subjectType);
+        const type = selectedType.subjectType;
+        const allCollections = await this.client.getCollections(type, force);
+        const collections = selectedType.profileTags?.length
+          ? allCollections.filter((item) => selectedType.profileTags.some((tag) => Core.collectionHasTag(item, tag)))
+          : allCollections;
         if (!collections.length) throw new Error("没有读取到该类型的收藏数据。请确认账号公开收藏或稍后重试。");
         this.state.collections = collections;
         this.state.baseProfile = Core.trainProfile(collections);
         this.state.profile = this.state.baseProfile;
         if (this.state.profile.ratedCount < 5) throw new Error("已评分样本不足 5 个，暂时无法建立可靠画像。");
 
-        const candidates = await this.client.getCandidates(type, this.state.profile, force);
-        const marked = new Set(collections.map((item) => Number(item.subjectId)));
+        const candidates = await this.client.getCandidates(type, this.state.profile, force, selectedType);
+        const marked = new Set(allCollections.map((item) => Number(item.subjectId)));
         this.state.candidates = candidates.filter((subject) => !marked.has(Number(subject.id)));
         if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
 

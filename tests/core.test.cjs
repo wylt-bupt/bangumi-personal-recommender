@@ -28,6 +28,27 @@ function collection(id, rate, tags, extra = {}) {
   };
 }
 
+test("matches special recommendation tags across public and personal collection tags", () => {
+  const publicTagged = collection(20, 7, ["里番", "纯爱"]);
+  const personalTagged = collection(21, 7, ["纯爱"]);
+  personalTagged.tags = ["里番"];
+  const unrelated = collection(22, 7, ["OVA", "纯爱"]);
+
+  assert.equal(Core.subjectHasTag(publicTagged.subject, "里番"), true);
+  assert.equal(Core.collectionHasTag(publicTagged, "里番"), true);
+  assert.equal(Core.collectionHasTag(personalTagged, "里番"), true);
+  assert.equal(Core.collectionHasTag(unrelated, "里番"), false);
+});
+
+test("keeps direct adult tags and requires corroboration for ambiguous rating tags", () => {
+  assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(31, 7, ["成人动画"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(32, 7, ["R18", "18禁"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(33, 7, ["R18", "无码"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(34, 7, ["R18", "血腥", "猎奇"])), false);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(35, 7, ["18X", "OVA", "BL"])), false);
+});
+
 test("normalizes staff roles and keeps role identity separate", () => {
   assert.equal(Core.normalizeRole("导演"), "director");
   assert.equal(Core.normalizeRole("アニメーション制作"), "studio");
