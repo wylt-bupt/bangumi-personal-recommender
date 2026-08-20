@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.1.5
+// @version      0.1.6
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -251,6 +251,45 @@
     return null;
   }
 
+  function normalizeInfoboxRole(keyInput) {
+    const key = normalizeText(keyInput);
+    if (/^(?:动画制作|動畫製作|アニメーション制作|制作会社|制作公司|studio)$/.test(key)) return "studio";
+    if (/^(?:总导演|總導演|导演|導演|監督|director)$/.test(key)) return "director";
+    if (/^(?:原作|作者|原作者|creator|original work)$/.test(key)) return "creator";
+    if (/^(?:系列构成|系列構成|シリーズ構成|series composition)$/.test(key)) return "series";
+    if (/^(?:脚本|劇本|剧本|scenario|screenplay)$/.test(key)) return "script";
+    if (/^(?:音乐|音樂|音楽|music)$/.test(key)) return "music";
+    return null;
+  }
+
+  function splitCreditNames(valueInput) {
+    return infoboxValueText(valueInput)
+      .replace(/\[[^\]]*]/g, " ")
+      .replace(/\([^)]*\)|（[^）]*）|【[^】]*】/g, "")
+      .split(/[、，,\/／;；\n]|\s+[&＆]\s+/)
+      .map((value) => value
+        .replace(/^(?:担当|制作|製作)[:：]\s*/i, "")
+        .trim())
+      .filter((value) => value && value.length <= 48 && !/^https?:/i.test(value))
+      .slice(0, 8);
+  }
+
+  function extractInfoboxCredits(infobox = []) {
+    const credits = [];
+    for (const entry of infobox) {
+      const role = normalizeInfoboxRole(entry?.key || entry?.k || "");
+      if (!role) continue;
+      for (const label of splitCreditNames(entry?.value ?? entry?.v ?? "")) {
+        credits.push({ role, label });
+      }
+    }
+    return credits;
+  }
+
+  function creditAlias(value) {
+    return normalizeText(value).replace(/[\s._・·—–-]+/g, "");
+  }
+
   function addGroupedFeature(groups, role, id, label) {
     if (!id || !ROLE_WEIGHTS[role]) return;
     if (!groups.has(role)) groups.set(role, new Map());
@@ -279,10 +318,21 @@
     const format = [...tagValues, ...subject.metaTags].find((tag) => FORMAT_TAGS.has(tag));
     if (format) addGroupedFeature(groups, "format", format, format.toUpperCase());
 
+    const creditedLabels = new Set();
     for (const person of subject.persons) {
       const role = normalizeRole(person.relation || person.type || person.career || person.jobs?.join(" "));
       const id = Number(person.id || person.person_id || 0);
-      if (role && id) addGroupedFeature(groups, role, id, person.name || person.name_cn || id);
+      if (role && id) {
+        const label = person.name || person.name_cn || id;
+        addGroupedFeature(groups, role, id, label);
+        creditedLabels.add(`${role}:${normalizeText(label)}`);
+      }
+    }
+    for (const { role, label } of extractInfoboxCredits(subject.infobox)) {
+      const normalizedLabel = normalizeText(label);
+      if (!normalizedLabel || creditedLabels.has(`${role}:${normalizedLabel}`)) continue;
+      addGroupedFeature(groups, role, `name:${normalizedLabel}`, label);
+      creditedLabels.add(`${role}:${normalizedLabel}`);
     }
 
     let actorCount = 0;
@@ -449,6 +499,155 @@
     return { role, roleLabel: roleLabel || role, label: raw };
   }
 
+  function selectByEvidenceCoverage(entries, characterBudget, coverage = 0.78, minimumRatio = 0.38) {
+    const sorted = [...entries]
+      .filter((entry) => Number(entry.value || 0) > 0 && entry.label)
+      .sort((a, b) => b.value - a.value);
+    if (!sorted.length) return [];
+    const strongest = sorted[0].value;
+    const total = sorted.reduce((sum, entry) => sum + entry.value, 0);
+    const selected = [];
+    let selectedMass = 0;
+    let usedCharacters = 0;
+    for (const entry of sorted) {
+      const labelLength = [...String(entry.label)].length + (selected.length ? 1 : 0);
+      if (selected.length && entry.value < strongest * minimumRatio) break;
+      if (selected.length && usedCharacters + labelLength > characterBudget) break;
+      selected.push(entry);
+      selectedMass += entry.value;
+      usedCharacters += labelLength;
+      if (selectedMass / total >= coverage) break;
+    }
+    return selected;
+  }
+
+  function selectRecommendationEvidence(scoredSubject, characterBudget = 108) {
+    const roleLabels = {
+      director: "导演",
+      studio: "制作",
+      creator: "原作",
+      series: "构成",
+      script: "脚本",
+      music: "音乐",
+    };
+    const creditsByAlias = new Map(
+      extractInfoboxCredits(scoredSubject?.subject?.infobox).map((credit) => [creditAlias(credit.label), credit]),
+    );
+    const genericPreferenceLabels = new Set(["tv", "日本", "动画", "動畫", "anime", "アニメ"]);
+    const reasons = [...(scoredSubject?.positiveReasons || [])]
+      .filter((entry) => Number(entry.value || 0) > 0)
+      .map((entry) => {
+        if (entry.role !== "tag" && entry.role !== "meta") return entry;
+        const credit = creditsByAlias.get(creditAlias(entry.label));
+        return credit
+          ? { ...entry, role: credit.role, roleLabel: roleLabels[credit.role] || entry.roleLabel, label: credit.label }
+          : entry;
+      })
+      .filter((entry) =>
+        (entry.role !== "tag" && entry.role !== "meta") ||
+        !genericPreferenceLabels.has(normalizeText(entry.label)),
+      )
+      .sort((a, b) => b.value - a.value);
+    const strongestReason = Number(reasons[0]?.value || 0);
+    const candidates = [];
+    const preferenceRoles = new Set(["tag", "meta", "format", "decade"]);
+    const preferenceReasons = selectByEvidenceCoverage(
+      reasons.filter((entry) => preferenceRoles.has(entry.role)),
+      28,
+    );
+    if (preferenceReasons.length) {
+      candidates.push({
+        kind: "preference",
+        reasons: preferenceReasons,
+        strength: preferenceReasons.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
+        cost: 18 + preferenceReasons.reduce((sum, entry) => sum + [...entry.label].length, 0),
+      });
+    }
+
+    const creativeRoles = new Set(["director", "studio", "creator", "series", "script", "music", "cv"]);
+    const creativeGroups = new Map();
+    for (const reason of reasons.filter((entry) => creativeRoles.has(entry.role))) {
+      if (!creativeGroups.has(reason.role)) creativeGroups.set(reason.role, []);
+      creativeGroups.get(reason.role).push(reason);
+    }
+    for (const [role, entries] of creativeGroups.entries()) {
+      if (strongestReason && entries[0].value < strongestReason * 0.28) continue;
+      const selected = selectByEvidenceCoverage(entries, 22, 0.76, 0.45);
+      if (!selected.length) continue;
+      candidates.push({
+        kind: "creative",
+        role,
+        roleLabel: selected[0].roleLabel,
+        reasons: selected,
+        strength: 0.2 + selected.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
+        cost: 16 + selected.reduce((sum, entry) => sum + [...entry.label].length, 0),
+      });
+    }
+
+    const personalMean = Number(scoredSubject?.personalMean || 0);
+    const positiveSimilarWorks = (scoredSubject?.similarWorks || [])
+      .filter((entry) =>
+        Number(entry.residual || 0) > 0 &&
+        Number(entry.rate || 0) > 0 &&
+        (!personalMean || Number(entry.rate) >= Math.ceil(personalMean)),
+      )
+      .sort((a, b) => b.similarity - a.similarity);
+    const strongestSimilarity = Number(positiveSimilarWorks[0]?.similarity || 0);
+    if (strongestSimilarity >= 0.065) {
+      const similarityCutoff = Math.max(0.065, strongestSimilarity * 0.72);
+      const works = [];
+      let usedCharacters = 0;
+      for (const work of positiveSimilarWorks) {
+        const workLength = [...String(work.name || "")].length + 4;
+        if (work.similarity < similarityCutoff) break;
+        if (works.length && usedCharacters + workLength > 46) break;
+        works.push(work);
+        usedCharacters += workLength;
+      }
+      if (works.length) {
+        candidates.push({
+          kind: "similarity",
+          works,
+          strength: 0.3 + strongestSimilarity / 0.2,
+          cost: 14 + usedCharacters,
+        });
+      }
+    }
+
+    if (scoredSubject?.bookOriginOverride) {
+      candidates.push({ kind: "exception", strength: 2, cost: 28 });
+    }
+    if (!candidates.length) return [{ kind: "quality", strength: 1, cost: 24 }];
+
+    const selected = [];
+    let remaining = Math.max(40, Number(characterBudget) || 108);
+    const strongestCreative = candidates
+      .filter((candidate) => candidate.kind === "creative")
+      .sort((a, b) => b.strength - a.strength)[0];
+    if (strongestCreative) {
+      selected.push(strongestCreative);
+      remaining -= strongestCreative.cost;
+    }
+    for (const originalCandidate of [...candidates].sort((a, b) => b.strength - a.strength)) {
+      if (originalCandidate === strongestCreative) continue;
+      let candidate = originalCandidate;
+      if (candidate.kind === "similarity" && candidate.cost > remaining && candidate.works.length > 1) {
+        const works = [...candidate.works];
+        let cost = candidate.cost;
+        while (works.length > 1 && cost > remaining) {
+          const removed = works.pop();
+          cost -= [...String(removed.name || "")].length + 4;
+        }
+        candidate = { ...candidate, works, cost };
+      }
+      if (candidate.cost > remaining && selected.length) continue;
+      selected.push(candidate);
+      remaining -= candidate.cost;
+    }
+    const order = { exception: 0, preference: 1, similarity: 2, creative: 3, quality: 4 };
+    return selected.sort((a, b) => order[a.kind] - order[b.kind]);
+  }
+
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
@@ -494,16 +693,19 @@
       weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
     const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
 
-    const positiveReasons = contributions.filter((entry) => entry.value > 0).slice(0, 3);
+    const positiveReasons = contributions.filter((entry) => entry.value > 0);
     const negativeReasons = contributions.filter((entry) => entry.value < 0).slice(0, 1);
-    const similarWorks = neighborCandidates.slice(0, 3).map((entry) => ({
+    const similarWorks = neighborCandidates.map((entry) => ({
       subjectId: entry.anchor.subjectId,
       name: entry.anchor.name,
+      rate: entry.anchor.rate,
+      residual: entry.anchor.residual,
       similarity: entry.similarity,
     }));
     const nearest = similarWorks[0] || null;
-    const reasonSupport = positiveReasons.length
-      ? mean(positiveReasons.map((entry) => entry.support))
+    const confidenceReasons = positiveReasons.slice(0, 3);
+    const reasonSupport = confidenceReasons.length
+      ? mean(confidenceReasons.map((entry) => entry.support))
       : 0;
     const confidenceBreakdown = {
       featureSupport: clamp(reasonSupport / 12, 0, 0.5),
@@ -515,6 +717,7 @@
 
     return {
       subject,
+      personalMean: profile.baseline.userMean,
       predicted,
       normalizedScore,
       bayesianScore: bayes,
@@ -637,6 +840,9 @@
     normalizeSubject,
     normalizeCollection,
     normalizeRole,
+    normalizeInfoboxRole,
+    splitCreditNames,
+    extractInfoboxCredits,
     buildFeatureVector,
     calculateRatingBaseline,
     expectedRating,
@@ -644,6 +850,7 @@
     weightedJaccard,
     bayesianScore,
     describeToken,
+    selectRecommendationEvidence,
     scoreSubject,
     classifyBookOrigin,
     isExceptionalForeignRecommendation,
@@ -665,7 +872,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.5";
+  const APP_VERSION = "0.1.6";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -674,7 +881,7 @@
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
   const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "4";
+  const RECOMMENDATION_MODEL_VERSION = "7";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -1074,19 +1281,31 @@
       );
     }
 
+    async getSubjectDetails(subjectId) {
+      if (!this.apiAvailable) return null;
+      return this.cached(
+        `subject-details:${subjectId}`,
+        ENTITY_TTL,
+        () => this.requestJson(`/v0/subjects/${subjectId}`).catch(() => null),
+      );
+    }
+
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 3, async (subjectId) => {
-        const [persons, characters] = await Promise.all([
+        const [details, persons, characters] = await Promise.all([
+          this.getSubjectDetails(subjectId),
           this.getPersons(subjectId),
           this.getCharacters(subjectId),
         ]);
         completed += 1;
         this.progress("正在补充导演、制作与声优信息…", completed, uniqueIds.length);
         const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
-        return base ? [subjectId, { ...base, persons, characters }] : null;
+        return base
+          ? [subjectId, { ...base, ...(details ? Core.normalizeSubject(details) : {}), persons, characters }]
+          : null;
       });
       return new Map(rows.filter(Boolean));
     }
@@ -1542,21 +1761,6 @@
       const title = subject.nameCn || subject.name || `条目 ${subject.id}`;
       const original = subject.nameCn && subject.name && subject.nameCn !== subject.name ? subject.name : "";
       const image = safeImageUrl(subject.image);
-      const reasons = item.positiveReasons.slice(0, 3).map((reason) =>
-        `<li><span>${escapeHtml(reason.roleLabel)}</span><strong>${escapeHtml(reason.label)}</strong></li>`,
-      );
-      const similarWorks = (item.similarWorks?.length
-        ? item.similarWorks
-        : item.nearest
-          ? [item.nearest]
-          : []).slice(0, 2);
-      for (const similar of similarWorks) {
-        reasons.push(`<li class="similar-reason"><span>相似</span><strong>${escapeHtml(similar.name)}</strong></li>`);
-      }
-      if (item.bookOriginOverride) {
-        reasons.unshift("<li><span>破例</span><strong>画像匹配与置信度极高</strong></li>");
-      }
-      if (!reasons.length) reasons.push("<li><span>依据</span><strong>全站质量与探索性</strong></li>");
       const globalScore = subject.rating.score ? subject.rating.score.toFixed(1) : "—";
       const votes = subject.rating.total ? subject.rating.total.toLocaleString("zh-CN") : "样本较少";
       const confidencePercent = Math.round(Number(item.confidenceScore || 0) * 100);
@@ -1565,8 +1769,41 @@
       const neighborPercent = Math.round(Number(confidenceBreakdown.neighborEvidence || 0) * 100);
       const ratingPercent = Math.round(Number(confidenceBreakdown.ratingEvidence || 0) * 100);
       const confidenceExplanation = `证据构成：偏好特征 ${featurePercent}/50，相似收藏 ${neighborPercent}/30，评分样本 ${ratingPercent}/20`;
+      const evidence = Core.selectRecommendationEvidence(item);
+      const quotedLabels = (reasons) =>
+        `<strong>「${reasons.map((reason) => escapeHtml(reason.label)).join("、")}」</strong>`;
+      const evidenceRows = evidence.map((entry) => {
+        if (entry.kind === "preference") {
+          return `<li><span class="evidence-kind">偏好</span><p>你对${quotedLabels(entry.reasons)}相关作品的评分通常高于个人平均</p></li>`;
+        }
+        if (entry.kind === "similarity") {
+          const works = entry.works.map((work) =>
+            `<strong>${Number(work.rate) ? `${Number(work.rate)} 分的` : ""}《${escapeHtml(work.name)}》</strong>`,
+          ).join("、");
+          return `<li><span class="evidence-kind">相似</span><p>与你收藏中 ${works} 特征接近</p></li>`;
+        }
+        if (entry.kind === "creative") {
+          const roleName = {
+            director: "导演",
+            studio: "制作公司",
+            creator: "作者／原作",
+            series: "系列构成",
+            script: "脚本",
+            music: "音乐创作",
+            cv: "声优",
+          }[entry.role] || entry.roleLabel || "创作人员";
+          return `<li><span class="evidence-kind">${escapeHtml(entry.roleLabel || roleName)}</span><p>${escapeHtml(roleName)}${quotedLabels(entry.reasons)}在你的历史评分中表现较好</p></li>`;
+        }
+        if (entry.kind === "exception") {
+          return "<li><span class=\"evidence-kind\">破例</span><p>虽非日本作品，但画像匹配与置信度同时达到极高阈值</p></li>";
+        }
+        return "<li><span class=\"evidence-kind\">口碑</span><p>全站评分与探索价值使它进入本轮候选</p></li>";
+      });
+      const shownSimilarCount = evidence
+        .filter((entry) => entry.kind === "similarity")
+        .reduce((sum, entry) => sum + entry.works.length, 0);
       return `
-        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-similar-count="${similarWorks.length}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
+        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-evidence-count="${evidence.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
@@ -1580,9 +1817,12 @@
               <div class="fit-score"><strong>${item.predicted.toFixed(1)}</strong><span>适合度</span></div>
             </div>
             <div class="metrics">
-              <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span><span class="confidence" title="${escapeHtml(confidenceExplanation)}" aria-label="置信度 ${item.confidence}，${confidencePercent}%。${escapeHtml(confidenceExplanation)}">置信度 ${item.confidence} · ${confidencePercent}%</span>
+              <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span>
             </div>
-            <ul class="reason-list">${reasons.join("")}</ul>
+            <section class="evidence-panel" aria-label="推荐依据，置信度 ${item.confidence}，${confidencePercent}%">
+              <div class="evidence-header"><strong>推荐依据</strong><span class="confidence" title="${escapeHtml(confidenceExplanation)}" aria-label="置信度 ${item.confidence}，${confidencePercent}%。${escapeHtml(confidenceExplanation)}">置信度 ${item.confidence} · ${confidencePercent}%</span></div>
+              <ul class="evidence-list">${evidenceRows.join("")}</ul>
+            </section>
             <div class="card-actions">
               <a class="primary compact" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">查看条目 ${ICONS.arrow}</a>
               <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="降低《${escapeHtml(title)}》的推荐优先级">${ICONS.hide}<span>不感兴趣</span></button>
@@ -1776,12 +2016,15 @@
         .fit-score strong { color: var(--primary); font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
         .fit-score span { color: var(--text-muted); font-size: 10px; }
         .metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-        .confidence { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
-        .reason-list { list-style: none; padding: 0; margin: 10px 0 12px; display: flex; flex-wrap: wrap; gap: 5px; }
-        .reason-list li { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 7px; border-radius: 7px; background: var(--surface-alt); font-size: 11px; }
-        .reason-list li.similar-reason { border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); }
-        .reason-list span { color: var(--text-muted); }
-        .reason-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .confidence { color: var(--accent); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
+        .evidence-panel { margin: 10px 0 12px; padding: 9px 10px 10px; border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border)); border-radius: 10px; background: var(--surface-alt); }
+        .evidence-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
+        .evidence-header > strong { font-size: 11px; letter-spacing: .04em; }
+        .evidence-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 7px; }
+        .evidence-list li { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 8px; }
+        .evidence-kind { min-width: 38px; padding: 2px 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--text-muted); font-size: 10px; font-weight: 800; line-height: 1.45; text-align: center; }
+        .evidence-list p { min-width: 0; margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+        .evidence-list p strong { color: var(--text); font-weight: 700; }
         .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
         .method-note { margin-top: 16px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-alt); transition: border-color 180ms ease-out, background 180ms ease-out; }
         .method-note[open] { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: var(--surface-raised); }

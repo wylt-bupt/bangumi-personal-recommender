@@ -237,6 +237,45 @@
     return null;
   }
 
+  function normalizeInfoboxRole(keyInput) {
+    const key = normalizeText(keyInput);
+    if (/^(?:动画制作|動畫製作|アニメーション制作|制作会社|制作公司|studio)$/.test(key)) return "studio";
+    if (/^(?:总导演|總導演|导演|導演|監督|director)$/.test(key)) return "director";
+    if (/^(?:原作|作者|原作者|creator|original work)$/.test(key)) return "creator";
+    if (/^(?:系列构成|系列構成|シリーズ構成|series composition)$/.test(key)) return "series";
+    if (/^(?:脚本|劇本|剧本|scenario|screenplay)$/.test(key)) return "script";
+    if (/^(?:音乐|音樂|音楽|music)$/.test(key)) return "music";
+    return null;
+  }
+
+  function splitCreditNames(valueInput) {
+    return infoboxValueText(valueInput)
+      .replace(/\[[^\]]*]/g, " ")
+      .replace(/\([^)]*\)|（[^）]*）|【[^】]*】/g, "")
+      .split(/[、，,\/／;；\n]|\s+[&＆]\s+/)
+      .map((value) => value
+        .replace(/^(?:担当|制作|製作)[:：]\s*/i, "")
+        .trim())
+      .filter((value) => value && value.length <= 48 && !/^https?:/i.test(value))
+      .slice(0, 8);
+  }
+
+  function extractInfoboxCredits(infobox = []) {
+    const credits = [];
+    for (const entry of infobox) {
+      const role = normalizeInfoboxRole(entry?.key || entry?.k || "");
+      if (!role) continue;
+      for (const label of splitCreditNames(entry?.value ?? entry?.v ?? "")) {
+        credits.push({ role, label });
+      }
+    }
+    return credits;
+  }
+
+  function creditAlias(value) {
+    return normalizeText(value).replace(/[\s._・·—–-]+/g, "");
+  }
+
   function addGroupedFeature(groups, role, id, label) {
     if (!id || !ROLE_WEIGHTS[role]) return;
     if (!groups.has(role)) groups.set(role, new Map());
@@ -265,10 +304,21 @@
     const format = [...tagValues, ...subject.metaTags].find((tag) => FORMAT_TAGS.has(tag));
     if (format) addGroupedFeature(groups, "format", format, format.toUpperCase());
 
+    const creditedLabels = new Set();
     for (const person of subject.persons) {
       const role = normalizeRole(person.relation || person.type || person.career || person.jobs?.join(" "));
       const id = Number(person.id || person.person_id || 0);
-      if (role && id) addGroupedFeature(groups, role, id, person.name || person.name_cn || id);
+      if (role && id) {
+        const label = person.name || person.name_cn || id;
+        addGroupedFeature(groups, role, id, label);
+        creditedLabels.add(`${role}:${normalizeText(label)}`);
+      }
+    }
+    for (const { role, label } of extractInfoboxCredits(subject.infobox)) {
+      const normalizedLabel = normalizeText(label);
+      if (!normalizedLabel || creditedLabels.has(`${role}:${normalizedLabel}`)) continue;
+      addGroupedFeature(groups, role, `name:${normalizedLabel}`, label);
+      creditedLabels.add(`${role}:${normalizedLabel}`);
     }
 
     let actorCount = 0;
@@ -435,6 +485,155 @@
     return { role, roleLabel: roleLabel || role, label: raw };
   }
 
+  function selectByEvidenceCoverage(entries, characterBudget, coverage = 0.78, minimumRatio = 0.38) {
+    const sorted = [...entries]
+      .filter((entry) => Number(entry.value || 0) > 0 && entry.label)
+      .sort((a, b) => b.value - a.value);
+    if (!sorted.length) return [];
+    const strongest = sorted[0].value;
+    const total = sorted.reduce((sum, entry) => sum + entry.value, 0);
+    const selected = [];
+    let selectedMass = 0;
+    let usedCharacters = 0;
+    for (const entry of sorted) {
+      const labelLength = [...String(entry.label)].length + (selected.length ? 1 : 0);
+      if (selected.length && entry.value < strongest * minimumRatio) break;
+      if (selected.length && usedCharacters + labelLength > characterBudget) break;
+      selected.push(entry);
+      selectedMass += entry.value;
+      usedCharacters += labelLength;
+      if (selectedMass / total >= coverage) break;
+    }
+    return selected;
+  }
+
+  function selectRecommendationEvidence(scoredSubject, characterBudget = 108) {
+    const roleLabels = {
+      director: "导演",
+      studio: "制作",
+      creator: "原作",
+      series: "构成",
+      script: "脚本",
+      music: "音乐",
+    };
+    const creditsByAlias = new Map(
+      extractInfoboxCredits(scoredSubject?.subject?.infobox).map((credit) => [creditAlias(credit.label), credit]),
+    );
+    const genericPreferenceLabels = new Set(["tv", "日本", "动画", "動畫", "anime", "アニメ"]);
+    const reasons = [...(scoredSubject?.positiveReasons || [])]
+      .filter((entry) => Number(entry.value || 0) > 0)
+      .map((entry) => {
+        if (entry.role !== "tag" && entry.role !== "meta") return entry;
+        const credit = creditsByAlias.get(creditAlias(entry.label));
+        return credit
+          ? { ...entry, role: credit.role, roleLabel: roleLabels[credit.role] || entry.roleLabel, label: credit.label }
+          : entry;
+      })
+      .filter((entry) =>
+        (entry.role !== "tag" && entry.role !== "meta") ||
+        !genericPreferenceLabels.has(normalizeText(entry.label)),
+      )
+      .sort((a, b) => b.value - a.value);
+    const strongestReason = Number(reasons[0]?.value || 0);
+    const candidates = [];
+    const preferenceRoles = new Set(["tag", "meta", "format", "decade"]);
+    const preferenceReasons = selectByEvidenceCoverage(
+      reasons.filter((entry) => preferenceRoles.has(entry.role)),
+      28,
+    );
+    if (preferenceReasons.length) {
+      candidates.push({
+        kind: "preference",
+        reasons: preferenceReasons,
+        strength: preferenceReasons.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
+        cost: 18 + preferenceReasons.reduce((sum, entry) => sum + [...entry.label].length, 0),
+      });
+    }
+
+    const creativeRoles = new Set(["director", "studio", "creator", "series", "script", "music", "cv"]);
+    const creativeGroups = new Map();
+    for (const reason of reasons.filter((entry) => creativeRoles.has(entry.role))) {
+      if (!creativeGroups.has(reason.role)) creativeGroups.set(reason.role, []);
+      creativeGroups.get(reason.role).push(reason);
+    }
+    for (const [role, entries] of creativeGroups.entries()) {
+      if (strongestReason && entries[0].value < strongestReason * 0.28) continue;
+      const selected = selectByEvidenceCoverage(entries, 22, 0.76, 0.45);
+      if (!selected.length) continue;
+      candidates.push({
+        kind: "creative",
+        role,
+        roleLabel: selected[0].roleLabel,
+        reasons: selected,
+        strength: 0.2 + selected.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
+        cost: 16 + selected.reduce((sum, entry) => sum + [...entry.label].length, 0),
+      });
+    }
+
+    const personalMean = Number(scoredSubject?.personalMean || 0);
+    const positiveSimilarWorks = (scoredSubject?.similarWorks || [])
+      .filter((entry) =>
+        Number(entry.residual || 0) > 0 &&
+        Number(entry.rate || 0) > 0 &&
+        (!personalMean || Number(entry.rate) >= Math.ceil(personalMean)),
+      )
+      .sort((a, b) => b.similarity - a.similarity);
+    const strongestSimilarity = Number(positiveSimilarWorks[0]?.similarity || 0);
+    if (strongestSimilarity >= 0.065) {
+      const similarityCutoff = Math.max(0.065, strongestSimilarity * 0.72);
+      const works = [];
+      let usedCharacters = 0;
+      for (const work of positiveSimilarWorks) {
+        const workLength = [...String(work.name || "")].length + 4;
+        if (work.similarity < similarityCutoff) break;
+        if (works.length && usedCharacters + workLength > 46) break;
+        works.push(work);
+        usedCharacters += workLength;
+      }
+      if (works.length) {
+        candidates.push({
+          kind: "similarity",
+          works,
+          strength: 0.3 + strongestSimilarity / 0.2,
+          cost: 14 + usedCharacters,
+        });
+      }
+    }
+
+    if (scoredSubject?.bookOriginOverride) {
+      candidates.push({ kind: "exception", strength: 2, cost: 28 });
+    }
+    if (!candidates.length) return [{ kind: "quality", strength: 1, cost: 24 }];
+
+    const selected = [];
+    let remaining = Math.max(40, Number(characterBudget) || 108);
+    const strongestCreative = candidates
+      .filter((candidate) => candidate.kind === "creative")
+      .sort((a, b) => b.strength - a.strength)[0];
+    if (strongestCreative) {
+      selected.push(strongestCreative);
+      remaining -= strongestCreative.cost;
+    }
+    for (const originalCandidate of [...candidates].sort((a, b) => b.strength - a.strength)) {
+      if (originalCandidate === strongestCreative) continue;
+      let candidate = originalCandidate;
+      if (candidate.kind === "similarity" && candidate.cost > remaining && candidate.works.length > 1) {
+        const works = [...candidate.works];
+        let cost = candidate.cost;
+        while (works.length > 1 && cost > remaining) {
+          const removed = works.pop();
+          cost -= [...String(removed.name || "")].length + 4;
+        }
+        candidate = { ...candidate, works, cost };
+      }
+      if (candidate.cost > remaining && selected.length) continue;
+      selected.push(candidate);
+      remaining -= candidate.cost;
+    }
+    const order = { exception: 0, preference: 1, similarity: 2, creative: 3, quality: 4 };
+    return selected.sort((a, b) => order[a.kind] - order[b.kind]);
+  }
+
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
@@ -480,16 +679,19 @@
       weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
     const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
 
-    const positiveReasons = contributions.filter((entry) => entry.value > 0).slice(0, 3);
+    const positiveReasons = contributions.filter((entry) => entry.value > 0);
     const negativeReasons = contributions.filter((entry) => entry.value < 0).slice(0, 1);
-    const similarWorks = neighborCandidates.slice(0, 3).map((entry) => ({
+    const similarWorks = neighborCandidates.map((entry) => ({
       subjectId: entry.anchor.subjectId,
       name: entry.anchor.name,
+      rate: entry.anchor.rate,
+      residual: entry.anchor.residual,
       similarity: entry.similarity,
     }));
     const nearest = similarWorks[0] || null;
-    const reasonSupport = positiveReasons.length
-      ? mean(positiveReasons.map((entry) => entry.support))
+    const confidenceReasons = positiveReasons.slice(0, 3);
+    const reasonSupport = confidenceReasons.length
+      ? mean(confidenceReasons.map((entry) => entry.support))
       : 0;
     const confidenceBreakdown = {
       featureSupport: clamp(reasonSupport / 12, 0, 0.5),
@@ -501,6 +703,7 @@
 
     return {
       subject,
+      personalMean: profile.baseline.userMean,
       predicted,
       normalizedScore,
       bayesianScore: bayes,
@@ -623,6 +826,9 @@
     normalizeSubject,
     normalizeCollection,
     normalizeRole,
+    normalizeInfoboxRole,
+    splitCreditNames,
+    extractInfoboxCredits,
     buildFeatureVector,
     calculateRatingBaseline,
     expectedRating,
@@ -630,6 +836,7 @@
     weightedJaccard,
     bayesianScore,
     describeToken,
+    selectRecommendationEvidence,
     scoreSubject,
     classifyBookOrigin,
     isExceptionalForeignRecommendation,

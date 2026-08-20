@@ -45,6 +45,21 @@ test("normalizes staff roles and keeps role identity separate", () => {
   assert.ok(vector.features["script:10"]);
 });
 
+test("extracts creator and production evidence from subject infobox", () => {
+  const vector = Core.buildFeatureVector({
+    ...subject(11, 8, ["科幻"]),
+    infobox: [
+      { key: "动画制作", value: "WHITE FOX" },
+      { key: "导演", value: "佐藤卓哉" },
+      { key: "脚本", value: "花田十辉(1, 3)、佐藤卓哉(2)" },
+    ],
+  });
+  assert.ok(vector.features["studio:name:white fox"]);
+  assert.ok(vector.features["director:name:佐藤卓哉"]);
+  assert.ok(vector.features["script:name:花田十辉"]);
+  assert.ok(vector.features["script:name:佐藤卓哉"]);
+});
+
 test("learns positive and negative tag preference from rating residuals", () => {
   const rows = [
     collection(1, 10, ["科幻", "悬疑"], { globalScore: 7.2 }),
@@ -79,14 +94,55 @@ test("scores a matching candidate above a disliked-pattern candidate", () => {
   assert.ok(liked.predicted > disliked.predicted);
   assert.ok(liked.positiveReasons.some((reason) => reason.label === "科幻"));
   assert.ok(liked.similarWorks.length >= 2);
-  assert.ok(liked.similarWorks.length <= 3);
+  assert.ok(liked.similarWorks.length <= 6);
   assert.deepEqual(liked.nearest, liked.similarWorks[0]);
+  assert.ok(liked.similarWorks.every((entry) => entry.rate > 0));
   assert.ok(liked.similarWorks.every((entry, index, list) =>
     index === 0 || list[index - 1].similarity >= entry.similarity,
   ));
   const confidenceParts = Object.values(liked.confidenceBreakdown).reduce((sum, value) => sum + value, 0);
   assert.ok(Math.abs(confidenceParts - liked.confidenceScore) < 1e-12);
   assert.ok(liked.confidenceScore >= 0 && liked.confidenceScore <= 1);
+});
+
+test("selects varied recommendation evidence by strength and text budget", () => {
+  const item = {
+    personalMean: 7.2,
+    positiveReasons: [
+      { role: "tag", roleLabel: "标签", label: "科幻", value: 0.5, support: 8 },
+      { role: "tag", roleLabel: "标签", label: "轮回", value: 0.4, support: 6 },
+      { role: "tag", roleLabel: "标签", label: "校园", value: 0.05, support: 12 },
+      { role: "studio", roleLabel: "制作", label: "WHITE FOX", value: 0.2, support: 4 },
+    ],
+    similarWorks: [
+      { name: "命运石之门", rate: 10, residual: 0.9, similarity: 0.2 },
+      { name: "来自新世界", rate: 9, residual: 0.7, similarity: 0.16 },
+      { name: "弱关联作品", rate: 8, residual: 0.3, similarity: 0.05 },
+      { name: "低分但超预期", rate: 7, residual: 0.4, similarity: 0.19 },
+    ],
+  };
+  const full = Core.selectRecommendationEvidence(item, 108);
+  const compact = Core.selectRecommendationEvidence(item, 40);
+  assert.deepEqual(full.map((entry) => entry.kind), ["preference", "similarity", "creative"]);
+  assert.deepEqual(full.find((entry) => entry.kind === "preference").reasons.map((entry) => entry.label), ["科幻", "轮回"]);
+  assert.deepEqual(full.find((entry) => entry.kind === "similarity").works.map((entry) => entry.name), ["命运石之门", "来自新世界"]);
+  assert.ok(compact.length < full.length);
+});
+
+test("reclassifies a verified credit tag as creative evidence", () => {
+  const evidence = Core.selectRecommendationEvidence({
+    subject: { infobox: [{ key: "动画制作", value: "A-1 Pictures" }] },
+    positiveReasons: [
+      { role: "tag", roleLabel: "标签", label: "a-1pictures", value: 0.4, support: 6 },
+      { role: "tag", roleLabel: "标签", label: "偶像", value: 0.2, support: 8 },
+      { role: "tag", roleLabel: "标签", label: "日本", value: 0.18, support: 20 },
+    ],
+    similarWorks: [],
+  });
+  assert.ok(evidence.some((entry) => entry.kind === "creative" && entry.role === "studio"));
+  assert.ok(evidence.find((entry) => entry.kind === "preference").reasons.every((entry) =>
+    entry.label !== "a-1pictures" && entry.label !== "日本",
+  ));
 });
 
 test("MMR reduces near-duplicate results", () => {
