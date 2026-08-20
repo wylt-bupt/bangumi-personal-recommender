@@ -2,6 +2,12 @@
 
 面向账号 `wylt` 的隐私优先超合金组件。它读取 Bangumi 收藏、评分、标签及可用的制作人员/声优关联，在全部已标记条目之外生成 5 个个性化推荐。
 
+## 当前部署
+
+- 源码主页：<https://github.com/wylt-bupt/bangumi-personal-recommender>
+- Bangumi 组件：<https://bgm.tv/dev/app/6931>
+- 当前版本：`0.1.0`，开发中，仅由组件创建者 `wylt` 启用，未提交全站审核。
+
 ## 已实现功能
 
 - 支持动画、书籍、游戏、音乐、三次元五类条目。
