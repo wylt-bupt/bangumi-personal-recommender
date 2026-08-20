@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.1.3
+// @version      0.1.4
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -496,13 +496,12 @@
 
     const positiveReasons = contributions.filter((entry) => entry.value > 0).slice(0, 3);
     const negativeReasons = contributions.filter((entry) => entry.value < 0).slice(0, 1);
-    const nearest = neighborCandidates[0]
-      ? {
-          subjectId: neighborCandidates[0].anchor.subjectId,
-          name: neighborCandidates[0].anchor.name,
-          similarity: neighborCandidates[0].similarity,
-        }
-      : null;
+    const similarWorks = neighborCandidates.slice(0, 3).map((entry) => ({
+      subjectId: entry.anchor.subjectId,
+      name: entry.anchor.name,
+      similarity: entry.similarity,
+    }));
+    const nearest = similarWorks[0] || null;
     const reasonSupport = positiveReasons.length
       ? mean(positiveReasons.map((entry) => entry.support))
       : 0;
@@ -524,6 +523,7 @@
       qualityScore: quality,
       positiveReasons,
       negativeReasons,
+      similarWorks,
       nearest,
       confidence,
       confidenceScore,
@@ -665,7 +665,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.3";
+  const APP_VERSION = "0.1.4";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -674,7 +674,7 @@
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
   const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "3";
+  const RECOMMENDATION_MODEL_VERSION = "4";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -1545,8 +1545,18 @@
       const reasons = item.positiveReasons.slice(0, 3).map((reason) =>
         `<li><span>${escapeHtml(reason.roleLabel)}</span><strong>${escapeHtml(reason.label)}</strong></li>`,
       );
-      if (item.nearest) {
-        reasons.push(`<li><span>相似</span><strong>${escapeHtml(item.nearest.name)}</strong></li>`);
+      if (item.bookOrigin?.status === "japanese") {
+        const originEvidence = item.bookOrigin.evidence?.slice(0, 2).join("、") || "作品信息与日系标签";
+        reasons.push(`<li class="origin-reason" title="来源判定依据：${escapeHtml(originEvidence)}"><span>来源</span><strong>日本作品</strong></li>`);
+      }
+      const similarWorks = (item.similarWorks?.length
+        ? item.similarWorks
+        : item.nearest
+          ? [item.nearest]
+          : []).slice(0, 2);
+      for (const similar of similarWorks) {
+        const similarityPercent = Math.round(Number(similar.similarity || 0) * 100);
+        reasons.push(`<li class="similar-reason" title="画像特征相似度 ${similarityPercent}%"><span>相似 ${similarityPercent}%</span><strong>${escapeHtml(similar.name)}</strong></li>`);
       }
       if (item.bookOriginOverride) {
         reasons.unshift("<li><span>破例</span><strong>画像匹配与置信度极高</strong></li>");
@@ -1561,7 +1571,7 @@
       const ratingPercent = Math.round(Number(confidenceBreakdown.ratingEvidence || 0) * 100);
       const confidenceExplanation = `证据构成：偏好特征 ${featurePercent}/50，相似收藏 ${neighborPercent}/30，评分样本 ${ratingPercent}/20`;
       return `
-        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
+        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-similar-count="${similarWorks.length}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
@@ -1774,6 +1784,8 @@
         .confidence { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
         .reason-list { list-style: none; padding: 0; margin: 10px 0 12px; display: flex; flex-wrap: wrap; gap: 5px; }
         .reason-list li { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 7px; border-radius: 7px; background: var(--surface-alt); font-size: 11px; }
+        .reason-list li.similar-reason { border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); }
+        .reason-list li.origin-reason { border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); }
         .reason-list span { color: var(--text-muted); }
         .reason-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }

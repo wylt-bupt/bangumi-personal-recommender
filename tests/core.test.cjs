@@ -78,6 +78,12 @@ test("scores a matching candidate above a disliked-pattern candidate", () => {
   const disliked = Core.scoreSubject(subject(102, 7.4, ["后宫", "异世界", "校园"]), profile);
   assert.ok(liked.predicted > disliked.predicted);
   assert.ok(liked.positiveReasons.some((reason) => reason.label === "科幻"));
+  assert.ok(liked.similarWorks.length >= 2);
+  assert.ok(liked.similarWorks.length <= 3);
+  assert.deepEqual(liked.nearest, liked.similarWorks[0]);
+  assert.ok(liked.similarWorks.every((entry, index, list) =>
+    index === 0 || list[index - 1].similarity >= entry.similarity,
+  ));
   const confidenceParts = Object.values(liked.confidenceBreakdown).reduce((sum, value) => sum + value, 0);
   assert.ok(Math.abs(confidenceParts - liked.confidenceScore) < 1e-12);
   assert.ok(liked.confidenceScore >= 0 && liked.confidenceScore <= 1);

@@ -482,13 +482,12 @@
 
     const positiveReasons = contributions.filter((entry) => entry.value > 0).slice(0, 3);
     const negativeReasons = contributions.filter((entry) => entry.value < 0).slice(0, 1);
-    const nearest = neighborCandidates[0]
-      ? {
-          subjectId: neighborCandidates[0].anchor.subjectId,
-          name: neighborCandidates[0].anchor.name,
-          similarity: neighborCandidates[0].similarity,
-        }
-      : null;
+    const similarWorks = neighborCandidates.slice(0, 3).map((entry) => ({
+      subjectId: entry.anchor.subjectId,
+      name: entry.anchor.name,
+      similarity: entry.similarity,
+    }));
+    const nearest = similarWorks[0] || null;
     const reasonSupport = positiveReasons.length
       ? mean(positiveReasons.map((entry) => entry.support))
       : 0;
@@ -510,6 +509,7 @@
       qualityScore: quality,
       positiveReasons,
       negativeReasons,
+      similarWorks,
       nearest,
       confidence,
       confidenceScore,
