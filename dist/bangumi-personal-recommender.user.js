@@ -291,7 +291,20 @@
   }
 
   function creditAlias(value) {
-    return normalizeText(value).replace(/[\s._・·—–-]+/g, "");
+    return normalizeText(value)
+      .replace(/[瀬瀨]/g, "濑")
+      .replace(/戸/g, "户")
+      .replace(/間/g, "间")
+      .replace(/類/g, "类")
+      .replace(/後/g, "后")
+      .replace(/國/g, "国")
+      .replace(/島/g, "岛")
+      .replace(/學/g, "学")
+      .replace(/樂/g, "乐")
+      .replace(/[辺邊邉]/g, "边")
+      .replace(/葉/g, "叶")
+      .replace(/澤/g, "泽")
+      .replace(/[\s._・·—–-]+/g, "");
   }
 
   function addGroupedFeature(groups, role, id, label) {
@@ -544,14 +557,14 @@
     ]);
     const titleAliases = new Set(
       [subject.name, subject.nameCn]
-        .map(normalizeText)
+        .map(creditAlias)
         .filter(Boolean),
     );
     for (const entry of subject.infobox) {
       const key = normalizeText(entry?.key || entry?.k || "");
       if (!/(?:别名|別名|中文名|英文名|原名|原題|alias|title)/i.test(key)) continue;
       for (const alias of infoboxValueText(entry?.value ?? entry?.v ?? "").split(/[、，,\/／;；\n]/)) {
-        const normalizedAlias = normalizeText(alias);
+        const normalizedAlias = creditAlias(alias);
         if (normalizedAlias) titleAliases.add(normalizedAlias);
       }
     }
@@ -574,7 +587,7 @@
         !TEMPORAL_TAG.test(entry.label) &&
         !genericLabels.has(normalizeText(entry.label)) &&
         !creditAliases.has(creditAlias(entry.label)) &&
-        !titleAliases.has(normalizeText(entry.label)) &&
+        !titleAliases.has(creditAlias(entry.label)) &&
         [...entry.label].length <= 18,
       )
       .sort((a, b) => b.score - a.score);

@@ -67,6 +67,13 @@ test("extracts creator and production evidence from subject infobox", () => {
   });
   assert.ok(bookVector.features["creator:name:瀬戸口廉也"]);
   assert.equal(bookVector.features["tag:瀬戸口廉也"], undefined);
+  assert.deepEqual(Core.selectContentTags({
+    id: 13,
+    type: 1,
+    name_cn: "人类衰退之后",
+    tags: ["濑户口廉也", "人類衰退之後", "致郁", "青春"],
+    infobox: [{ key: "作者", value: "唐辺葉介 (瀬戸口廉也)" }],
+  }).map((entry) => entry.label), ["致郁", "青春"]);
 });
 
 test("learns positive and negative tag preference from rating residuals", () => {
