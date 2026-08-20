@@ -492,10 +492,12 @@
     const reasonSupport = positiveReasons.length
       ? mean(positiveReasons.map((entry) => entry.support))
       : 0;
-    const confidenceScore =
-      clamp(reasonSupport / 12, 0, 0.5) +
-      clamp((nearest?.similarity || 0) / 0.6, 0, 0.3) +
-      clamp(Math.log10(subject.rating.total + 1) / 12, 0, 0.2);
+    const confidenceBreakdown = {
+      featureSupport: clamp(reasonSupport / 12, 0, 0.5),
+      neighborEvidence: clamp((nearest?.similarity || 0) / 0.6, 0, 0.3),
+      ratingEvidence: clamp(Math.log10(subject.rating.total + 1) / 12, 0, 0.2),
+    };
+    const confidenceScore = Object.values(confidenceBreakdown).reduce((sum, value) => sum + value, 0);
     const confidence = confidenceScore >= 0.68 ? "高" : confidenceScore >= 0.4 ? "中" : "探索";
 
     return {
@@ -511,6 +513,7 @@
       nearest,
       confidence,
       confidenceScore,
+      confidenceBreakdown,
       features: vector.features,
     };
   }

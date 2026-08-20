@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.2";
+  const APP_VERSION = "0.1.3";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -13,7 +13,7 @@
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
   const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "2";
+  const RECOMMENDATION_MODEL_VERSION = "3";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -893,8 +893,14 @@
       if (!reasons.length) reasons.push("<li><span>依据</span><strong>全站质量与探索性</strong></li>");
       const globalScore = subject.rating.score ? subject.rating.score.toFixed(1) : "—";
       const votes = subject.rating.total ? subject.rating.total.toLocaleString("zh-CN") : "样本较少";
+      const confidencePercent = Math.round(Number(item.confidenceScore || 0) * 100);
+      const confidenceBreakdown = item.confidenceBreakdown || {};
+      const featurePercent = Math.round(Number(confidenceBreakdown.featureSupport || 0) * 100);
+      const neighborPercent = Math.round(Number(confidenceBreakdown.neighborEvidence || 0) * 100);
+      const ratingPercent = Math.round(Number(confidenceBreakdown.ratingEvidence || 0) * 100);
+      const confidenceExplanation = `证据构成：偏好特征 ${featurePercent}/50，相似收藏 ${neighborPercent}/30，评分样本 ${ratingPercent}/20`;
       return `
-        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}">
+        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
@@ -908,7 +914,7 @@
               <div class="fit-score"><strong>${item.predicted.toFixed(1)}</strong><span>适合度</span></div>
             </div>
             <div class="metrics">
-              <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span><span class="confidence">置信度 ${item.confidence}</span>
+              <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span><span class="confidence" title="${escapeHtml(confidenceExplanation)}" aria-label="置信度 ${item.confidence}，${confidencePercent}%。${escapeHtml(confidenceExplanation)}">置信度 ${item.confidence} · ${confidencePercent}%</span>
             </div>
             <ul class="reason-list">${reasons.join("")}</ul>
             <div class="card-actions">
@@ -944,6 +950,7 @@
               <li><span class="step-number">2</span><div><strong>提取个人偏好</strong><p>学习标签、年代、导演、制作公司和声优等特征带来的正负影响。</p></div></li>
               <li><span class="step-number">3</span><div><strong>排序并保持多样</strong><p>排除所有已标记条目，融合相似度与质量分，再避免五个结果过于重复。</p></div></li>
             </ol>
+            <p class="method-confidence"><strong>适合度不等于置信度。</strong>适合度预测你可能会打多高的分；置信度表示证据是否充分，由偏好特征支持（50%）、相似收藏（30%）和全站评分样本（20%）组成。</p>
             <p class="method-privacy">全部计算在当前浏览器完成，不接入 AI，也不会修改你的收藏。</p>
           </div>
         </details>`;
@@ -1103,7 +1110,7 @@
         .fit-score strong { color: var(--primary); font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
         .fit-score span { color: var(--text-muted); font-size: 10px; }
         .metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-        .confidence { color: var(--accent); font-weight: 700; }
+        .confidence { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
         .reason-list { list-style: none; padding: 0; margin: 10px 0 12px; display: flex; flex-wrap: wrap; gap: 5px; }
         .reason-list li { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 7px; border-radius: 7px; background: var(--surface-alt); font-size: 11px; }
         .reason-list span { color: var(--text-muted); }
@@ -1129,6 +1136,8 @@
         .step-number { width: 26px; height: 26px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 8px; color: var(--primary); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; display: grid; place-items: center; }
         .method-steps strong { display: block; margin: 1px 0 2px; font-size: 12px; line-height: 1.4; }
         .method-steps p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+        .method-confidence { margin: 13px 0 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
+        .method-confidence strong { color: var(--text); }
         .method-privacy { margin: 13px 0 0; padding: 10px 11px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-muted); font-size: 11px; line-height: 1.5; }
         .drawer-footer { min-height: 66px; padding: 10px 24px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 8px; }
         .drawer-footer button { min-height: 44px; }

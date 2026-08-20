@@ -78,6 +78,9 @@ test("scores a matching candidate above a disliked-pattern candidate", () => {
   const disliked = Core.scoreSubject(subject(102, 7.4, ["后宫", "异世界", "校园"]), profile);
   assert.ok(liked.predicted > disliked.predicted);
   assert.ok(liked.positiveReasons.some((reason) => reason.label === "科幻"));
+  const confidenceParts = Object.values(liked.confidenceBreakdown).reduce((sum, value) => sum + value, 0);
+  assert.ok(Math.abs(confidenceParts - liked.confidenceScore) < 1e-12);
+  assert.ok(liked.confidenceScore >= 0 && liked.confidenceScore <= 1);
 });
 
 test("MMR reduces near-duplicate results", () => {
