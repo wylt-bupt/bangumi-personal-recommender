@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.2.9
+// @version      0.3.0
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -986,14 +986,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.9";
+  const APP_VERSION = "0.3.0";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "18";
+  const RECOMMENDATION_MODEL_VERSION = "19";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -1428,6 +1428,7 @@
       const withSourceTag = (rows) => (Array.isArray(rows) ? rows : []).map((row) => ({
         ...row,
         tags: [...(Array.isArray(row.tags) ? row.tags : []), { name: tag }],
+        adultEvidenceVerified: true,
       }));
       const firstRows = withSourceTag(first.data);
       const pageSize = Math.max(1, firstRows.length || 20);
@@ -1474,6 +1475,9 @@
               characters: subject.characters?.length ? subject.characters : (previous.characters || []),
               relation: subject.relation || previous.relation || "",
               sourceUrl: subject.sourceUrl || previous.sourceUrl || "",
+              adultEvidenceVerified: Boolean(
+                previous.adultEvidenceVerified || subject.adultEvidenceVerified,
+              ),
             }
           : { ...previous, ...subject });
       }
@@ -1882,10 +1886,14 @@
           await this.enhanceWithPeople();
         }
         if (this.state.requireAdultEvidence) {
-          this.state.candidates = this.state.candidates.filter((subject) =>
-            subject.originMetadata?.adultEvidenceVerified === true
-              && Core.isAdultRecommendationCandidate(subject.originMetadata),
-          );
+          this.state.candidates = this.state.candidates.filter((subject) => {
+            const evidence = subject.originMetadata?.adultEvidenceVerified === true
+              ? subject.originMetadata
+              : subject.adultEvidenceVerified === true
+                ? subject
+                : null;
+            return evidence && Core.isAdultRecommendationCandidate(evidence);
+          });
         }
         this.recompute({ enforceJapanese: true, render: true });
 
