@@ -1,0 +1,553 @@
+(function attachBangumiRecommenderCore(globalObject) {
+  "use strict";
+
+  const SUBJECT_TYPES = Object.freeze({
+    1: { label: "书籍", slug: "book" },
+    2: { label: "动画", slug: "anime" },
+    3: { label: "音乐", slug: "music" },
+    4: { label: "游戏", slug: "game" },
+    6: { label: "三次元", slug: "real" },
+  });
+
+  const COLLECTION_STATUS = Object.freeze({
+    1: "wish",
+    2: "collect",
+    3: "doing",
+    4: "on_hold",
+    5: "dropped",
+  });
+
+  const ROLE_WEIGHTS = Object.freeze({
+    tag: 1,
+    meta: 0.9,
+    director: 1,
+    studio: 0.8,
+    creator: 0.7,
+    series: 0.6,
+    script: 0.6,
+    music: 0.45,
+    cv: 0.2,
+    decade: 0.22,
+    format: 0.2,
+  });
+
+  const ROLE_SHRINKAGE = Object.freeze({
+    tag: 4,
+    meta: 4,
+    director: 2.5,
+    studio: 4,
+    creator: 3,
+    series: 3,
+    script: 3,
+    music: 4,
+    cv: 7,
+    decade: 8,
+    format: 6,
+  });
+
+  const ROLE_MIN_SUPPORT = Object.freeze({
+    tag: 2,
+    meta: 2,
+    director: 2,
+    studio: 3,
+    creator: 2,
+    series: 2,
+    script: 2,
+    music: 3,
+    cv: 4,
+    decade: 4,
+    format: 3,
+  });
+
+  const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年(?:[147]|10)月)?$|^(?:19|20)\d0s$/i;
+  const FORMAT_TAGS = new Set(["tv", "剧场版", "劇場版", "ova", "oad", "web", "泡面番"]);
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
+  }
+
+  function mean(values) {
+    if (!values.length) return 0;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }
+
+  function normalizeText(value) {
+    return String(value ?? "")
+      .normalize("NFKC")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLocaleLowerCase("zh-CN");
+  }
+
+  function tokenPrefix(token) {
+    return String(token).split(":", 1)[0];
+  }
+
+  function normalizeTagList(tags) {
+    if (!Array.isArray(tags)) return [];
+    const normalized = tags
+      .map((tag) => (typeof tag === "string" ? tag : tag?.name))
+      .map(normalizeText)
+      .filter(Boolean);
+    return [...new Set(normalized)];
+  }
+
+  function normalizeSubject(raw = {}) {
+    const rating = raw.rating || {};
+    const date = String(raw.date || raw.air_date || "");
+    return {
+      id: Number(raw.id || raw.subject_id || 0),
+      type: Number(raw.type || raw.subject_type || 0),
+      name: String(raw.name || ""),
+      nameCn: String(raw.name_cn || raw.nameCn || ""),
+      date,
+      image:
+        raw.image ||
+        raw.images?.common ||
+        raw.images?.medium ||
+        raw.images?.small ||
+        "",
+      tags: normalizeTagList(raw.tags),
+      metaTags: normalizeTagList(raw.meta_tags || raw.metaTags),
+      rating: {
+        score: Number(rating.score || raw.score || 0),
+        total: Number(rating.total || raw.rating_total || 0),
+      },
+      rank: Number(raw.rank || 0),
+      persons: Array.isArray(raw.persons || raw._persons) ? raw.persons || raw._persons : [],
+      characters: Array.isArray(raw.characters || raw._characters)
+        ? raw.characters || raw._characters
+        : [],
+      relation: String(raw.relation || ""),
+      sourceUrl: String(raw.sourceUrl || ""),
+    };
+  }
+
+  function normalizeCollection(raw = {}) {
+    const subject = normalizeSubject(raw.subject || raw);
+    const type = Number(raw.type || raw.collection_type || 0);
+    return {
+      subjectId: Number(raw.subject_id || subject.id || 0),
+      type,
+      status: COLLECTION_STATUS[type] || String(raw.status || "unknown"),
+      rate: Number(raw.rate || 0),
+      tags: normalizeTagList(raw.tags),
+      comment: String(raw.comment || ""),
+      updatedAt: String(raw.updated_at || raw.updatedAt || ""),
+      subject,
+    };
+  }
+
+  function normalizeRole(relation) {
+    const value = normalizeText(relation);
+    if (!value) return null;
+    if (/(动画制作|動畫製作|アニメーション制作|animation production|制作会社|studio)/i.test(value)) {
+      return "studio";
+    }
+    if (/(总导演|總導演|导演|導演|監督|director)/i.test(value)) return "director";
+    if (/(原作|作者|creator|original work)/i.test(value)) return "creator";
+    if (/(系列构成|系列構成|シリーズ構成|series composition)/i.test(value)) return "series";
+    if (/(脚本|劇本|剧本|scenario|screenplay)/i.test(value)) return "script";
+    if (/(音乐|音樂|音楽|music)/i.test(value)) return "music";
+    return null;
+  }
+
+  function addGroupedFeature(groups, role, id, label) {
+    if (!id || !ROLE_WEIGHTS[role]) return;
+    if (!groups.has(role)) groups.set(role, new Map());
+    groups.get(role).set(`${role}:${id}`, String(label || id));
+  }
+
+  function buildFeatureVector(subjectInput, collectionTags = []) {
+    const subject = normalizeSubject(subjectInput);
+    const groups = new Map();
+    const labels = {};
+
+    const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
+      .filter((tag) => !TEMPORAL_TAG.test(tag))
+      .slice(0, 18);
+    for (const tag of tagValues) addGroupedFeature(groups, "tag", tag, tag);
+
+    for (const tag of subject.metaTags.slice(0, 8)) {
+      if (!TEMPORAL_TAG.test(tag)) addGroupedFeature(groups, "meta", tag, tag);
+    }
+
+    const year = Number.parseInt(subject.date.slice(0, 4), 10);
+    if (Number.isFinite(year) && year >= 1900 && year <= 2100) {
+      addGroupedFeature(groups, "decade", `${Math.floor(year / 10) * 10}s`, `${Math.floor(year / 10) * 10}年代`);
+    }
+
+    const format = [...tagValues, ...subject.metaTags].find((tag) => FORMAT_TAGS.has(tag));
+    if (format) addGroupedFeature(groups, "format", format, format.toUpperCase());
+
+    for (const person of subject.persons) {
+      const role = normalizeRole(person.relation || person.type || person.career || person.jobs?.join(" "));
+      const id = Number(person.id || person.person_id || 0);
+      if (role && id) addGroupedFeature(groups, role, id, person.name || person.name_cn || id);
+    }
+
+    let actorCount = 0;
+    for (const character of subject.characters) {
+      const actors = Array.isArray(character.actors)
+        ? character.actors
+        : character.actor
+          ? [character.actor]
+          : [];
+      for (const actor of actors) {
+        if (actorCount >= 8) break;
+        const id = Number(actor.id || actor.person_id || 0);
+        if (id) {
+          addGroupedFeature(groups, "cv", id, actor.name || actor.name_cn || id);
+          actorCount += 1;
+        }
+      }
+      if (actorCount >= 8) break;
+    }
+
+    const features = {};
+    for (const [role, entries] of groups.entries()) {
+      const scale = ROLE_WEIGHTS[role] / Math.sqrt(Math.max(1, entries.size));
+      for (const [token, label] of entries.entries()) {
+        features[token] = scale;
+        labels[token] = label;
+      }
+    }
+    return { features, labels };
+  }
+
+  function calculateRatingBaseline(collections) {
+    const rated = collections.filter((item) => item.rate > 0);
+    const userMean = mean(rated.map((item) => item.rate)) || 7;
+    const paired = rated.filter((item) => item.subject.rating.score > 0);
+    const globalMean = mean(paired.map((item) => item.subject.rating.score)) || 6.8;
+    if (paired.length < 5) return { userMean, globalMean, beta: 0.35 };
+
+    let covariance = 0;
+    let variance = 0;
+    for (const item of paired) {
+      const gx = item.subject.rating.score - globalMean;
+      covariance += gx * (item.rate - userMean);
+      variance += gx * gx;
+    }
+    const beta = variance > 0 ? clamp(covariance / variance, 0, 1) : 0.35;
+    return { userMean, globalMean, beta };
+  }
+
+  function expectedRating(subject, baseline) {
+    const globalScore = Number(subject.rating?.score || 0);
+    if (!globalScore) return baseline.userMean;
+    return baseline.userMean + baseline.beta * (globalScore - baseline.globalMean);
+  }
+
+  function trainProfile(collectionInputs) {
+    const collections = collectionInputs
+      .map(normalizeCollection)
+      .filter((item) => item.subjectId && item.subject.id);
+    const rated = collections.filter((item) => item.rate > 0);
+    const baseline = calculateRatingBaseline(collections);
+    const stats = new Map();
+    const anchors = [];
+
+    for (const item of rated) {
+      const vector = buildFeatureVector(item.subject, item.tags);
+      const expected = expectedRating(item.subject, baseline);
+      const residual = clamp((item.rate - expected) / 2.5, -1.5, 1.5);
+      anchors.push({
+        subjectId: item.subjectId,
+        name: item.subject.nameCn || item.subject.name,
+        rate: item.rate,
+        residual,
+        features: vector.features,
+      });
+
+      for (const [token, magnitude] of Object.entries(vector.features)) {
+        const current = stats.get(token) || {
+          support: 0,
+          weightedResidual: 0,
+          label: vector.labels[token] || token,
+        };
+        current.support += 1;
+        current.weightedResidual += residual * magnitude;
+        stats.set(token, current);
+      }
+    }
+
+    const featureWeights = {};
+    const featureSupport = {};
+    const featureLabels = {};
+    const ratedCount = Math.max(1, rated.length);
+    for (const [token, stat] of stats.entries()) {
+      const role = tokenPrefix(token);
+      if (stat.support < (ROLE_MIN_SUPPORT[role] || 2)) continue;
+      const shrinkage = ROLE_SHRINKAGE[role] || 4;
+      const idf = clamp(Math.log((ratedCount + 1) / (stat.support + 1)) + 1, 1, 2.5);
+      featureWeights[token] = (stat.weightedResidual / (shrinkage + stat.support)) * idf;
+      featureSupport[token] = stat.support;
+      featureLabels[token] = stat.label;
+    }
+
+    anchors.sort((a, b) => Math.abs(b.residual) - Math.abs(a.residual));
+    const topFeatures = Object.entries(featureWeights)
+      .map(([token, weight]) => ({
+        token,
+        weight,
+        support: featureSupport[token],
+        label: featureLabels[token],
+      }))
+      .sort((a, b) => b.weight - a.weight);
+
+    return {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      ratedCount: rated.length,
+      collectionCount: collections.length,
+      baseline,
+      featureWeights,
+      featureSupport,
+      featureLabels,
+      topFeatures,
+      anchors: anchors.slice(0, 80),
+    };
+  }
+
+  function weightedJaccard(left = {}, right = {}) {
+    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+    let intersection = 0;
+    let union = 0;
+    for (const key of keys) {
+      const a = Math.abs(Number(left[key] || 0));
+      const b = Math.abs(Number(right[key] || 0));
+      intersection += Math.min(a, b);
+      union += Math.max(a, b);
+    }
+    return union ? intersection / union : 0;
+  }
+
+  function bayesianScore(subject, globalMean = 6.8, minimumVotes = 300) {
+    const rating = subject.rating || {};
+    const score = Number(rating.score || 0);
+    const total = Number(rating.total || 0);
+    if (!score || !total) return globalMean;
+    return (total / (total + minimumVotes)) * score + (minimumVotes / (total + minimumVotes)) * globalMean;
+  }
+
+  function describeToken(token, labels = {}) {
+    const role = tokenPrefix(token);
+    const raw = labels[token] || token.slice(token.indexOf(":") + 1);
+    const roleLabel = {
+      tag: "标签",
+      meta: "类型",
+      director: "导演",
+      studio: "制作",
+      creator: "原作",
+      series: "构成",
+      script: "脚本",
+      music: "音乐",
+      cv: "声优",
+      decade: "年代",
+      format: "形式",
+    }[role];
+    return { role, roleLabel: roleLabel || role, label: raw };
+  }
+
+  function scoreSubject(subjectInput, profile, mode = "balanced") {
+    const subject = normalizeSubject(subjectInput);
+    const vector = buildFeatureVector(subject);
+    const contributions = Object.entries(vector.features)
+      .map(([token, magnitude]) => ({
+        token,
+        value: magnitude * Number(profile.featureWeights[token] || 0),
+        support: Number(profile.featureSupport[token] || 0),
+        ...describeToken(token, { ...profile.featureLabels, ...vector.labels }),
+      }))
+      .filter((entry) => entry.value !== 0)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+
+    const featureMass = Object.values(vector.features).reduce((sum, value) => sum + Math.abs(value), 0);
+    const contentRaw = contributions.reduce((sum, entry) => sum + entry.value, 0) /
+      Math.sqrt(Math.max(1, featureMass));
+    const content = Math.tanh(contentRaw * 2.2);
+
+    const neighborCandidates = profile.anchors
+      .map((anchor) => ({
+        anchor,
+        similarity: weightedJaccard(vector.features, anchor.features),
+      }))
+      .filter((entry) => entry.similarity >= 0.04)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 6);
+    const similarityMass = neighborCandidates.reduce((sum, entry) => sum + entry.similarity, 0);
+    const neighbor = similarityMass
+      ? neighborCandidates.reduce(
+          (sum, entry) => sum + entry.similarity * entry.anchor.residual,
+          0,
+        ) / similarityMass
+      : 0;
+
+    const bayes = bayesianScore(subject, profile.baseline.globalMean);
+    const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
+    const weights = {
+      stable: { content: 0.5, neighbor: 0.2, quality: 0.3 },
+      balanced: { content: 0.6, neighbor: 0.25, quality: 0.15 },
+      explore: { content: 0.67, neighbor: 0.25, quality: 0.08 },
+    }[mode] || { content: 0.6, neighbor: 0.25, quality: 0.15 };
+    const normalizedScore =
+      weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
+    const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
+
+    const positiveReasons = contributions.filter((entry) => entry.value > 0).slice(0, 3);
+    const negativeReasons = contributions.filter((entry) => entry.value < 0).slice(0, 1);
+    const nearest = neighborCandidates[0]
+      ? {
+          subjectId: neighborCandidates[0].anchor.subjectId,
+          name: neighborCandidates[0].anchor.name,
+          similarity: neighborCandidates[0].similarity,
+        }
+      : null;
+    const reasonSupport = positiveReasons.length
+      ? mean(positiveReasons.map((entry) => entry.support))
+      : 0;
+    const confidenceScore =
+      clamp(reasonSupport / 12, 0, 0.5) +
+      clamp((nearest?.similarity || 0) / 0.6, 0, 0.3) +
+      clamp(Math.log10(subject.rating.total + 1) / 12, 0, 0.2);
+    const confidence = confidenceScore >= 0.68 ? "高" : confidenceScore >= 0.4 ? "中" : "探索";
+
+    return {
+      subject,
+      predicted,
+      normalizedScore,
+      bayesianScore: bayes,
+      contentScore: content,
+      neighborScore: neighbor,
+      qualityScore: quality,
+      positiveReasons,
+      negativeReasons,
+      nearest,
+      confidence,
+      features: vector.features,
+    };
+  }
+
+  function seededNoise(subjectId, salt = "") {
+    const input = `${subjectId}:${salt}`;
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return ((hash >>> 0) % 10000) / 10000;
+  }
+
+  function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
+    const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
+    const remaining = scoredInputs.slice();
+    const selected = [];
+    while (selected.length < count && remaining.length) {
+      let bestIndex = -1;
+      let bestValue = -Infinity;
+      for (let index = 0; index < remaining.length; index += 1) {
+        const candidate = remaining[index];
+        const maxSimilarity = selected.length
+          ? Math.max(...selected.map((item) => weightedJaccard(candidate.features, item.features)))
+          : 0;
+        const studioTokens = Object.keys(candidate.features).filter((token) => token.startsWith("studio:"));
+        const sameStudioCount = selected.filter((item) =>
+          studioTokens.some((token) => item.features[token]),
+        ).length;
+        const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
+        const adjusted =
+          candidate.normalizedScore -
+          penalty * maxSimilarity -
+          Math.max(0, sameStudioCount - 1) * 0.12 +
+          explorationJitter;
+        if (adjusted > bestValue) {
+          bestValue = adjusted;
+          bestIndex = index;
+        }
+      }
+      selected.push(remaining.splice(bestIndex, 1)[0]);
+    }
+    return selected;
+  }
+
+  function recommendationSalt(date = new Date()) {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+  }
+
+  function collectionFingerprint(collectionInputs) {
+    const rows = collectionInputs
+      .map(normalizeCollection)
+      .map((item) =>
+        [
+          item.subjectId,
+          item.type,
+          item.rate,
+          item.tags.slice().sort().join(","),
+          item.comment,
+          item.updatedAt,
+        ].join("|"),
+      )
+      .sort();
+    let hash = 2166136261;
+    const value = rows.join("\n");
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function influentialSubjectIds(collectionInputs, profile, positiveCount = 12, negativeCount = 8) {
+    const residuals = new Map(profile.anchors.map((anchor) => [anchor.subjectId, anchor.residual]));
+    const candidates = collectionInputs
+      .map(normalizeCollection)
+      .filter((item) => residuals.has(item.subjectId))
+      .map((item) => ({ id: item.subjectId, residual: residuals.get(item.subjectId) }));
+    const positives = candidates
+      .filter((item) => item.residual > 0)
+      .sort((a, b) => b.residual - a.residual)
+      .slice(0, positiveCount);
+    const negatives = candidates
+      .filter((item) => item.residual < 0)
+      .sort((a, b) => a.residual - b.residual)
+      .slice(0, negativeCount);
+    return [...new Set([...positives, ...negatives].map((item) => item.id))];
+  }
+
+  function topRetrievalTags(profile, count = 6) {
+    return profile.topFeatures
+      .filter((entry) => entry.weight > 0 && entry.token.startsWith("tag:"))
+      .filter((entry) => !TEMPORAL_TAG.test(entry.label))
+      .slice(0, count)
+      .map((entry) => entry.label);
+  }
+
+  const Core = Object.freeze({
+    SUBJECT_TYPES,
+    COLLECTION_STATUS,
+    ROLE_WEIGHTS,
+    clamp,
+    normalizeText,
+    normalizeTagList,
+    normalizeSubject,
+    normalizeCollection,
+    normalizeRole,
+    buildFeatureVector,
+    calculateRatingBaseline,
+    expectedRating,
+    trainProfile,
+    weightedJaccard,
+    bayesianScore,
+    describeToken,
+    scoreSubject,
+    diversify,
+    recommendationSalt,
+    collectionFingerprint,
+    influentialSubjectIds,
+    topRetrievalTags,
+  });
+
+  if (typeof module !== "undefined" && module.exports) module.exports = Core;
+  globalObject.BangumiRecommenderCore = Core;
+})(typeof globalThis !== "undefined" ? globalThis : window);

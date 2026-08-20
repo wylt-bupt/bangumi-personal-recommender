@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bangumi 推荐组件测试页</title>
+  <style>
+    body { margin: 0; min-height: 100vh; color: #555; background: #f4f4f4; font: 14px/1.6 Arial, sans-serif; }
+    header { height: 52px; background: #fff; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 24px; }
+    main { max-width: 980px; margin: 32px auto; padding: 0 20px; }
+    .mock-card { height: 170px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 10px; background: #fff; }
+  </style>
+  <script>
+    const likedTags = ["科幻", "悬疑", "轮回", "百合", "治愈", "日常"];
+    const dislikedTags = ["后宫", "异世界", "龙傲天"];
+    const makeSubject = (id, liked = true) => ({
+      id,
+      type: 2,
+      name: `Mock Subject ${id}`,
+      name_cn: `${liked ? "可能喜欢" : "对照条目"} ${id}`,
+      date: `${2000 + (id % 25)}-01-01`,
+      images: { common: `https://lain.bgm.tv/pic/cover/c/00/00/${id}_mock.jpg` },
+      tags: (liked ? likedTags : dislikedTags).slice(id % 3, id % 3 + 3).map((name) => ({ name, count: 100 })),
+      rating: { score: liked ? 7.8 + (id % 8) / 10 : 6.5, total: 800 + id * 3 },
+      rank: id,
+    });
+    const collections = Array.from({ length: 28 }, (_, index) => ({
+      subject_id: index + 1,
+      type: 2,
+      rate: index < 18 ? 8 + (index % 3) : 3 + (index % 3),
+      tags: index < 18 ? likedTags.slice(index % 3, index % 3 + 3) : dislikedTags,
+      updated_at: "2026-08-20T10:00:00+08:00",
+      subject: makeSubject(index + 1, index < 18),
+    }));
+    const candidates = Array.from({ length: 45 }, (_, index) => makeSubject(1000 + index, index < 35));
+    const realFetch = window.fetch.bind(window);
+    window.fetch = async (input, options = {}) => {
+      const url = String(input);
+      if (url.includes("api.bgm.tv/v0/users/wylt/collections")) {
+        const offset = Number(new URL(url).searchParams.get("offset") || 0);
+        return new Response(JSON.stringify({ total: collections.length, data: collections.slice(offset, offset + 100) }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("api.bgm.tv/v0/subjects?") || url.includes("api.bgm.tv/v0/search/subjects")) {
+        return new Response(JSON.stringify({ total: candidates.length, data: candidates }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (/api\.bgm\.tv\/v0\/subjects\/\d+\/persons/.test(url)) {
+        const id = Number(url.match(/subjects\/(\d+)/)[1]);
+        return new Response(JSON.stringify([{ id: 70 + (id % 4), name: `导演 ${id % 4}`, relation: "导演" }, { id: 90 + (id % 3), name: `制作 ${id % 3}`, relation: "动画制作" }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (/api\.bgm\.tv\/v0\/subjects\/\d+\/characters/.test(url)) {
+        const id = Number(url.match(/subjects\/(\d+)/)[1]);
+        return new Response(JSON.stringify([{ id: id * 10, actors: [{ id: 200 + (id % 5), name: `声优 ${id % 5}` }] }]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return realFetch(input, options);
+    };
+  </script>
+</head>
+<body>
+  <header><strong>Bangumi 番组计划 · 本地测试页</strong></header>
+  <main>
+    <h1>组件集成测试</h1>
+    <p>点击右下角“推荐”按钮，生成模拟推荐结果。</p>
+    <div class="mock-card"></div><div class="mock-card"></div><div class="mock-card"></div>
+  </main>
+  <script src="../dist/bangumi-personal-recommender.user.js"></script>
+</body>
+</html>
