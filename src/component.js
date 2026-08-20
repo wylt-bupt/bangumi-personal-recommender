@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.9";
+  const APP_VERSION = "0.2.0";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "10";
+  const RECOMMENDATION_MODEL_VERSION = "11";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -411,6 +411,29 @@
       );
     }
 
+    async getSubjectDetails(subjectId) {
+      if (!this.apiAvailable) return null;
+      return this.cached(
+        `subject-details:${subjectId}`,
+        ENTITY_TTL,
+        () => this.requestJson(`/v0/subjects/${subjectId}`).catch(() => null),
+      );
+    }
+
+    async enrichOriginMetadata(subjects, subjectIds) {
+      if (!this.apiAvailable || !subjectIds.length) return new Map();
+      const uniqueIds = [...new Set(subjectIds)].slice(0, 80);
+      let completed = 0;
+      const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
+        const details = await this.getSubjectDetails(subjectId);
+        completed += 1;
+        this.progress("正在确认候选作品来源…", completed, uniqueIds.length);
+        const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
+        return base ? [subjectId, Core.normalizeSubject(details || base)] : null;
+      });
+      return new Map(rows.filter(Boolean));
+    }
+
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
@@ -451,6 +474,7 @@
         scoredPool: [],
         current: [],
         collections: [],
+        eligibleCandidateCount: 0,
         lastSync: null,
         currentSummary: {},
       };
@@ -714,19 +738,19 @@
         this.state.candidates = candidates.filter((subject) => !marked.has(Number(subject.id)));
         if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
 
-        this.recompute();
-        this.setProgress("基础推荐已完成，正在尝试补充人员信息…", 0, 0);
+        this.recompute({ enforceJapanese: false, render: false });
+        this.setProgress("基础排序已完成，正在确认日本作品…", 0, 0);
 
         if (this.client.apiAvailable) {
           await this.enhanceWithPeople();
-          this.recompute();
         }
+        this.recompute({ enforceJapanese: true, render: true });
 
         this.state.lastSync = new Date().toISOString();
         this.updateSyncLabel();
         await this.saveCurrentResult();
         this.setProgress(
-          `完成：分析 ${collections.length} 个收藏，比较 ${this.state.candidates.length} 个未标记候选。`,
+          `完成：分析 ${collections.length} 个收藏，保留 ${this.state.eligibleCandidateCount} 个已确认日本候选。`,
           1,
           1,
         );
@@ -739,8 +763,20 @@
 
     async enhanceWithPeople() {
       const influential = Core.influentialSubjectIds(this.state.collections, this.state.profile, 10, 6);
+      const originPreview = this.state.scoredPool.slice(0, 80).map((item) => item.subject.id);
+      let allSubjects = [
+        ...this.state.collections.map((item) => item.subject),
+        ...this.state.candidates,
+      ];
+      const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview);
+      if (origins.size) {
+        this.state.candidates = this.state.candidates.map((item) =>
+          origins.has(item.id) ? { ...item, originMetadata: origins.get(item.id) } : item,
+        );
+      }
+
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);
-      const allSubjects = [
+      allSubjects = [
         ...this.state.collections.map((item) => item.subject),
         ...this.state.candidates,
       ];
@@ -753,16 +789,24 @@
       this.state.profile = Core.trainProfile(this.state.collections);
     }
 
-    recompute() {
+    recompute({ enforceJapanese = true, render = true } = {}) {
       const scored = this.state.candidates
         .map((subject) => {
           const scoredSubject = Core.scoreSubject(subject, this.state.profile, this.config.mode);
-          return scoredSubject;
+          return {
+            ...scoredSubject,
+            origin: enforceJapanese ? Core.classifyJapaneseOrigin(subject) : null,
+          };
         })
+        .filter((item) => !enforceJapanese || item.origin?.status === "japanese")
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
+      this.state.eligibleCandidateCount = enforceJapanese ? scored.length : 0;
+      if (enforceJapanese && scored.length < 5) {
+        throw new Error(`只能确认 ${scored.length} 个日本候选，无法在不混入其他国家作品的前提下生成 5 个推荐。`);
+      }
       this.state.scoredPool = scored.slice(0, 180);
       this.excludedBatch.clear();
-      this.renderFromPool();
+      if (render) this.renderFromPool();
     }
 
     renderFromPool() {
@@ -778,7 +822,7 @@
       this.renderRecommendations(selected, {
         collectionCount: this.state.profile.collectionCount,
         ratedCount: this.state.profile.ratedCount,
-        candidateCount: this.state.candidates.length,
+        candidateCount: this.state.eligibleCandidateCount,
       });
     }
 
@@ -955,7 +999,7 @@
           summary: {
             collectionCount: this.state.profile.collectionCount,
             ratedCount: this.state.profile.ratedCount,
-            candidateCount: this.state.candidates.length,
+            candidateCount: this.state.eligibleCandidateCount,
           },
         },
       });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.1.9
+// @version      0.2.0
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -118,6 +118,16 @@
     return String(value ?? "").trim();
   }
 
+  function normalizeInfoboxEntries(infobox) {
+    if (!Array.isArray(infobox)) return [];
+    return infobox
+      .map((entry) => ({
+        key: normalizeText(entry?.key || entry?.k || ""),
+        value: normalizeText(infoboxValueText(entry?.value ?? entry?.v ?? entry)),
+      }))
+      .filter((entry) => entry.key || entry.value);
+  }
+
   function normalizeSubject(raw = {}) {
     const rating = raw.rating || {};
     const date = String(raw.date || raw.air_date || "");
@@ -149,6 +159,62 @@
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
     };
+  }
+
+  function classifyJapaneseOrigin(subjectInput) {
+    const source = subjectInput?.originMetadata || subjectInput || {};
+    const subject = normalizeSubject(source);
+    const entries = normalizeInfoboxEntries(subject.infobox);
+    const tagText = normalizeText([...subject.tags, ...subject.metaTags].join(" "));
+    const titleText = normalizeText(`${subject.name} ${subject.nameCn}`);
+    const infoText = entries.map((entry) => `${entry.key} ${entry.value}`).join(" ");
+    const evidence = [];
+    let japaneseScore = 0;
+    let foreignScore = 0;
+    let explicitJapanese = false;
+    let explicitForeign = false;
+
+    const countryKey = /(?:国家|國家|地区|地區|原产|原產|制作国|製作国|製作國|country|region)/i;
+    const japaneseCountry = /(?:^|\s)(?:日本|japan|japanese)(?:\s|$)/i;
+    const foreignCountry = /(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)/i;
+    for (const entry of entries) {
+      if (!countryKey.test(entry.key)) continue;
+      if (japaneseCountry.test(` ${entry.value} `)) explicitJapanese = true;
+      if (foreignCountry.test(entry.value)) explicitForeign = true;
+    }
+
+    if (/(?:日本|日漫|日本动画|日本動畫|日剧|日劇|日影|日本电影|日本電影|j-?pop|アニソン|同人音楽|同人音乐|東方|东方project|vocaloid|特撮|特摄|轻小说|輕小說|ライトノベル|galgame|eroge|jrpg)/i.test(tagText)) {
+      japaneseScore += 2;
+      evidence.push("日系标签");
+    }
+    if (/(?:欧美|歐美|美剧|美劇|英剧|英劇|韩剧|韓劇|国产|國產|中国动画|中國動畫|韩漫|韓漫|美漫|k-?pop)/i.test(tagText)) {
+      foreignScore += 3;
+      evidence.push("非日系标签");
+    }
+    if (/[ぁ-ゖァ-ヺ]/.test(subject.name)) {
+      japaneseScore += 2;
+      evidence.push("日文原名");
+    }
+
+    const japaneseInstitution = /(?:gainax|production\s*i\.?g|shaft|a-1\s*pictures|cloverworks|mappa|madhouse|ufotable|trigger|bones|sunrise|サンライズ|京都アニメーション|京アニ|東映|toei|tms|wit\s*studio|studio\s*deen|j\.?c\.?staff|ぴえろ|日本アニメーション|aniplex|kadokawa|角川|講談社|讲谈社|集英社|小学館|小学馆|芳文社|白泉社|双葉社|双叶社|徳間書店|德间书店|電撃|电击|key\s*sounds\s*label|sony\s*music\s*japan|avex|lantis|日本テレビ|テレビ朝日|テレビ東京|フジテレビ|nhk)/i;
+    if (japaneseInstitution.test(infoText)) {
+      japaneseScore += 3;
+      evidence.push("日本机构");
+    }
+
+    if (explicitJapanese && !explicitForeign) {
+      return { status: "japanese", confidence: 1, evidence: ["明确日本地区", ...evidence] };
+    }
+    if (explicitForeign && !explicitJapanese) {
+      return { status: "non_japanese", confidence: 1, evidence: ["明确非日本地区", ...evidence] };
+    }
+    if (japaneseScore >= 3 && japaneseScore >= foreignScore + 2) {
+      return { status: "japanese", confidence: clamp(japaneseScore / 5, 0, 1), evidence };
+    }
+    if (foreignScore >= 3) {
+      return { status: "non_japanese", confidence: clamp(foreignScore / 5, 0, 1), evidence };
+    }
+    return { status: "unknown", confidence: 0, evidence };
   }
 
   function normalizeCollection(raw = {}) {
@@ -811,7 +877,9 @@
     clamp,
     normalizeText,
     normalizeTagList,
+    normalizeInfoboxEntries,
     normalizeSubject,
+    classifyJapaneseOrigin,
     normalizeCollection,
     normalizeRole,
     normalizeInfoboxRole,
@@ -845,14 +913,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.9";
+  const APP_VERSION = "0.2.0";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "10";
+  const RECOMMENDATION_MODEL_VERSION = "11";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -1252,6 +1320,29 @@
       );
     }
 
+    async getSubjectDetails(subjectId) {
+      if (!this.apiAvailable) return null;
+      return this.cached(
+        `subject-details:${subjectId}`,
+        ENTITY_TTL,
+        () => this.requestJson(`/v0/subjects/${subjectId}`).catch(() => null),
+      );
+    }
+
+    async enrichOriginMetadata(subjects, subjectIds) {
+      if (!this.apiAvailable || !subjectIds.length) return new Map();
+      const uniqueIds = [...new Set(subjectIds)].slice(0, 80);
+      let completed = 0;
+      const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
+        const details = await this.getSubjectDetails(subjectId);
+        completed += 1;
+        this.progress("正在确认候选作品来源…", completed, uniqueIds.length);
+        const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
+        return base ? [subjectId, Core.normalizeSubject(details || base)] : null;
+      });
+      return new Map(rows.filter(Boolean));
+    }
+
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
@@ -1292,6 +1383,7 @@
         scoredPool: [],
         current: [],
         collections: [],
+        eligibleCandidateCount: 0,
         lastSync: null,
         currentSummary: {},
       };
@@ -1555,19 +1647,19 @@
         this.state.candidates = candidates.filter((subject) => !marked.has(Number(subject.id)));
         if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
 
-        this.recompute();
-        this.setProgress("基础推荐已完成，正在尝试补充人员信息…", 0, 0);
+        this.recompute({ enforceJapanese: false, render: false });
+        this.setProgress("基础排序已完成，正在确认日本作品…", 0, 0);
 
         if (this.client.apiAvailable) {
           await this.enhanceWithPeople();
-          this.recompute();
         }
+        this.recompute({ enforceJapanese: true, render: true });
 
         this.state.lastSync = new Date().toISOString();
         this.updateSyncLabel();
         await this.saveCurrentResult();
         this.setProgress(
-          `完成：分析 ${collections.length} 个收藏，比较 ${this.state.candidates.length} 个未标记候选。`,
+          `完成：分析 ${collections.length} 个收藏，保留 ${this.state.eligibleCandidateCount} 个已确认日本候选。`,
           1,
           1,
         );
@@ -1580,8 +1672,20 @@
 
     async enhanceWithPeople() {
       const influential = Core.influentialSubjectIds(this.state.collections, this.state.profile, 10, 6);
+      const originPreview = this.state.scoredPool.slice(0, 80).map((item) => item.subject.id);
+      let allSubjects = [
+        ...this.state.collections.map((item) => item.subject),
+        ...this.state.candidates,
+      ];
+      const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview);
+      if (origins.size) {
+        this.state.candidates = this.state.candidates.map((item) =>
+          origins.has(item.id) ? { ...item, originMetadata: origins.get(item.id) } : item,
+        );
+      }
+
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);
-      const allSubjects = [
+      allSubjects = [
         ...this.state.collections.map((item) => item.subject),
         ...this.state.candidates,
       ];
@@ -1594,16 +1698,24 @@
       this.state.profile = Core.trainProfile(this.state.collections);
     }
 
-    recompute() {
+    recompute({ enforceJapanese = true, render = true } = {}) {
       const scored = this.state.candidates
         .map((subject) => {
           const scoredSubject = Core.scoreSubject(subject, this.state.profile, this.config.mode);
-          return scoredSubject;
+          return {
+            ...scoredSubject,
+            origin: enforceJapanese ? Core.classifyJapaneseOrigin(subject) : null,
+          };
         })
+        .filter((item) => !enforceJapanese || item.origin?.status === "japanese")
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
+      this.state.eligibleCandidateCount = enforceJapanese ? scored.length : 0;
+      if (enforceJapanese && scored.length < 5) {
+        throw new Error(`只能确认 ${scored.length} 个日本候选，无法在不混入其他国家作品的前提下生成 5 个推荐。`);
+      }
       this.state.scoredPool = scored.slice(0, 180);
       this.excludedBatch.clear();
-      this.renderFromPool();
+      if (render) this.renderFromPool();
     }
 
     renderFromPool() {
@@ -1619,7 +1731,7 @@
       this.renderRecommendations(selected, {
         collectionCount: this.state.profile.collectionCount,
         ratedCount: this.state.profile.ratedCount,
-        candidateCount: this.state.candidates.length,
+        candidateCount: this.state.eligibleCandidateCount,
       });
     }
 
@@ -1796,7 +1908,7 @@
           summary: {
             collectionCount: this.state.profile.collectionCount,
             ratedCount: this.state.profile.ratedCount,
-            candidateCount: this.state.candidates.length,
+            candidateCount: this.state.eligibleCandidateCount,
           },
         },
       });

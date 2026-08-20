@@ -215,3 +215,46 @@ test("collection fingerprints are stable and change with ratings", () => {
   const changed = [collection(1, 9, ["科幻"]), collection(2, 7, ["日常"])];
   assert.notEqual(Core.collectionFingerprint(first), Core.collectionFingerprint(changed));
 });
+
+test("strictly classifies confirmed Japanese, foreign, and unknown origins", () => {
+  const japaneseAnime = Core.classifyJapaneseOrigin({
+    id: 201,
+    type: 2,
+    name: "FLCL",
+    infobox: [{ key: "动画制作", value: "GAINAX / Production I.G" }],
+  });
+  const japaneseBook = Core.classifyJapaneseOrigin({
+    id: 202,
+    type: 1,
+    name: "人類は衰退しました",
+    tags: [{ name: "轻小说" }],
+  });
+  const foreign = Core.classifyJapaneseOrigin({
+    id: 203,
+    type: 6,
+    name: "The Godfather",
+    infobox: [{ key: "国家", value: "美国" }],
+  });
+  const unknown = Core.classifyJapaneseOrigin({ id: 204, type: 4, name: "Untitled Game" });
+  assert.equal(japaneseAnime.status, "japanese");
+  assert.equal(japaneseBook.status, "japanese");
+  assert.equal(foreign.status, "non_japanese");
+  assert.equal(unknown.status, "unknown");
+});
+
+test("origin metadata filters eligibility without changing recommendation score", () => {
+  const rows = [
+    collection(1, 10, ["科幻", "悬疑"], { globalScore: 7.2 }),
+    collection(2, 9, ["科幻", "轮回"], { globalScore: 7.1 }),
+    collection(3, 4, ["后宫", "异世界"], { globalScore: 7.0 }),
+    collection(4, 3, ["后宫", "校园"], { globalScore: 6.9 }),
+  ];
+  const profile = Core.trainProfile(rows);
+  const base = subject(205, 7.4, ["科幻", "悬疑"]);
+  const enriched = {
+    ...base,
+    originMetadata: { ...base, infobox: [{ key: "国家", value: "日本" }] },
+  };
+  assert.equal(Core.scoreSubject(base, profile).normalizedScore, Core.scoreSubject(enriched, profile).normalizedScore);
+  assert.equal(Core.classifyJapaneseOrigin(enriched).status, "japanese");
+});

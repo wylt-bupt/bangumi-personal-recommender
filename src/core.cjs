@@ -104,6 +104,16 @@
     return String(value ?? "").trim();
   }
 
+  function normalizeInfoboxEntries(infobox) {
+    if (!Array.isArray(infobox)) return [];
+    return infobox
+      .map((entry) => ({
+        key: normalizeText(entry?.key || entry?.k || ""),
+        value: normalizeText(infoboxValueText(entry?.value ?? entry?.v ?? entry)),
+      }))
+      .filter((entry) => entry.key || entry.value);
+  }
+
   function normalizeSubject(raw = {}) {
     const rating = raw.rating || {};
     const date = String(raw.date || raw.air_date || "");
@@ -135,6 +145,62 @@
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
     };
+  }
+
+  function classifyJapaneseOrigin(subjectInput) {
+    const source = subjectInput?.originMetadata || subjectInput || {};
+    const subject = normalizeSubject(source);
+    const entries = normalizeInfoboxEntries(subject.infobox);
+    const tagText = normalizeText([...subject.tags, ...subject.metaTags].join(" "));
+    const titleText = normalizeText(`${subject.name} ${subject.nameCn}`);
+    const infoText = entries.map((entry) => `${entry.key} ${entry.value}`).join(" ");
+    const evidence = [];
+    let japaneseScore = 0;
+    let foreignScore = 0;
+    let explicitJapanese = false;
+    let explicitForeign = false;
+
+    const countryKey = /(?:国家|國家|地区|地區|原产|原產|制作国|製作国|製作國|country|region)/i;
+    const japaneseCountry = /(?:^|\s)(?:日本|japan|japanese)(?:\s|$)/i;
+    const foreignCountry = /(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)/i;
+    for (const entry of entries) {
+      if (!countryKey.test(entry.key)) continue;
+      if (japaneseCountry.test(` ${entry.value} `)) explicitJapanese = true;
+      if (foreignCountry.test(entry.value)) explicitForeign = true;
+    }
+
+    if (/(?:日本|日漫|日本动画|日本動畫|日剧|日劇|日影|日本电影|日本電影|j-?pop|アニソン|同人音楽|同人音乐|東方|东方project|vocaloid|特撮|特摄|轻小说|輕小說|ライトノベル|galgame|eroge|jrpg)/i.test(tagText)) {
+      japaneseScore += 2;
+      evidence.push("日系标签");
+    }
+    if (/(?:欧美|歐美|美剧|美劇|英剧|英劇|韩剧|韓劇|国产|國產|中国动画|中國動畫|韩漫|韓漫|美漫|k-?pop)/i.test(tagText)) {
+      foreignScore += 3;
+      evidence.push("非日系标签");
+    }
+    if (/[ぁ-ゖァ-ヺ]/.test(subject.name)) {
+      japaneseScore += 2;
+      evidence.push("日文原名");
+    }
+
+    const japaneseInstitution = /(?:gainax|production\s*i\.?g|shaft|a-1\s*pictures|cloverworks|mappa|madhouse|ufotable|trigger|bones|sunrise|サンライズ|京都アニメーション|京アニ|東映|toei|tms|wit\s*studio|studio\s*deen|j\.?c\.?staff|ぴえろ|日本アニメーション|aniplex|kadokawa|角川|講談社|讲谈社|集英社|小学館|小学馆|芳文社|白泉社|双葉社|双叶社|徳間書店|德间书店|電撃|电击|key\s*sounds\s*label|sony\s*music\s*japan|avex|lantis|日本テレビ|テレビ朝日|テレビ東京|フジテレビ|nhk)/i;
+    if (japaneseInstitution.test(infoText)) {
+      japaneseScore += 3;
+      evidence.push("日本机构");
+    }
+
+    if (explicitJapanese && !explicitForeign) {
+      return { status: "japanese", confidence: 1, evidence: ["明确日本地区", ...evidence] };
+    }
+    if (explicitForeign && !explicitJapanese) {
+      return { status: "non_japanese", confidence: 1, evidence: ["明确非日本地区", ...evidence] };
+    }
+    if (japaneseScore >= 3 && japaneseScore >= foreignScore + 2) {
+      return { status: "japanese", confidence: clamp(japaneseScore / 5, 0, 1), evidence };
+    }
+    if (foreignScore >= 3) {
+      return { status: "non_japanese", confidence: clamp(foreignScore / 5, 0, 1), evidence };
+    }
+    return { status: "unknown", confidence: 0, evidence };
   }
 
   function normalizeCollection(raw = {}) {
@@ -797,7 +863,9 @@
     clamp,
     normalizeText,
     normalizeTagList,
+    normalizeInfoboxEntries,
     normalizeSubject,
+    classifyJapaneseOrigin,
     normalizeCollection,
     normalizeRole,
     normalizeInfoboxRole,
