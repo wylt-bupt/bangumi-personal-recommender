@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.0";
+  const APP_VERSION = "0.3.1";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "19";
+  const RECOMMENDATION_MODEL_VERSION = "20";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -400,7 +400,7 @@
       const directTags = [...options.directCandidateTags];
       const supplementalTags = [...(options.supplementalCandidateTags || [])];
       const allTags = [...new Set([...directTags, ...supplementalTags].map(Core.normalizeText))];
-      const key = `candidates:special:v2:${options.id || subjectType}:${allTags.sort().join("|")}`;
+      const key = `candidates:special:v3:${options.id || subjectType}:${allTags.sort().join("|")}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
