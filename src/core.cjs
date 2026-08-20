@@ -249,15 +249,19 @@
   }
 
   function splitCreditNames(valueInput) {
-    return infoboxValueText(valueInput)
-      .replace(/\[[^\]]*]/g, " ")
+    const rawValue = infoboxValueText(valueInput).replace(/\[[^\]]*]/g, " ");
+    const aliases = [...rawValue.matchAll(/[（(]([^()（）]{2,24})[）)]/g)]
+      .map((match) => match[1].trim())
+      .filter((value) => /[\p{L}]/u.test(value) && !/\d|[、，,;；]/.test(value));
+    const primaryNames = rawValue
       .replace(/\([^)]*\)|（[^）]*）|【[^】]*】/g, "")
       .split(/[、，,\/／;；\n]|\s+[&＆]\s+/)
       .map((value) => value
         .replace(/^(?:担当|制作|製作)[:：]\s*/i, "")
-        .trim())
+      .trim())
       .filter((value) => value && value.length <= 48 && !/^https?:/i.test(value))
       .slice(0, 8);
+    return [...new Set([...primaryNames, ...aliases])].slice(0, 8);
   }
 
   function extractInfoboxCredits(infobox = []) {
@@ -517,10 +521,26 @@
     return selected;
   }
 
-  function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 32) {
+  function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 24) {
     const subject = normalizeSubject(subjectInput);
     const creditAliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
-    const genericLabels = new Set(["tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説"]);
+    const genericLabels = new Set([
+      "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
+      "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
+    ]);
+    const titleAliases = new Set(
+      [subject.name, subject.nameCn]
+        .map(normalizeText)
+        .filter(Boolean),
+    );
+    for (const entry of subject.infobox) {
+      const key = normalizeText(entry?.key || entry?.k || "");
+      if (!/(?:别名|別名|中文名|英文名|原名|原題|alias|title)/i.test(key)) continue;
+      for (const alias of infoboxValueText(entry?.value ?? entry?.v ?? "").split(/[、，,\/／;；\n]/)) {
+        const normalizedAlias = normalizeText(alias);
+        if (normalizedAlias) titleAliases.add(normalizedAlias);
+      }
+    }
     const positiveTagValues = new Map(
       positiveReasons
         .filter((entry) => entry.role === "tag" && Number(entry.value || 0) > 0)
@@ -540,6 +560,7 @@
         !TEMPORAL_TAG.test(entry.label) &&
         !genericLabels.has(normalizeText(entry.label)) &&
         !creditAliases.has(creditAlias(entry.label)) &&
+        !titleAliases.has(normalizeText(entry.label)) &&
         [...entry.label].length <= 18,
       )
       .sort((a, b) => b.score - a.score);

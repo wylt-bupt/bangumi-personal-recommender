@@ -59,6 +59,14 @@ test("extracts creator and production evidence from subject infobox", () => {
   assert.ok(vector.features["director:name:佐藤卓哉"]);
   assert.ok(vector.features["script:name:花田十辉"]);
   assert.ok(vector.features["script:name:佐藤卓哉"]);
+
+  const bookVector = Core.buildFeatureVector({
+    ...subject(12, 8, ["瀬戸口廉也", "致郁"]),
+    type: 1,
+    infobox: [{ key: "作者", value: "唐辺葉介 (瀬戸口廉也)" }],
+  });
+  assert.ok(bookVector.features["creator:name:瀬戸口廉也"]);
+  assert.equal(bookVector.features["tag:瀬戸口廉也"], undefined);
 });
 
 test("learns positive and negative tag preference from rating residuals", () => {
@@ -133,7 +141,9 @@ test("keeps verified credits out of content tags and treats them as weak creativ
   const subjectWithCredits = {
     id: 12,
     type: 2,
-    tags: ["日本", "TV", "a-1pictures", "偶像", "音乐", "青春"],
+    name: "THE IDOLM@STER",
+    name_cn: "偶像大师",
+    tags: ["日本", "TV", "a-1pictures", "偶像大师", "偶像", "音乐", "青春", "系列"],
     infobox: [{ key: "动画制作", value: "A-1 Pictures" }],
   };
   const positiveReasons = [
