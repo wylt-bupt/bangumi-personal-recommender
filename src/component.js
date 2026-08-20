@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.5";
+  const APP_VERSION = "0.2.6";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "14";
+  const RECOMMENDATION_MODEL_VERSION = "15";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -420,7 +420,8 @@
               this.progress(`“${tag}”站内标签页不可用，保留其余候选来源…`, 0, 0);
             }
           }
-          const candidates = this.dedupeSubjects(pools, true).filter(Core.isAdultRecommendationCandidate);
+          const candidates = this.dedupeSubjects(pools, true)
+            .filter((subject) => Core.isAdultRecommendationCandidate(subject, true));
           if (!candidates.length) throw new Error("没有读取到可确认的里番候选条目。");
           return candidates;
         },
@@ -873,6 +874,7 @@
           : allCollections;
         if (!collections.length) throw new Error("没有读取到该类型的收藏数据。请确认账号公开收藏或稍后重试。");
         this.state.collections = collections;
+        this.state.requireAdultEvidence = selectedType.id === "anime_hentai";
         this.state.baseProfile = Core.trainProfile(collections);
         this.state.profile = this.state.baseProfile;
         if (this.state.profile.ratedCount < 5) throw new Error("已评分样本不足 5 个，暂时无法建立可靠画像。");
@@ -914,9 +916,17 @@
       ];
       const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview);
       if (origins.size) {
-        this.state.candidates = this.state.candidates.map((item) =>
-          origins.has(item.id) ? { ...item, originMetadata: origins.get(item.id) } : item,
-        );
+        this.state.candidates = this.state.candidates.map((item) => {
+          if (!origins.has(item.id)) return item;
+          const details = origins.get(item.id);
+          return {
+            ...item,
+            ...details,
+            tags: [...new Set([...(item.tags || []), ...(details.tags || [])])],
+            metaTags: [...new Set([...(item.metaTags || []), ...(details.metaTags || [])])],
+            originMetadata: details,
+          };
+        });
       }
 
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);
@@ -953,6 +963,8 @@
           };
         })
         .filter((item) => !enforceJapanese || item.origin?.status === "japanese")
+        .filter((item) => !enforceJapanese || !this.state.requireAdultEvidence
+          || Core.isAdultRecommendationCandidate(item.subject))
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
       this.state.eligibleCandidateCount = enforceJapanese ? scored.length : 0;
       if (enforceJapanese && scored.length < 5) {

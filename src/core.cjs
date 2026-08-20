@@ -64,9 +64,12 @@
   const ADULT_RECOMMENDATION_TAGS = Object.freeze({
     profile: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画", "r18", "18x", "18禁"]),
     direct: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画"]),
+    strongDirect: Object.freeze(["步兵裡番", "泡面里番", "成人动画"]),
     supplemental: Object.freeze(["r18", "18x", "18禁"]),
     corroborating: Object.freeze([
-      "实用", "无码", "本番", "里番下限", "poro", "ピンクパイナップル", "queenbee",
+      "实用", "无码", "本番", "里番下限", "成人向", "成人三部曲", "有h", "有h哦", "hentai",
+      "エロ", "エロアニメ", "色情", "官能", "三级", "拔作", "抜きゲー", "r17", "r18+", "18+",
+      "poro", "ピンクパイナップル", "queenbee",
       "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
     ]),
   });
@@ -116,15 +119,19 @@
     return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
   }
 
-  function isAdultRecommendationCandidate(subjectInput) {
+  function isAdultRecommendationCandidate(subjectInput, allowDirectOnly = false) {
     const subject = normalizeSubject(subjectInput);
     const tags = new Set([...subject.tags, ...subject.metaTags]);
     const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
-    if (containsAny(ADULT_RECOMMENDATION_TAGS.direct)) return true;
+    const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
+    if (allowDirectOnly && hasDirect) return true;
+    if (containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect)) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
     if (supplementalCount >= 2) return true;
-    return supplementalCount === 1 && containsAny(ADULT_RECOMMENDATION_TAGS.corroborating);
+    const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
+      || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
+    return (hasDirect || supplementalCount === 1) && hasCorroboration;
   }
 
   function infoboxValueText(value) {

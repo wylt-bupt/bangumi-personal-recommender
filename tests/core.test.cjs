@@ -41,12 +41,15 @@ test("matches special recommendation tags across public and personal collection 
 });
 
 test("keeps direct adult tags and requires corroboration for ambiguous rating tags", () => {
-  assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"])), false);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"]), true), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(31, 7, ["成人动画"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(32, 7, ["R18", "18禁"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(33, 7, ["R18", "无码"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(36, 7, ["里番", "成人三部曲"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(34, 7, ["R18", "血腥", "猎奇"])), false);
   assert.equal(Core.isAdultRecommendationCandidate(subject(35, 7, ["18X", "OVA", "BL"])), false);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(37, 7, ["里番", "治愈", "日本"])), false);
 });
 
 test("normalizes staff roles and keeps role identity separate", () => {

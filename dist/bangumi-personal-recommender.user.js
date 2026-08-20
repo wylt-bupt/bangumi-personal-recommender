@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.2.5
+// @version      0.2.6
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -78,9 +78,12 @@
   const ADULT_RECOMMENDATION_TAGS = Object.freeze({
     profile: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画", "r18", "18x", "18禁"]),
     direct: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画"]),
+    strongDirect: Object.freeze(["步兵裡番", "泡面里番", "成人动画"]),
     supplemental: Object.freeze(["r18", "18x", "18禁"]),
     corroborating: Object.freeze([
-      "实用", "无码", "本番", "里番下限", "poro", "ピンクパイナップル", "queenbee",
+      "实用", "无码", "本番", "里番下限", "成人向", "成人三部曲", "有h", "有h哦", "hentai",
+      "エロ", "エロアニメ", "色情", "官能", "三级", "拔作", "抜きゲー", "r17", "r18+", "18+",
+      "poro", "ピンクパイナップル", "queenbee",
       "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
     ]),
   });
@@ -130,15 +133,19 @@
     return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
   }
 
-  function isAdultRecommendationCandidate(subjectInput) {
+  function isAdultRecommendationCandidate(subjectInput, allowDirectOnly = false) {
     const subject = normalizeSubject(subjectInput);
     const tags = new Set([...subject.tags, ...subject.metaTags]);
     const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
-    if (containsAny(ADULT_RECOMMENDATION_TAGS.direct)) return true;
+    const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
+    if (allowDirectOnly && hasDirect) return true;
+    if (containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect)) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
     if (supplementalCount >= 2) return true;
-    return supplementalCount === 1 && containsAny(ADULT_RECOMMENDATION_TAGS.corroborating);
+    const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
+      || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
+    return (hasDirect || supplementalCount === 1) && hasCorroboration;
   }
 
   function infoboxValueText(value) {
@@ -976,14 +983,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.5";
+  const APP_VERSION = "0.2.6";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "14";
+  const RECOMMENDATION_MODEL_VERSION = "15";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -1392,7 +1399,8 @@
               this.progress(`“${tag}”站内标签页不可用，保留其余候选来源…`, 0, 0);
             }
           }
-          const candidates = this.dedupeSubjects(pools, true).filter(Core.isAdultRecommendationCandidate);
+          const candidates = this.dedupeSubjects(pools, true)
+            .filter((subject) => Core.isAdultRecommendationCandidate(subject, true));
           if (!candidates.length) throw new Error("没有读取到可确认的里番候选条目。");
           return candidates;
         },
@@ -1845,6 +1853,7 @@
           : allCollections;
         if (!collections.length) throw new Error("没有读取到该类型的收藏数据。请确认账号公开收藏或稍后重试。");
         this.state.collections = collections;
+        this.state.requireAdultEvidence = selectedType.id === "anime_hentai";
         this.state.baseProfile = Core.trainProfile(collections);
         this.state.profile = this.state.baseProfile;
         if (this.state.profile.ratedCount < 5) throw new Error("已评分样本不足 5 个，暂时无法建立可靠画像。");
@@ -1886,9 +1895,17 @@
       ];
       const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview);
       if (origins.size) {
-        this.state.candidates = this.state.candidates.map((item) =>
-          origins.has(item.id) ? { ...item, originMetadata: origins.get(item.id) } : item,
-        );
+        this.state.candidates = this.state.candidates.map((item) => {
+          if (!origins.has(item.id)) return item;
+          const details = origins.get(item.id);
+          return {
+            ...item,
+            ...details,
+            tags: [...new Set([...(item.tags || []), ...(details.tags || [])])],
+            metaTags: [...new Set([...(item.metaTags || []), ...(details.metaTags || [])])],
+            originMetadata: details,
+          };
+        });
       }
 
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);
@@ -1925,6 +1942,8 @@
           };
         })
         .filter((item) => !enforceJapanese || item.origin?.status === "japanese")
+        .filter((item) => !enforceJapanese || !this.state.requireAdultEvidence
+          || Core.isAdultRecommendationCandidate(item.subject))
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
       this.state.eligibleCandidateCount = enforceJapanese ? scored.length : 0;
       if (enforceJapanese && scored.length < 5) {

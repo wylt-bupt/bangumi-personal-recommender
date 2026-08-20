@@ -1,6 +1,6 @@
 {
   "name": "bangumi-personal-recommender",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "private": true,
   "description": "A privacy-first personal recommendation component for Bangumi.",
   "scripts": {
