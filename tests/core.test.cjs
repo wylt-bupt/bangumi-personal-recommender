@@ -46,27 +46,22 @@ test("normalizes staff roles and keeps role identity separate", () => {
   assert.ok(vector.features["script:10"]);
 });
 
-test("extracts creator and production evidence from subject infobox", () => {
-  const vector = Core.buildFeatureVector({
-    ...subject(11, 8, ["科幻"]),
-    infobox: [
-      { key: "动画制作", value: "WHITE FOX" },
-      { key: "导演", value: "佐藤卓哉" },
-      { key: "脚本", value: "花田十辉(1, 3)、佐藤卓哉(2)" },
-    ],
-  });
-  assert.ok(vector.features["studio:name:white fox"]);
-  assert.ok(vector.features["director:name:佐藤卓哉"]);
-  assert.ok(vector.features["script:name:花田十辉"]);
-  assert.ok(vector.features["script:name:佐藤卓哉"]);
+test("extracts infobox credits for display without changing the original ranking vector", () => {
+  const infobox = [
+    { key: "动画制作", value: "WHITE FOX" },
+    { key: "导演", value: "佐藤卓哉" },
+    { key: "脚本", value: "花田十辉(1, 3)、佐藤卓哉(2)" },
+  ];
+  assert.deepEqual(Core.extractInfoboxCredits(infobox), [
+    { role: "studio", label: "WHITE FOX" },
+    { role: "director", label: "佐藤卓哉" },
+    { role: "script", label: "花田十辉" },
+    { role: "script", label: "佐藤卓哉" },
+  ]);
+  const vector = Core.buildFeatureVector({ ...subject(11, 8, ["科幻"]), infobox });
+  assert.equal(vector.features["studio:name:white fox"], undefined);
+  assert.ok(vector.features["tag:科幻"]);
 
-  const bookVector = Core.buildFeatureVector({
-    ...subject(12, 8, ["瀬戸口廉也", "致郁"]),
-    type: 1,
-    infobox: [{ key: "作者", value: "唐辺葉介 (瀬戸口廉也)" }],
-  });
-  assert.ok(bookVector.features["creator:name:瀬戸口廉也"]);
-  assert.equal(bookVector.features["tag:瀬戸口廉也"], undefined);
   assert.deepEqual(Core.selectContentTags({
     id: 13,
     type: 1,
@@ -173,7 +168,7 @@ test("keeps verified credits out of content tags and treats them as weak creativ
   assert.deepEqual(tags.map((entry) => entry.label), ["偶像", "音乐", "青春"]);
 });
 
-test("unmatched personnel features do not dilute learned tag preference", () => {
+test("uses the original v0.1.0 feature normalization baseline", () => {
   const rows = [
     collection(1, 10, ["治愈", "日常"], { globalScore: 7.2 }),
     collection(2, 9, ["治愈", "青春"], { globalScore: 7.1 }),
@@ -181,17 +176,19 @@ test("unmatched personnel features do not dilute learned tag preference", () => 
     collection(4, 3, ["后宫", "异世界"], { globalScore: 6.9 }),
   ];
   const profile = Core.trainProfile(rows);
-  const plain = Core.scoreSubject(subject(101, 7.4, ["治愈", "日常"]), profile);
-  const noisy = Core.scoreSubject(subject(102, 7.4, ["治愈", "日常"], {
-    infobox: [
-      { key: "导演", value: "从未看过的导演" },
-      { key: "动画制作", value: "从未看过的公司" },
-      { key: "音乐", value: "从未看过的作曲家" },
-    ],
-  }), profile);
-  assert.ok(Math.abs(plain.contentScore - noisy.contentScore) < 1e-12);
-  assert.ok(Core.ROLE_WEIGHTS.tag > Core.ROLE_WEIGHTS.director);
-  assert.ok(Core.ROLE_WEIGHTS.director > Core.ROLE_WEIGHTS.cv);
+  const candidate = subject(101, 7.4, ["治愈", "日常"], {
+    persons: [{ id: 99, name: "陌生导演", relation: "导演" }],
+  });
+  const vector = Core.buildFeatureVector(candidate);
+  const scored = Core.scoreSubject(candidate, profile);
+  const raw = Object.entries(vector.features).reduce(
+    (sum, [token, magnitude]) => sum + magnitude * Number(profile.featureWeights[token] || 0),
+    0,
+  );
+  const mass = Object.values(vector.features).reduce((sum, value) => sum + Math.abs(value), 0);
+  assert.ok(Math.abs(scored.contentScore - Math.tanh((raw / Math.sqrt(Math.max(1, mass))) * 2.2)) < 1e-12);
+  assert.equal(Core.ROLE_WEIGHTS.director, 1);
+  assert.equal(Core.ROLE_WEIGHTS.cv, 0.2);
 });
 
 test("MMR reduces near-duplicate results", () => {

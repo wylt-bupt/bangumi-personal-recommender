@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.1.7
+// @version      0.1.8
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -33,16 +33,16 @@
 
   const ROLE_WEIGHTS = Object.freeze({
     tag: 1,
-    meta: 0.8,
-    director: 0.35,
-    studio: 0.3,
-    creator: 0.35,
-    series: 0.25,
-    script: 0.25,
-    music: 0.2,
-    cv: 0.08,
-    decade: 0.18,
-    format: 0.15,
+    meta: 0.9,
+    director: 1,
+    studio: 0.8,
+    creator: 0.7,
+    series: 0.6,
+    script: 0.6,
+    music: 0.45,
+    cv: 0.2,
+    decade: 0.22,
+    format: 0.2,
   });
 
   const ROLE_SHRINKAGE = Object.freeze({
@@ -318,22 +318,11 @@
     const subject = normalizeSubject(subjectInput);
     const groups = new Map();
     const labels = {};
-    const subjectCredits = extractInfoboxCredits(subject.infobox);
-    const creditsByAlias = new Map(subjectCredits.map((credit) => [creditAlias(credit.label), credit]));
-    const creditedLabels = new Set();
 
     const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
       .filter((tag) => !TEMPORAL_TAG.test(tag))
       .slice(0, 18);
-    for (const tag of tagValues) {
-      const credit = creditsByAlias.get(creditAlias(tag));
-      if (credit) {
-        addGroupedFeature(groups, credit.role, `name:${normalizeText(credit.label)}`, credit.label);
-        creditedLabels.add(`${credit.role}:${normalizeText(credit.label)}`);
-      } else {
-        addGroupedFeature(groups, "tag", tag, tag);
-      }
-    }
+    for (const tag of tagValues) addGroupedFeature(groups, "tag", tag, tag);
 
     for (const tag of subject.metaTags.slice(0, 8)) {
       if (!TEMPORAL_TAG.test(tag)) addGroupedFeature(groups, "meta", tag, tag);
@@ -350,17 +339,7 @@
     for (const person of subject.persons) {
       const role = normalizeRole(person.relation || person.type || person.career || person.jobs?.join(" "));
       const id = Number(person.id || person.person_id || 0);
-      if (role && id) {
-        const label = person.name || person.name_cn || id;
-        if (!creditedLabels.has(`${role}:${normalizeText(label)}`)) addGroupedFeature(groups, role, id, label);
-        creditedLabels.add(`${role}:${normalizeText(label)}`);
-      }
-    }
-    for (const { role, label } of subjectCredits) {
-      const normalizedLabel = normalizeText(label);
-      if (!normalizedLabel || creditedLabels.has(`${role}:${normalizedLabel}`)) continue;
-      addGroupedFeature(groups, role, `name:${normalizedLabel}`, label);
-      creditedLabels.add(`${role}:${normalizedLabel}`);
+      if (role && id) addGroupedFeature(groups, role, id, person.name || person.name_cn || id);
     }
 
     let actorCount = 0;
@@ -732,10 +711,7 @@
       .filter((entry) => entry.value !== 0)
       .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 
-    const featureMass = contributions.reduce(
-      (sum, entry) => sum + Math.abs(Number(vector.features[entry.token] || 0)),
-      0,
-    );
+    const featureMass = Object.values(vector.features).reduce((sum, value) => sum + Math.abs(value), 0);
     const contentRaw = contributions.reduce((sum, entry) => sum + entry.value, 0) /
       Math.sqrt(Math.max(1, featureMass));
     const content = Math.tanh(contentRaw * 2.2);
@@ -947,7 +923,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.7";
+  const APP_VERSION = "0.1.8";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -956,7 +932,7 @@
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
   const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "8";
+  const RECOMMENDATION_MODEL_VERSION = "9";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -1370,17 +1346,14 @@
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 3, async (subjectId) => {
-        const [details, persons, characters] = await Promise.all([
-          this.getSubjectDetails(subjectId),
+        const [persons, characters] = await Promise.all([
           this.getPersons(subjectId),
           this.getCharacters(subjectId),
         ]);
         completed += 1;
         this.progress("正在补充导演、制作与声优信息…", completed, uniqueIds.length);
         const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
-        return base
-          ? [subjectId, { ...base, ...(details ? Core.normalizeSubject(details) : {}), persons, characters }]
-          : null;
+        return base ? [subjectId, { ...base, persons, characters }] : null;
       });
       return new Map(rows.filter(Boolean));
     }

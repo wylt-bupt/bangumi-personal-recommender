@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.7";
+  const APP_VERSION = "0.1.8";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -13,7 +13,7 @@
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
   const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "8";
+  const RECOMMENDATION_MODEL_VERSION = "9";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -427,17 +427,14 @@
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 3, async (subjectId) => {
-        const [details, persons, characters] = await Promise.all([
-          this.getSubjectDetails(subjectId),
+        const [persons, characters] = await Promise.all([
           this.getPersons(subjectId),
           this.getCharacters(subjectId),
         ]);
         completed += 1;
         this.progress("正在补充导演、制作与声优信息…", completed, uniqueIds.length);
         const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
-        return base
-          ? [subjectId, { ...base, ...(details ? Core.normalizeSubject(details) : {}), persons, characters }]
-          : null;
+        return base ? [subjectId, { ...base, persons, characters }] : null;
       });
       return new Map(rows.filter(Boolean));
     }
