@@ -51,6 +51,7 @@ test("keeps direct adult tags and requires corroboration for ambiguous rating ta
   assert.equal(Core.isAdultRecommendationCandidate(subject(34, 7, ["R18", "血腥", "猎奇"])), false);
   assert.equal(Core.isAdultRecommendationCandidate(subject(35, 7, ["18X", "OVA", "BL"])), false);
   assert.equal(Core.isAdultRecommendationCandidate(subject(37, 7, ["里番", "治愈", "日本"])), false);
+  assert.equal(Core.normalizeSubject({ ...subject(39, 7, ["里番"]), adultEvidenceVerified: false }).adultEvidenceVerified, false);
 });
 
 test("normalizes staff roles and keeps role identity separate", () => {

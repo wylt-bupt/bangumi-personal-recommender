@@ -185,6 +185,9 @@
         : [],
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
+      adultEvidenceVerified: raw.adultEvidenceVerified === undefined
+        ? undefined
+        : Boolean(raw.adultEvidenceVerified),
     };
   }
 

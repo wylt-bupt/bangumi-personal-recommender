@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.7";
+  const APP_VERSION = "0.2.8";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "16";
+  const RECOMMENDATION_MODEL_VERSION = "17";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -561,11 +561,15 @@
 
     async getSubjectDetails(subjectId) {
       if (!this.apiAvailable) return null;
-      return this.cached(
-        `subject-details:${subjectId}`,
-        ENTITY_TTL,
-        () => this.requestJson(`/v0/subjects/${subjectId}`).catch(() => null),
-      );
+      try {
+        return await this.cached(
+          `subject-details:v2:${subjectId}`,
+          ENTITY_TTL,
+          () => this.requestJson(`/v0/subjects/${subjectId}`),
+        );
+      } catch {
+        return null;
+      }
     }
 
     async enrichOriginMetadata(subjects, subjectIds) {
@@ -577,7 +581,12 @@
         completed += 1;
         this.progress("正在确认候选作品来源…", completed, uniqueIds.length);
         const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
-        return base ? [subjectId, Core.normalizeSubject(details || base)] : null;
+        return base
+          ? [subjectId, {
+              ...Core.normalizeSubject(details || base),
+              adultEvidenceVerified: Boolean(details),
+            }]
+          : null;
       });
       return new Map(rows.filter(Boolean));
     }
@@ -964,7 +973,8 @@
         })
         .filter((item) => !enforceJapanese || item.origin?.status === "japanese")
         .filter((item) => !enforceJapanese || !this.state.requireAdultEvidence
-          || Core.isAdultRecommendationCandidate(item.subject))
+          || (item.subject.adultEvidenceVerified !== false
+            && Core.isAdultRecommendationCandidate(item.subject)))
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
       this.state.eligibleCandidateCount = enforceJapanese ? scored.length : 0;
       if (enforceJapanese && scored.length < 5) {
