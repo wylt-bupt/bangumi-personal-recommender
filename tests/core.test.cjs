@@ -51,6 +51,10 @@ test("keeps direct adult tags and requires corroboration for ambiguous rating ta
   assert.equal(Core.isAdultRecommendationCandidate(subject(34, 7, ["R18", "血腥", "猎奇"])), false);
   assert.equal(Core.isAdultRecommendationCandidate(subject(35, 7, ["18X", "OVA", "BL"])), false);
   assert.equal(Core.isAdultRecommendationCandidate(subject(37, 7, ["里番", "治愈", "日本"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate({
+    ...subject(40, 7, ["里番", "治愈", "日本"]),
+    tags: [{ name: "里番", count: 1 }, { name: "治愈", count: 50 }, { name: "日本", count: 50 }],
+  }), false);
   assert.equal(Core.normalizeSubject({ ...subject(39, 7, ["里番"]), adultEvidenceVerified: false }).adultEvidenceVerified, false);
 });
 

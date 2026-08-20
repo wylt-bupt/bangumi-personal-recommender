@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.3.4
+// @version      0.3.5
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -139,12 +139,17 @@
     const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
     const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
     if (allowDirectOnly && hasDirect) return true;
-    if (hasDirect) return true;
+    const hasStrongDirect = containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect);
+    const hasDirectConsensus = ADULT_RECOMMENDATION_TAGS.direct.some((value) => {
+      const tag = normalizeText(value);
+      return tags.has(tag) && Number(subject.tagCounts[tag] || 0) >= 3;
+    });
+    if (hasStrongDirect || hasDirectConsensus) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
     const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
       || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
-    return supplementalCount >= 1 && hasCorroboration;
+    return (hasDirect || supplementalCount >= 1) && hasCorroboration;
   }
 
   function infoboxValueText(value) {
@@ -171,6 +176,16 @@
   function normalizeSubject(raw = {}) {
     const rating = raw.rating || {};
     const date = String(raw.date || raw.air_date || "");
+    const tagCounts = {};
+    for (const tag of Array.isArray(raw.tags) ? raw.tags : []) {
+      if (!tag || typeof tag !== "object") continue;
+      const name = normalizeText(tag.name);
+      if (name) tagCounts[name] = Math.max(Number(tagCounts[name] || 0), Number(tag.count || 0));
+    }
+    for (const [nameInput, count] of Object.entries(raw.tagCounts || {})) {
+      const name = normalizeText(nameInput);
+      if (name) tagCounts[name] = Math.max(Number(tagCounts[name] || 0), Number(count || 0));
+    }
     return {
       id: Number(raw.id || raw.subject_id || 0),
       type: Number(raw.type || raw.subject_type || 0),
@@ -184,6 +199,7 @@
         raw.images?.small ||
         "",
       tags: normalizeTagList(raw.tags),
+      tagCounts,
       metaTags: normalizeTagList(raw.meta_tags || raw.metaTags),
       rating: {
         score: Number(rating.score || raw.score || 0),
@@ -985,14 +1001,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.4";
+  const APP_VERSION = "0.3.5";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "23";
+  const RECOMMENDATION_MODEL_VERSION = "24";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;

@@ -125,12 +125,17 @@
     const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
     const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
     if (allowDirectOnly && hasDirect) return true;
-    if (hasDirect) return true;
+    const hasStrongDirect = containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect);
+    const hasDirectConsensus = ADULT_RECOMMENDATION_TAGS.direct.some((value) => {
+      const tag = normalizeText(value);
+      return tags.has(tag) && Number(subject.tagCounts[tag] || 0) >= 3;
+    });
+    if (hasStrongDirect || hasDirectConsensus) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
     const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
       || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
-    return supplementalCount >= 1 && hasCorroboration;
+    return (hasDirect || supplementalCount >= 1) && hasCorroboration;
   }
 
   function infoboxValueText(value) {
@@ -157,6 +162,16 @@
   function normalizeSubject(raw = {}) {
     const rating = raw.rating || {};
     const date = String(raw.date || raw.air_date || "");
+    const tagCounts = {};
+    for (const tag of Array.isArray(raw.tags) ? raw.tags : []) {
+      if (!tag || typeof tag !== "object") continue;
+      const name = normalizeText(tag.name);
+      if (name) tagCounts[name] = Math.max(Number(tagCounts[name] || 0), Number(tag.count || 0));
+    }
+    for (const [nameInput, count] of Object.entries(raw.tagCounts || {})) {
+      const name = normalizeText(nameInput);
+      if (name) tagCounts[name] = Math.max(Number(tagCounts[name] || 0), Number(count || 0));
+    }
     return {
       id: Number(raw.id || raw.subject_id || 0),
       type: Number(raw.type || raw.subject_type || 0),
@@ -170,6 +185,7 @@
         raw.images?.small ||
         "",
       tags: normalizeTagList(raw.tags),
+      tagCounts,
       metaTags: normalizeTagList(raw.meta_tags || raw.metaTags),
       rating: {
         score: Number(rating.score || raw.score || 0),
