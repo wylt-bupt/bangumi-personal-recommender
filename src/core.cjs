@@ -125,13 +125,12 @@
     const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
     const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
     if (allowDirectOnly && hasDirect) return true;
-    if (containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect)) return true;
+    if (hasDirect) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
     const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
       || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
-    if (hasDirect && supplementalCount >= 1) return true;
-    return (hasDirect || supplementalCount >= 1) && hasCorroboration;
+    return supplementalCount >= 1 && hasCorroboration;
   }
 
   function infoboxValueText(value) {

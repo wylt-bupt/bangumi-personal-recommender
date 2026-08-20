@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.3.2
+// @version      0.3.3
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -139,13 +139,12 @@
     const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
     const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
     if (allowDirectOnly && hasDirect) return true;
-    if (containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect)) return true;
+    if (hasDirect) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
     const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
       || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
-    if (hasDirect && supplementalCount >= 1) return true;
-    return (hasDirect || supplementalCount >= 1) && hasCorroboration;
+    return supplementalCount >= 1 && hasCorroboration;
   }
 
   function infoboxValueText(value) {
@@ -986,14 +985,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.2";
+  const APP_VERSION = "0.3.3";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "21";
+  const RECOMMENDATION_MODEL_VERSION = "22";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
