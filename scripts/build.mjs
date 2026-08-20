@@ -7,7 +7,7 @@ const output = resolve(root, "dist/bangumi-personal-recommender.user.js");
 const header = `// ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.3.3
+// @version      0.3.4
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*

@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.3";
+  const APP_VERSION = "0.3.4";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "22";
+  const RECOMMENDATION_MODEL_VERSION = "23";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -443,11 +443,7 @@
       );
       this.progress(`正在补充“${tag}”API 候选…`, 0, 1);
       const first = await fetchPage(0);
-      const withVerifiedEvidence = (rows) => (Array.isArray(rows) ? rows : []).map((row) => ({
-        ...row,
-        adultEvidenceVerified: true,
-        adultEvidenceMetadata: Core.normalizeSubject(row),
-      }));
+      const withVerifiedEvidence = (rows) => (Array.isArray(rows) ? rows : []);
       const firstRows = withVerifiedEvidence(first.data);
       const pageSize = Math.max(1, firstRows.length || 20);
       const total = Math.max(firstRows.length, Number(first.total || 0));
@@ -471,9 +467,6 @@
       const map = new Map();
       for (const raw of subjects) {
         const subject = Core.normalizeSubject(raw);
-        if (raw?.adultEvidenceMetadata) {
-          subject.adultEvidenceMetadata = Core.normalizeSubject(raw.adultEvidenceMetadata);
-        }
         if (!subject.id) continue;
         const previous = map.get(subject.id) || {};
         map.set(subject.id, mergeTags
@@ -499,8 +492,6 @@
               adultEvidenceVerified: Boolean(
                 previous.adultEvidenceVerified || subject.adultEvidenceVerified,
               ),
-              adultEvidenceMetadata:
-                subject.adultEvidenceMetadata || previous.adultEvidenceMetadata,
             }
           : { ...previous, ...subject });
       }
@@ -581,9 +572,9 @@
       }
     }
 
-    async enrichOriginMetadata(subjects, subjectIds) {
+    async enrichOriginMetadata(subjects, subjectIds, limit = 180) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
-      const uniqueIds = [...new Set(subjectIds)].slice(0, 180);
+      const uniqueIds = [...new Set(subjectIds)].slice(0, limit);
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
         const details = await this.getSubjectDetails(subjectId);
@@ -912,7 +903,7 @@
           this.state.candidates = this.state.candidates.filter((subject) => {
             const evidence = subject.originMetadata?.adultEvidenceVerified === true
               ? subject.originMetadata
-              : subject.adultEvidenceMetadata || null;
+              : null;
             return evidence && Core.isAdultRecommendationCandidate(evidence);
           });
         }
@@ -935,12 +926,13 @@
 
     async enhanceWithPeople() {
       const influential = Core.influentialSubjectIds(this.state.collections, this.state.profile, 10, 6);
-      const originPreview = this.state.scoredPool.slice(0, 180).map((item) => item.subject.id);
+      const originLimit = this.state.requireAdultEvidence ? 360 : 180;
+      const originPreview = this.state.scoredPool.slice(0, originLimit).map((item) => item.subject.id);
       let allSubjects = [
         ...this.state.collections.map((item) => item.subject),
         ...this.state.candidates,
       ];
-      const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview);
+      const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview, originLimit);
       if (origins.size) {
         this.state.candidates = this.state.candidates.map((item) => {
           if (!origins.has(item.id)) return item;
@@ -997,7 +989,8 @@
       if (enforceJapanese && scored.length < 5) {
         throw new Error(`只能确认 ${scored.length} 个日本候选，无法在不混入其他国家作品的前提下生成 5 个推荐。`);
       }
-      this.state.scoredPool = scored.slice(0, 180);
+      const poolLimit = !enforceJapanese && this.state.requireAdultEvidence ? 360 : 180;
+      this.state.scoredPool = scored.slice(0, poolLimit);
       this.excludedBatch.clear();
       if (render) this.renderFromPool();
     }
