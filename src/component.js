@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.8";
+  const APP_VERSION = "0.2.9";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "17";
+  const RECOMMENDATION_MODEL_VERSION = "18";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -898,6 +898,12 @@
 
         if (this.client.apiAvailable) {
           await this.enhanceWithPeople();
+        }
+        if (this.state.requireAdultEvidence) {
+          this.state.candidates = this.state.candidates.filter((subject) =>
+            subject.originMetadata?.adultEvidenceVerified === true
+              && Core.isAdultRecommendationCandidate(subject.originMetadata),
+          );
         }
         this.recompute({ enforceJapanese: true, render: true });
 
