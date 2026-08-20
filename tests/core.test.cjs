@@ -168,7 +168,7 @@ test("keeps verified credits out of content tags and treats them as weak creativ
   assert.deepEqual(tags.map((entry) => entry.label), ["偶像", "音乐", "青春"]);
 });
 
-test("uses the original v0.1.0 feature normalization baseline", () => {
+test("keeps the original normalization while treating supplemental credits as weak evidence", () => {
   const rows = [
     collection(1, 10, ["治愈", "日常"], { globalScore: 7.2 }),
     collection(2, 9, ["治愈", "青春"], { globalScore: 7.1 }),
@@ -187,8 +187,13 @@ test("uses the original v0.1.0 feature normalization baseline", () => {
   );
   const mass = Object.values(vector.features).reduce((sum, value) => sum + Math.abs(value), 0);
   assert.ok(Math.abs(scored.contentScore - Math.tanh((raw / Math.sqrt(Math.max(1, mass))) * 2.2)) < 1e-12);
-  assert.equal(Core.ROLE_WEIGHTS.director, 1);
-  assert.equal(Core.ROLE_WEIGHTS.cv, 0.2);
+  assert.equal(Core.ROLE_WEIGHTS.director, 0.35);
+  assert.equal(Core.ROLE_WEIGHTS.studio, 0.28);
+  assert.equal(Core.ROLE_WEIGHTS.creator, 0.25);
+  assert.equal(Core.ROLE_WEIGHTS.script, 0.2);
+  assert.equal(Core.ROLE_WEIGHTS.music, 0.15);
+  assert.equal(Core.ROLE_WEIGHTS.cv, 0.07);
+  assert.ok(Core.ROLE_WEIGHTS.director < Core.ROLE_WEIGHTS.tag / 2);
 });
 
 test("MMR reduces near-duplicate results", () => {
@@ -206,6 +211,32 @@ test("MMR reduces near-duplicate results", () => {
   const selected = Core.diversify(pool, 3, "explore", "test");
   assert.ok([1, 2].includes(selected[0].subject.id));
   assert.ok(selected.some((item) => item.subject.id === 3 || item.subject.id === 4));
+});
+
+test("supplemental scoring is capped at a weak twenty-percent adjustment", () => {
+  const base = {
+    personalMean: 7,
+    predicted: 7.42,
+    normalizedScore: 0.2,
+    contentScore: 0.1,
+    neighborScore: 0.3,
+    qualityScore: 0.4,
+    features: { "tag:治愈": 1 },
+  };
+  const supplemental = {
+    ...base,
+    predicted: 8.68,
+    normalizedScore: 0.8,
+    contentScore: 0.7,
+    neighborScore: 0.9,
+    features: { "tag:治愈": 1, "director:1": 0.35 },
+  };
+  const blended = Core.blendSupplementalScore(base, supplemental);
+  assert.ok(Math.abs(blended.normalizedScore - 0.32) < 1e-12);
+  assert.ok(Math.abs(blended.predicted - 7.672) < 1e-12);
+  assert.ok(Math.abs(blended.contentScore - 0.22) < 1e-12);
+  assert.ok(Math.abs(blended.neighborScore - 0.42) < 1e-12);
+  assert.deepEqual(blended.diversityFeatures, base.features);
 });
 
 test("collection fingerprints are stable and change with ratings", () => {

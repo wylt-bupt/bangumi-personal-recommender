@@ -20,13 +20,13 @@
   const ROLE_WEIGHTS = Object.freeze({
     tag: 1,
     meta: 0.9,
-    director: 1,
-    studio: 0.8,
-    creator: 0.7,
-    series: 0.6,
-    script: 0.6,
-    music: 0.45,
-    cv: 0.2,
+    director: 0.35,
+    studio: 0.28,
+    creator: 0.25,
+    series: 0.2,
+    script: 0.2,
+    music: 0.15,
+    cv: 0.07,
     decade: 0.22,
     format: 0.2,
   });
@@ -762,6 +762,25 @@
     };
   }
 
+  function blendSupplementalScore(baseScore, supplementalScore, supplementalWeight = 0.2) {
+    const weight = clamp(supplementalWeight, 0, 1);
+    const baseWeight = 1 - weight;
+    const blend = (key) =>
+      baseWeight * Number(baseScore?.[key] || 0) + weight * Number(supplementalScore?.[key] || 0);
+    const normalizedScore = blend("normalizedScore");
+    const personalMean = Number(baseScore?.personalMean || supplementalScore?.personalMean || 7);
+    return {
+      ...supplementalScore,
+      personalMean,
+      predicted: clamp(personalMean + normalizedScore * 2.1, 1, 10),
+      normalizedScore,
+      contentScore: blend("contentScore"),
+      neighborScore: blend("neighborScore"),
+      qualityScore: blend("qualityScore"),
+      diversityFeatures: baseScore?.features || supplementalScore?.features || {},
+    };
+  }
+
   function seededNoise(subjectId, salt = "") {
     const input = `${subjectId}:${salt}`;
     let hash = 2166136261;
@@ -781,12 +800,17 @@
       let bestValue = -Infinity;
       for (let index = 0; index < remaining.length; index += 1) {
         const candidate = remaining[index];
+        const candidateDiversityFeatures = candidate.diversityFeatures || candidate.features;
         const maxSimilarity = selected.length
-          ? Math.max(...selected.map((item) => weightedJaccard(candidate.features, item.features)))
+          ? Math.max(
+              ...selected.map((item) =>
+                weightedJaccard(candidateDiversityFeatures, item.diversityFeatures || item.features),
+              ),
+            )
           : 0;
-        const studioTokens = Object.keys(candidate.features).filter((token) => token.startsWith("studio:"));
+        const studioTokens = Object.keys(candidateDiversityFeatures).filter((token) => token.startsWith("studio:"));
         const sameStudioCount = selected.filter((item) =>
-          studioTokens.some((token) => item.features[token]),
+          studioTokens.some((token) => (item.diversityFeatures || item.features)[token]),
         ).length;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
         const adjusted =
@@ -881,6 +905,7 @@
     selectContentTags,
     selectRecommendationEvidence,
     scoreSubject,
+    blendSupplementalScore,
     diversify,
     recommendationSalt,
     collectionFingerprint,

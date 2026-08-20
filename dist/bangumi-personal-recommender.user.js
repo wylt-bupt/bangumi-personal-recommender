@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.2.1
+// @version      0.2.2
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -34,13 +34,13 @@
   const ROLE_WEIGHTS = Object.freeze({
     tag: 1,
     meta: 0.9,
-    director: 1,
-    studio: 0.8,
-    creator: 0.7,
-    series: 0.6,
-    script: 0.6,
-    music: 0.45,
-    cv: 0.2,
+    director: 0.35,
+    studio: 0.28,
+    creator: 0.25,
+    series: 0.2,
+    script: 0.2,
+    music: 0.15,
+    cv: 0.07,
     decade: 0.22,
     format: 0.2,
   });
@@ -776,6 +776,25 @@
     };
   }
 
+  function blendSupplementalScore(baseScore, supplementalScore, supplementalWeight = 0.2) {
+    const weight = clamp(supplementalWeight, 0, 1);
+    const baseWeight = 1 - weight;
+    const blend = (key) =>
+      baseWeight * Number(baseScore?.[key] || 0) + weight * Number(supplementalScore?.[key] || 0);
+    const normalizedScore = blend("normalizedScore");
+    const personalMean = Number(baseScore?.personalMean || supplementalScore?.personalMean || 7);
+    return {
+      ...supplementalScore,
+      personalMean,
+      predicted: clamp(personalMean + normalizedScore * 2.1, 1, 10),
+      normalizedScore,
+      contentScore: blend("contentScore"),
+      neighborScore: blend("neighborScore"),
+      qualityScore: blend("qualityScore"),
+      diversityFeatures: baseScore?.features || supplementalScore?.features || {},
+    };
+  }
+
   function seededNoise(subjectId, salt = "") {
     const input = `${subjectId}:${salt}`;
     let hash = 2166136261;
@@ -795,12 +814,17 @@
       let bestValue = -Infinity;
       for (let index = 0; index < remaining.length; index += 1) {
         const candidate = remaining[index];
+        const candidateDiversityFeatures = candidate.diversityFeatures || candidate.features;
         const maxSimilarity = selected.length
-          ? Math.max(...selected.map((item) => weightedJaccard(candidate.features, item.features)))
+          ? Math.max(
+              ...selected.map((item) =>
+                weightedJaccard(candidateDiversityFeatures, item.diversityFeatures || item.features),
+              ),
+            )
           : 0;
-        const studioTokens = Object.keys(candidate.features).filter((token) => token.startsWith("studio:"));
+        const studioTokens = Object.keys(candidateDiversityFeatures).filter((token) => token.startsWith("studio:"));
         const sameStudioCount = selected.filter((item) =>
-          studioTokens.some((token) => item.features[token]),
+          studioTokens.some((token) => (item.diversityFeatures || item.features)[token]),
         ).length;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
         const adjusted =
@@ -895,6 +919,7 @@
     selectContentTags,
     selectRecommendationEvidence,
     scoreSubject,
+    blendSupplementalScore,
     diversify,
     recommendationSalt,
     collectionFingerprint,
@@ -913,14 +938,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.1";
+  const APP_VERSION = "0.2.2";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "12";
+  const RECOMMENDATION_MODEL_VERSION = "13";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -1396,6 +1421,7 @@
       this.state = {
         open: false,
         busy: false,
+        baseProfile: null,
         profile: null,
         candidates: [],
         scoredPool: [],
@@ -1597,6 +1623,7 @@
     }
 
     resetViewForType() {
+      this.state.baseProfile = null;
       this.state.profile = null;
       this.state.candidates = [];
       this.state.scoredPool = [];
@@ -1657,7 +1684,8 @@
         const collections = await this.client.getCollections(type, force);
         if (!collections.length) throw new Error("没有读取到该类型的收藏数据。请确认账号公开收藏或稍后重试。");
         this.state.collections = collections;
-        this.state.profile = Core.trainProfile(collections);
+        this.state.baseProfile = Core.trainProfile(collections);
+        this.state.profile = this.state.baseProfile;
         if (this.state.profile.ratedCount < 5) throw new Error("已评分样本不足 5 个，暂时无法建立可靠画像。");
 
         const candidates = await this.client.getCandidates(type, this.state.profile, force);
@@ -1719,7 +1747,17 @@
     recompute({ enforceJapanese = true, render = true } = {}) {
       const scored = this.state.candidates
         .map((subject) => {
-          const scoredSubject = Core.scoreSubject(subject, this.state.profile, this.config.mode);
+          const supplementalScore = Core.scoreSubject(subject, this.state.profile, this.config.mode);
+          const scoredSubject = this.state.baseProfile !== this.state.profile
+            ? Core.blendSupplementalScore(
+                Core.scoreSubject(
+                  { ...subject, persons: [], characters: [] },
+                  this.state.baseProfile,
+                  this.config.mode,
+                ),
+                supplementalScore,
+              )
+            : supplementalScore;
           return {
             ...scoredSubject,
             origin: enforceJapanese ? Core.classifyJapaneseOrigin(subject) : null,
