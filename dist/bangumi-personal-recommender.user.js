@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.1.4
+// @version      0.1.5
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -665,7 +665,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.4";
+  const APP_VERSION = "0.1.5";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -1545,18 +1545,13 @@
       const reasons = item.positiveReasons.slice(0, 3).map((reason) =>
         `<li><span>${escapeHtml(reason.roleLabel)}</span><strong>${escapeHtml(reason.label)}</strong></li>`,
       );
-      if (item.bookOrigin?.status === "japanese") {
-        const originEvidence = item.bookOrigin.evidence?.slice(0, 2).join("、") || "作品信息与日系标签";
-        reasons.push(`<li class="origin-reason" title="来源判定依据：${escapeHtml(originEvidence)}"><span>来源</span><strong>日本作品</strong></li>`);
-      }
       const similarWorks = (item.similarWorks?.length
         ? item.similarWorks
         : item.nearest
           ? [item.nearest]
           : []).slice(0, 2);
       for (const similar of similarWorks) {
-        const similarityPercent = Math.round(Number(similar.similarity || 0) * 100);
-        reasons.push(`<li class="similar-reason" title="画像特征相似度 ${similarityPercent}%"><span>相似 ${similarityPercent}%</span><strong>${escapeHtml(similar.name)}</strong></li>`);
+        reasons.push(`<li class="similar-reason"><span>相似</span><strong>${escapeHtml(similar.name)}</strong></li>`);
       }
       if (item.bookOriginOverride) {
         reasons.unshift("<li><span>破例</span><strong>画像匹配与置信度极高</strong></li>");
@@ -1785,7 +1780,6 @@
         .reason-list { list-style: none; padding: 0; margin: 10px 0 12px; display: flex; flex-wrap: wrap; gap: 5px; }
         .reason-list li { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 7px; border-radius: 7px; background: var(--surface-alt); font-size: 11px; }
         .reason-list li.similar-reason { border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); }
-        .reason-list li.origin-reason { border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); }
         .reason-list span { color: var(--text-muted); }
         .reason-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
