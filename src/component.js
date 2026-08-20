@@ -4,16 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.8";
+  const APP_VERSION = "0.1.9";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const DISMISSED_KEY = "bgmpr:dismissed:v1";
-  const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "9";
+  const RECOMMENDATION_MODEL_VERSION = "10";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -413,15 +411,6 @@
       );
     }
 
-    async getSubjectDetails(subjectId) {
-      if (!this.apiAvailable) return null;
-      return this.cached(
-        `subject-details:${subjectId}`,
-        ENTITY_TTL,
-        () => this.requestJson(`/v0/subjects/${subjectId}`).catch(() => null),
-      );
-    }
-
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
@@ -449,17 +438,6 @@
         mode: "balanced",
         ...loadJson(CONFIG_KEY, {}),
       };
-      this.dismissed = loadJson(DISMISSED_KEY, {});
-      this.bookFeedbackWasReset = false;
-      if (!localStorage.getItem(BOOK_FEEDBACK_RESET_MARKER)) {
-        const previousBookFeedback = this.dismissed["1"] || [];
-        if (previousBookFeedback.length) {
-          this.dismissed["1"] = [];
-          saveJson(DISMISSED_KEY, this.dismissed);
-          this.bookFeedbackWasReset = true;
-        }
-        localStorage.setItem(BOOK_FEEDBACK_RESET_MARKER, "1");
-      }
       this.client = new BangumiDataClient(
         this.store,
         this.config.username,
@@ -625,10 +603,6 @@
       this.previousPageOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = "hidden";
       this.$(".close").focus();
-      if (this.bookFeedbackWasReset) {
-        this.bookFeedbackWasReset = false;
-        this.showToast("已撤销书籍类型的全部“不感兴趣”反馈。");
-      }
       this.loadCachedResult().then((loaded) => {
         if (!loaded && !this.state.busy) this.$('[data-role="welcome"]').hidden = false;
       });
@@ -780,43 +754,11 @@
     }
 
     recompute() {
-      const dismissed = new Set((this.dismissed[this.config.subjectType] || []).map(Number));
-      const dismissedVectors = this.state.candidates
-        .filter((subject) => dismissed.has(Number(subject.id)))
-        .map((subject) => Core.buildFeatureVector(subject).features);
       const scored = this.state.candidates
-        .filter((subject) => !dismissed.has(Number(subject.id)))
         .map((subject) => {
           const scoredSubject = Core.scoreSubject(subject, this.state.profile, this.config.mode);
-          const feedbackSimilarity = dismissedVectors.length
-            ? Math.max(...dismissedVectors.map((vector) => Core.weightedJaccard(scoredSubject.features, vector)))
-            : 0;
-          const feedbackPenalty = feedbackSimilarity * 0.16;
-          const bookOrigin = Number(this.config.subjectType) === 1
-            ? Core.classifyBookOrigin(scoredSubject.subject)
-            : null;
-          const originAdjustment = bookOrigin?.status === "japanese"
-            ? 0.035
-            : bookOrigin?.status === "unknown"
-              ? -0.025
-              : 0;
-          return {
-            ...scoredSubject,
-            normalizedScore: scoredSubject.normalizedScore - feedbackPenalty + originAdjustment,
-            predicted: Core.clamp(scoredSubject.predicted - feedbackPenalty * 1.5 + originAdjustment * 1.2, 1, 10),
-            bookOrigin,
-          };
+          return scoredSubject;
         })
-        .filter((item) =>
-          Number(this.config.subjectType) !== 1 ||
-          item.bookOrigin?.status !== "non_japanese" ||
-          Core.isExceptionalForeignRecommendation(item),
-        )
-        .map((item) => ({
-          ...item,
-          bookOriginOverride:
-            item.bookOrigin?.status === "non_japanese" && Core.isExceptionalForeignRecommendation(item),
-        }))
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
       this.state.scoredPool = scored.slice(0, 180);
       this.excludedBatch.clear();
@@ -851,22 +793,13 @@
     }
 
     dismiss(subjectId) {
-      const type = String(this.config.subjectType);
-      const previous = [...(this.dismissed[type] || [])];
-      this.dismissed[type] = [...new Set([...previous, subjectId])];
-      saveJson(DISMISSED_KEY, this.dismissed);
-      if (this.state.scoredPool.length) {
-        this.recompute();
-      } else {
-        this.state.current = this.state.current.filter((item) => Number(item.subject.id) !== subjectId);
-        this.renderRecommendations(this.state.current, this.state.currentSummary);
-        this.ensureRecommendations({ force: false });
-      }
-      this.showToast("已降低该条目及相似特征的推荐优先级。", () => {
-        this.dismissed[type] = previous;
-        saveJson(DISMISSED_KEY, this.dismissed);
-        if (this.state.scoredPool.length) this.recompute();
-        else this.ensureRecommendations({ force: false });
+      const previous = new Set(this.excludedBatch);
+      this.excludedBatch.add(Number(subjectId));
+      this.renderFromPool();
+      this.showToast("已从当前这批结果中暂时隐藏。", () => {
+        this.excludedBatch.clear();
+        for (const id of previous) this.excludedBatch.add(id);
+        this.renderFromPool();
       });
     }
 
@@ -927,16 +860,13 @@
           }[entry.role] || entry.roleLabel || "创作人员";
           return `<li><span class="evidence-kind">${escapeHtml(entry.roleLabel || roleName)}</span><p>${escapeHtml(roleName)}${quotedLabels(entry.reasons)}在你的历史评分中表现较好</p></li>`;
         }
-        if (entry.kind === "exception") {
-          return "<li><span class=\"evidence-kind\">破例</span><p>虽非日本作品，但画像匹配与置信度同时达到极高阈值</p></li>";
-        }
         return "<li><span class=\"evidence-kind\">口碑</span><p>全站评分与探索价值使它进入本轮候选</p></li>";
       });
       const shownSimilarCount = evidence
         .filter((entry) => entry.kind === "similarity")
         .reduce((sum, entry) => sum + entry.works.length, 0);
       return `
-        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
+        <article class="recommendation-card" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
@@ -959,7 +889,7 @@
             </section>
             <div class="card-actions">
               <a class="primary compact" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">查看条目 ${ICONS.arrow}</a>
-              <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="降低《${escapeHtml(title)}》的推荐优先级">${ICONS.hide}<span>不感兴趣</span></button>
+              <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">${ICONS.hide}<span>暂时隐藏</span></button>
             </div>
           </div>
         </article>`;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.1.8
+// @version      0.1.9
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -118,16 +118,6 @@
     return String(value ?? "").trim();
   }
 
-  function normalizeInfoboxEntries(infobox) {
-    if (!Array.isArray(infobox)) return [];
-    return infobox
-      .map((entry) => ({
-        key: normalizeText(entry?.key || entry?.k || ""),
-        value: normalizeText(infoboxValueText(entry?.value ?? entry?.v ?? entry)),
-      }))
-      .filter((entry) => entry.key || entry.value);
-  }
-
   function normalizeSubject(raw = {}) {
     const rating = raw.rating || {};
     const date = String(raw.date || raw.air_date || "");
@@ -159,68 +149,6 @@
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
     };
-  }
-
-  function classifyBookOrigin(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    if (subject.type !== 1) return { status: "not_applicable", confidence: 1, evidence: [] };
-
-    const tags = [...subject.tags, ...subject.metaTags].join(" ");
-    const entries = normalizeInfoboxEntries(subject.infobox);
-    const titleText = normalizeText(`${subject.name} ${subject.nameCn}`);
-    let japaneseScore = 0;
-    let nonJapaneseScore = 0;
-    const evidence = [];
-    const add = (kind, score, label) => {
-      if (kind === "japanese") japaneseScore += score;
-      else nonJapaneseScore += score;
-      evidence.push(label);
-    };
-
-    if (/(日本|日漫|日本文学|日本文學|轻小说|輕小說|ライトノベル|漫画|漫畫|マンガ|コミック)/i.test(tags)) {
-      add("japanese", 3, "日系标签");
-    }
-    if (/(欧美|歐美|美漫|英美文学|英美文學|国产漫画|國產漫畫|中国文学|中國文學|韩漫|韓漫|韩国文学|韓國文學)/i.test(tags)) {
-      add("non_japanese", 4, "非日系标签");
-    }
-
-    const countryKey = /(国家|國家|地区|地區|原产|原產|原作国|原作國|country|region)/i;
-    const creativeKey = /(出版社|出版者|文库|文庫|书系|書系|连载|連載|作者|原作|原名|原題|original|publisher|imprint|magazine)/i;
-    const japaneseCountry = /(日本|japan|japanese)/i;
-    const nonJapaneseCountry = /(美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|波兰|波蘭|瑞典|挪威|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|poland|sweden|norway)/i;
-    const japanesePublisher = /(kadokawa|角川|講談社|讲谈社|集英社|小学館|小学馆|新潮社|文藝春秋|文艺春秋|白泉社|双葉社|双叶社|徳間書店|德间书店|スクウェア・エニックス|一迅社|芳文社|早川書房|早川书房|電撃文庫|电击文库|富士見|富士见|mf文庫|mf文库|ガガガ文庫|ga文庫|ga文库|メディアワークス|アスキー)/i;
-    const nonJapanesePublisher = /(penguin|harper\s*collins|random house|simon\s*&\s*schuster|scholastic|bloomsbury|macmillan|bantam|spectra|gollancz|orbit books|tor books|vintage books|del rey)/i;
-    const kana = /[ぁ-ゖァ-ヺ]/;
-
-    for (const entry of entries) {
-      if (countryKey.test(entry.key)) {
-        if (japaneseCountry.test(entry.value)) add("japanese", 6, `${entry.key}: 日本`);
-        if (nonJapaneseCountry.test(entry.value)) add("non_japanese", 6, `${entry.key}: 非日本`);
-      }
-      if (creativeKey.test(entry.key)) {
-        if (japanesePublisher.test(entry.value)) add("japanese", 4, "日本出版社/文库");
-        if (nonJapanesePublisher.test(entry.value)) add("non_japanese", 4, "非日本出版社");
-        if (kana.test(entry.value)) add("japanese", 2, "日文创作信息");
-      }
-    }
-    if (kana.test(titleText)) add("japanese", 1, "日文标题");
-
-    const delta = japaneseScore - nonJapaneseScore;
-    const confidence = clamp(Math.abs(delta) / 8, 0, 1);
-    if (delta >= 2) return { status: "japanese", confidence, evidence, japaneseScore, nonJapaneseScore };
-    if (delta <= -3) return { status: "non_japanese", confidence, evidence, japaneseScore, nonJapaneseScore };
-    return { status: "unknown", confidence, evidence, japaneseScore, nonJapaneseScore };
-  }
-
-  function isExceptionalForeignRecommendation(scoredSubject) {
-    return Boolean(
-      scoredSubject &&
-      Number(scoredSubject.confidenceScore || 0) >= 0.82 &&
-      Number(scoredSubject.predicted || 0) >= 8.6 &&
-      Number(scoredSubject.contentScore || 0) >= 0.6 &&
-      Number(scoredSubject.nearest?.similarity || 0) >= 0.38 &&
-      (scoredSubject.positiveReasons?.length || 0) >= 2
-    );
   }
 
   function normalizeCollection(raw = {}) {
@@ -672,9 +600,6 @@
       }
     }
 
-    if (scoredSubject?.bookOriginOverride) {
-      candidates.push({ kind: "exception", strength: 2, cost: 28 });
-    }
     if (!candidates.length) return [{ kind: "quality", strength: 1, cost: 24 }];
 
     const selected = [];
@@ -694,7 +619,7 @@
       selected.push(candidate);
       remaining -= candidate.cost;
     }
-    const order = { exception: 0, similarity: 1, creative: 2, quality: 3 };
+    const order = { similarity: 0, creative: 1, quality: 2 };
     return selected.sort((a, b) => order[a.kind] - order[b.kind]);
   }
 
@@ -886,7 +811,6 @@
     clamp,
     normalizeText,
     normalizeTagList,
-    normalizeInfoboxEntries,
     normalizeSubject,
     normalizeCollection,
     normalizeRole,
@@ -903,8 +827,6 @@
     selectContentTags,
     selectRecommendationEvidence,
     scoreSubject,
-    classifyBookOrigin,
-    isExceptionalForeignRecommendation,
     diversify,
     recommendationSalt,
     collectionFingerprint,
@@ -923,16 +845,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.8";
+  const APP_VERSION = "0.1.9";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const DISMISSED_KEY = "bgmpr:dismissed:v1";
-  const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "9";
+  const RECOMMENDATION_MODEL_VERSION = "10";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -1332,15 +1252,6 @@
       );
     }
 
-    async getSubjectDetails(subjectId) {
-      if (!this.apiAvailable) return null;
-      return this.cached(
-        `subject-details:${subjectId}`,
-        ENTITY_TTL,
-        () => this.requestJson(`/v0/subjects/${subjectId}`).catch(() => null),
-      );
-    }
-
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
@@ -1368,17 +1279,6 @@
         mode: "balanced",
         ...loadJson(CONFIG_KEY, {}),
       };
-      this.dismissed = loadJson(DISMISSED_KEY, {});
-      this.bookFeedbackWasReset = false;
-      if (!localStorage.getItem(BOOK_FEEDBACK_RESET_MARKER)) {
-        const previousBookFeedback = this.dismissed["1"] || [];
-        if (previousBookFeedback.length) {
-          this.dismissed["1"] = [];
-          saveJson(DISMISSED_KEY, this.dismissed);
-          this.bookFeedbackWasReset = true;
-        }
-        localStorage.setItem(BOOK_FEEDBACK_RESET_MARKER, "1");
-      }
       this.client = new BangumiDataClient(
         this.store,
         this.config.username,
@@ -1544,10 +1444,6 @@
       this.previousPageOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = "hidden";
       this.$(".close").focus();
-      if (this.bookFeedbackWasReset) {
-        this.bookFeedbackWasReset = false;
-        this.showToast("已撤销书籍类型的全部“不感兴趣”反馈。");
-      }
       this.loadCachedResult().then((loaded) => {
         if (!loaded && !this.state.busy) this.$('[data-role="welcome"]').hidden = false;
       });
@@ -1699,43 +1595,11 @@
     }
 
     recompute() {
-      const dismissed = new Set((this.dismissed[this.config.subjectType] || []).map(Number));
-      const dismissedVectors = this.state.candidates
-        .filter((subject) => dismissed.has(Number(subject.id)))
-        .map((subject) => Core.buildFeatureVector(subject).features);
       const scored = this.state.candidates
-        .filter((subject) => !dismissed.has(Number(subject.id)))
         .map((subject) => {
           const scoredSubject = Core.scoreSubject(subject, this.state.profile, this.config.mode);
-          const feedbackSimilarity = dismissedVectors.length
-            ? Math.max(...dismissedVectors.map((vector) => Core.weightedJaccard(scoredSubject.features, vector)))
-            : 0;
-          const feedbackPenalty = feedbackSimilarity * 0.16;
-          const bookOrigin = Number(this.config.subjectType) === 1
-            ? Core.classifyBookOrigin(scoredSubject.subject)
-            : null;
-          const originAdjustment = bookOrigin?.status === "japanese"
-            ? 0.035
-            : bookOrigin?.status === "unknown"
-              ? -0.025
-              : 0;
-          return {
-            ...scoredSubject,
-            normalizedScore: scoredSubject.normalizedScore - feedbackPenalty + originAdjustment,
-            predicted: Core.clamp(scoredSubject.predicted - feedbackPenalty * 1.5 + originAdjustment * 1.2, 1, 10),
-            bookOrigin,
-          };
+          return scoredSubject;
         })
-        .filter((item) =>
-          Number(this.config.subjectType) !== 1 ||
-          item.bookOrigin?.status !== "non_japanese" ||
-          Core.isExceptionalForeignRecommendation(item),
-        )
-        .map((item) => ({
-          ...item,
-          bookOriginOverride:
-            item.bookOrigin?.status === "non_japanese" && Core.isExceptionalForeignRecommendation(item),
-        }))
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
       this.state.scoredPool = scored.slice(0, 180);
       this.excludedBatch.clear();
@@ -1770,22 +1634,13 @@
     }
 
     dismiss(subjectId) {
-      const type = String(this.config.subjectType);
-      const previous = [...(this.dismissed[type] || [])];
-      this.dismissed[type] = [...new Set([...previous, subjectId])];
-      saveJson(DISMISSED_KEY, this.dismissed);
-      if (this.state.scoredPool.length) {
-        this.recompute();
-      } else {
-        this.state.current = this.state.current.filter((item) => Number(item.subject.id) !== subjectId);
-        this.renderRecommendations(this.state.current, this.state.currentSummary);
-        this.ensureRecommendations({ force: false });
-      }
-      this.showToast("已降低该条目及相似特征的推荐优先级。", () => {
-        this.dismissed[type] = previous;
-        saveJson(DISMISSED_KEY, this.dismissed);
-        if (this.state.scoredPool.length) this.recompute();
-        else this.ensureRecommendations({ force: false });
+      const previous = new Set(this.excludedBatch);
+      this.excludedBatch.add(Number(subjectId));
+      this.renderFromPool();
+      this.showToast("已从当前这批结果中暂时隐藏。", () => {
+        this.excludedBatch.clear();
+        for (const id of previous) this.excludedBatch.add(id);
+        this.renderFromPool();
       });
     }
 
@@ -1846,16 +1701,13 @@
           }[entry.role] || entry.roleLabel || "创作人员";
           return `<li><span class="evidence-kind">${escapeHtml(entry.roleLabel || roleName)}</span><p>${escapeHtml(roleName)}${quotedLabels(entry.reasons)}在你的历史评分中表现较好</p></li>`;
         }
-        if (entry.kind === "exception") {
-          return "<li><span class=\"evidence-kind\">破例</span><p>虽非日本作品，但画像匹配与置信度同时达到极高阈值</p></li>";
-        }
         return "<li><span class=\"evidence-kind\">口碑</span><p>全站评分与探索价值使它进入本轮候选</p></li>";
       });
       const shownSimilarCount = evidence
         .filter((entry) => entry.kind === "similarity")
         .reduce((sum, entry) => sum + entry.works.length, 0);
       return `
-        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
+        <article class="recommendation-card" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
@@ -1878,7 +1730,7 @@
             </section>
             <div class="card-actions">
               <a class="primary compact" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">查看条目 ${ICONS.arrow}</a>
-              <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="降低《${escapeHtml(title)}》的推荐优先级">${ICONS.hide}<span>不感兴趣</span></button>
+              <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">${ICONS.hide}<span>暂时隐藏</span></button>
             </div>
           </div>
         </article>`;
