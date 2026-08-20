@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.1";
+  const APP_VERSION = "0.1.2";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -12,6 +12,8 @@
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
+  const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
+  const RECOMMENDATION_MODEL_VERSION = "2";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -320,7 +322,7 @@
     async getCandidates(subjectType, profile, force = false) {
       const tags = Core.topRetrievalTags(profile, 6);
       const signature = tags.map(Core.normalizeText).sort().join("|");
-      const key = `candidates:${subjectType}:${signature}`;
+      const key = `candidates:v2:${subjectType}:${signature}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
@@ -439,6 +441,16 @@
         ...loadJson(CONFIG_KEY, {}),
       };
       this.dismissed = loadJson(DISMISSED_KEY, {});
+      this.bookFeedbackWasReset = false;
+      if (!localStorage.getItem(BOOK_FEEDBACK_RESET_MARKER)) {
+        const previousBookFeedback = this.dismissed["1"] || [];
+        if (previousBookFeedback.length) {
+          this.dismissed["1"] = [];
+          saveJson(DISMISSED_KEY, this.dismissed);
+          this.bookFeedbackWasReset = true;
+        }
+        localStorage.setItem(BOOK_FEEDBACK_RESET_MARKER, "1");
+      }
       this.client = new BangumiDataClient(
         this.store,
         this.config.username,
@@ -604,6 +616,10 @@
       this.previousPageOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = "hidden";
       this.$(".close").focus();
+      if (this.bookFeedbackWasReset) {
+        this.bookFeedbackWasReset = false;
+        this.showToast("已撤销书籍类型的全部“不感兴趣”反馈。");
+      }
       this.loadCachedResult().then((loaded) => {
         if (!loaded && !this.state.busy) this.$('[data-role="welcome"]').hidden = false;
       });
@@ -658,7 +674,7 @@
     }
 
     cacheKey() {
-      return `result:${this.config.username}:${this.config.subjectType}:${this.config.mode}`;
+      return `result:v${RECOMMENDATION_MODEL_VERSION}:${this.config.username}:${this.config.subjectType}:${this.config.mode}`;
     }
 
     async loadCachedResult() {
@@ -767,12 +783,31 @@
             ? Math.max(...dismissedVectors.map((vector) => Core.weightedJaccard(scoredSubject.features, vector)))
             : 0;
           const feedbackPenalty = feedbackSimilarity * 0.16;
+          const bookOrigin = Number(this.config.subjectType) === 1
+            ? Core.classifyBookOrigin(scoredSubject.subject)
+            : null;
+          const originAdjustment = bookOrigin?.status === "japanese"
+            ? 0.035
+            : bookOrigin?.status === "unknown"
+              ? -0.025
+              : 0;
           return {
             ...scoredSubject,
-            normalizedScore: scoredSubject.normalizedScore - feedbackPenalty,
-            predicted: Core.clamp(scoredSubject.predicted - feedbackPenalty * 1.5, 1, 10),
+            normalizedScore: scoredSubject.normalizedScore - feedbackPenalty + originAdjustment,
+            predicted: Core.clamp(scoredSubject.predicted - feedbackPenalty * 1.5 + originAdjustment * 1.2, 1, 10),
+            bookOrigin,
           };
         })
+        .filter((item) =>
+          Number(this.config.subjectType) !== 1 ||
+          item.bookOrigin?.status !== "non_japanese" ||
+          Core.isExceptionalForeignRecommendation(item),
+        )
+        .map((item) => ({
+          ...item,
+          bookOriginOverride:
+            item.bookOrigin?.status === "non_japanese" && Core.isExceptionalForeignRecommendation(item),
+        }))
         .sort((a, b) => b.normalizedScore - a.normalizedScore);
       this.state.scoredPool = scored.slice(0, 180);
       this.excludedBatch.clear();
@@ -852,11 +887,14 @@
       if (item.nearest) {
         reasons.push(`<li><span>相似</span><strong>${escapeHtml(item.nearest.name)}</strong></li>`);
       }
+      if (item.bookOriginOverride) {
+        reasons.unshift("<li><span>破例</span><strong>画像匹配与置信度极高</strong></li>");
+      }
       if (!reasons.length) reasons.push("<li><span>依据</span><strong>全站质量与探索性</strong></li>");
       const globalScore = subject.rating.score ? subject.rating.score.toFixed(1) : "—";
       const votes = subject.rating.total ? subject.rating.total.toLocaleString("zh-CN") : "样本较少";
       return `
-        <article class="recommendation-card">
+        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
