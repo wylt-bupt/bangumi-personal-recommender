@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.0";
+  const APP_VERSION = "0.1.1";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -27,6 +27,7 @@
     arrow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 5-1.4 1.4 4.6 4.6H5v2h11.2l-4.6 4.6L13 19l7-7-7-7Z"/></svg>`,
     hide: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.7 5.1 10 5.5l.9 1.5-.9 1.5c-.15.2-1.3 1.65-3.2 3L17.35 15A12.7 12.7 0 0 0 20 12c-1.18-1.55-4.28-5-8-5-.76 0-1.48.14-2.16.37L8.27 5.8A9.8 9.8 0 0 1 12 5Zm-8.7-.7 16.4 16.4-1.4 1.4-3.08-3.08A9.8 9.8 0 0 1 12 19c-5.5 0-9.7-5.1-10-5.5L1.1 12l.9-1.5a17.1 17.1 0 0 1 3.1-3.43L1.9 3.7l1.4-1.4ZM6.5 8.5A13.4 13.4 0 0 0 4 12c1.18 1.55 4.28 5 8 5 .56 0 1.1-.08 1.61-.22l-1.7-1.7A3.1 3.1 0 0 1 8.9 12l-2.4-3.5Zm4.35 1.03A3 3 0 0 1 14.47 13l-3.62-3.47Z"/></svg>`,
     info: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 10h2v7h-2v-7Zm0-3h2v2h-2V7Zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>`,
+    chevron: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>`,
   });
 
   function escapeHtml(value) {
@@ -894,8 +895,19 @@
         </div>
         <div class="recommendation-list">${recommendations.map((item, index) => this.recommendationCard(item, index)).join("")}</div>
         <details class="method-note">
-          <summary>${ICONS.info}<span>这些结果是怎样得到的？</span></summary>
-          <p>先校正你的评分习惯与全站评分，再学习标签、导演、制作公司和声优带来的评分增益；最后用相似作品和贝叶斯质量分排序，并通过多样化算法避免五个结果过于相似。</p>
+          <summary>
+            <span class="method-icon">${ICONS.info}</span>
+            <span class="method-copy"><strong>为什么推荐这些？</strong><small>评分校准 · 兴趣画像 · 相似作品 · 多样化</small></span>
+            <span class="method-chevron">${ICONS.chevron}</span>
+          </summary>
+          <div class="method-body">
+            <ol class="method-steps">
+              <li><span class="step-number">1</span><div><strong>校准评分习惯</strong><p>结合你的平均分和条目全站评分，判断哪些作品真正超出你的预期。</p></div></li>
+              <li><span class="step-number">2</span><div><strong>提取个人偏好</strong><p>学习标签、年代、导演、制作公司和声优等特征带来的正负影响。</p></div></li>
+              <li><span class="step-number">3</span><div><strong>排序并保持多样</strong><p>排除所有已标记条目，融合相似度与质量分，再避免五个结果过于重复。</p></div></li>
+            </ol>
+            <p class="method-privacy">全部计算在当前浏览器完成，不接入 AI，也不会修改你的收藏。</p>
+          </div>
         </details>`;
       this.$(".content").scrollTop = 0;
     }
@@ -1059,10 +1071,27 @@
         .reason-list span { color: var(--text-muted); }
         .reason-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-        .method-note { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); }
-        .method-note summary { min-height: 32px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; }
+        .method-note { margin-top: 16px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-alt); transition: border-color 180ms ease-out, background 180ms ease-out; }
+        .method-note[open] { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: var(--surface-raised); }
+        .method-note summary { min-height: 64px; padding: 10px 14px; cursor: pointer; display: grid; grid-template-columns: 36px minmax(0, 1fr) 28px; align-items: center; gap: 11px; list-style: none; }
         .method-note summary::-webkit-details-marker { display: none; }
-        .method-note p { margin: 10px 0 2px; color: var(--text-muted); font-size: 13px; }
+        .method-note summary::marker { display: none; content: ""; }
+        .method-note summary:hover .method-copy strong { color: var(--primary); }
+        .method-icon { width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary); display: grid; place-items: center; }
+        .method-icon svg { width: 18px; height: 18px; fill: currentColor; }
+        .method-copy { min-width: 0; display: grid; gap: 2px; }
+        .method-copy strong { font-size: 13px; line-height: 1.35; transition: color 180ms ease-out; }
+        .method-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+        .method-chevron { width: 28px; height: 28px; border-radius: 8px; color: var(--text-muted); display: grid; place-items: center; transition: transform 180ms ease-out, color 180ms ease-out; }
+        .method-chevron svg { width: 18px; height: 18px; fill: currentColor; }
+        .method-note[open] .method-chevron { transform: rotate(180deg); color: var(--primary); }
+        .method-body { padding: 14px; border-top: 1px solid var(--border); }
+        .method-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
+        .method-steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 10px; }
+        .step-number { width: 26px; height: 26px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 8px; color: var(--primary); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; display: grid; place-items: center; }
+        .method-steps strong { display: block; margin: 1px 0 2px; font-size: 12px; line-height: 1.4; }
+        .method-steps p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
+        .method-privacy { margin: 13px 0 0; padding: 10px 11px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-muted); font-size: 11px; line-height: 1.5; }
         .drawer-footer { min-height: 66px; padding: 10px 24px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 8px; }
         .drawer-footer button { min-height: 44px; }
         .version { margin-left: auto; color: var(--text-muted); font-size: 11px; }
