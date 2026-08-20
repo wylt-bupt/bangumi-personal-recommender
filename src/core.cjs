@@ -203,6 +203,7 @@
       adultEvidenceVerified: raw.adultEvidenceVerified === undefined
         ? undefined
         : Boolean(raw.adultEvidenceVerified),
+      adultVerificationPriority: Number(raw.adultVerificationPriority || 0),
     };
   }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.3.5
+// @version      0.3.6
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -217,6 +217,7 @@
       adultEvidenceVerified: raw.adultEvidenceVerified === undefined
         ? undefined
         : Boolean(raw.adultEvidenceVerified),
+      adultVerificationPriority: Number(raw.adultVerificationPriority || 0),
     };
   }
 
@@ -1001,14 +1002,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.5";
+  const APP_VERSION = "0.3.6";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "24";
+  const RECOMMENDATION_MODEL_VERSION = "25";
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -1397,7 +1398,7 @@
       const directTags = [...options.directCandidateTags];
       const supplementalTags = [...(options.supplementalCandidateTags || [])];
       const allTags = [...new Set([...directTags, ...supplementalTags].map(Core.normalizeText))];
-      const key = `candidates:special:v4:${options.id || subjectType}:${allTags.sort().join("|")}`;
+      const key = `candidates:special:v5:${options.id || subjectType}:${allTags.sort().join("|")}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
@@ -1440,7 +1441,20 @@
       );
       this.progress(`正在补充“${tag}”API 候选…`, 0, 1);
       const first = await fetchPage(0);
-      const withVerifiedEvidence = (rows) => (Array.isArray(rows) ? rows : []);
+      const withVerifiedEvidence = (rows) => (Array.isArray(rows) ? rows : []).map((row) => {
+        const subject = Core.normalizeSubject(row);
+        const adultTagCount = Math.max(
+          0,
+          ...Core.ADULT_RECOMMENDATION_TAGS.profile.map(
+            (adultTag) => Number(subject.tagCounts[Core.normalizeText(adultTag)] || 0),
+          ),
+        );
+        return {
+          ...row,
+          adultVerificationPriority:
+            (Core.isAdultRecommendationCandidate(subject) ? 10000 : 0) + adultTagCount,
+        };
+      });
       const firstRows = withVerifiedEvidence(first.data);
       const pageSize = Math.max(1, firstRows.length || 20);
       const total = Math.max(firstRows.length, Number(first.total || 0));
@@ -1488,6 +1502,10 @@
               sourceUrl: subject.sourceUrl || previous.sourceUrl || "",
               adultEvidenceVerified: Boolean(
                 previous.adultEvidenceVerified || subject.adultEvidenceVerified,
+              ),
+              adultVerificationPriority: Math.max(
+                Number(previous.adultVerificationPriority || 0),
+                Number(subject.adultVerificationPriority || 0),
               ),
             }
           : { ...previous, ...subject });
@@ -1924,7 +1942,17 @@
     async enhanceWithPeople() {
       const influential = Core.influentialSubjectIds(this.state.collections, this.state.profile, 10, 6);
       const originLimit = this.state.requireAdultEvidence ? 360 : 180;
-      const originPreview = this.state.scoredPool.slice(0, originLimit).map((item) => item.subject.id);
+      const scoredPreview = this.state.scoredPool
+        .slice(0, this.state.requireAdultEvidence ? 180 : originLimit)
+        .map((item) => item.subject.id);
+      const adultPriorityPreview = this.state.requireAdultEvidence
+        ? [...this.state.candidates]
+            .filter((subject) => subject.adultVerificationPriority > 0)
+            .sort((left, right) => right.adultVerificationPriority - left.adultVerificationPriority)
+            .slice(0, 180)
+            .map((subject) => subject.id)
+        : [];
+      const originPreview = [...new Set([...adultPriorityPreview, ...scoredPreview])].slice(0, originLimit);
       let allSubjects = [
         ...this.state.collections.map((item) => item.subject),
         ...this.state.candidates,
