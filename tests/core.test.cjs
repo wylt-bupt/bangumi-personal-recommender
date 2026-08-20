@@ -11,6 +11,7 @@ function subject(id, score, tags, extra = {}) {
     date: extra.date || "2020-01-01",
     tags: tags.map((name, index) => ({ name, count: 100 - index })),
     rating: { score, total: extra.total || 1000 },
+    infobox: extra.infobox || [],
     persons: extra.persons || [],
     characters: extra.characters || [],
   };
@@ -112,7 +113,7 @@ test("selects varied recommendation evidence by strength and text budget", () =>
       { role: "tag", roleLabel: "标签", label: "科幻", value: 0.5, support: 8 },
       { role: "tag", roleLabel: "标签", label: "轮回", value: 0.4, support: 6 },
       { role: "tag", roleLabel: "标签", label: "校园", value: 0.05, support: 12 },
-      { role: "studio", roleLabel: "制作", label: "WHITE FOX", value: 0.2, support: 4 },
+      { role: "studio", roleLabel: "制作", label: "WHITE FOX", value: 0.3, support: 4 },
     ],
     similarWorks: [
       { name: "命运石之门", rate: 10, residual: 0.9, similarity: 0.2 },
@@ -123,26 +124,52 @@ test("selects varied recommendation evidence by strength and text budget", () =>
   };
   const full = Core.selectRecommendationEvidence(item, 108);
   const compact = Core.selectRecommendationEvidence(item, 40);
-  assert.deepEqual(full.map((entry) => entry.kind), ["preference", "similarity", "creative"]);
-  assert.deepEqual(full.find((entry) => entry.kind === "preference").reasons.map((entry) => entry.label), ["科幻", "轮回"]);
+  assert.deepEqual(full.map((entry) => entry.kind), ["similarity", "creative"]);
   assert.deepEqual(full.find((entry) => entry.kind === "similarity").works.map((entry) => entry.name), ["命运石之门", "来自新世界"]);
   assert.ok(compact.length < full.length);
 });
 
-test("reclassifies a verified credit tag as creative evidence", () => {
+test("keeps verified credits out of content tags and treats them as weak creative evidence", () => {
+  const subjectWithCredits = {
+    id: 12,
+    type: 2,
+    tags: ["日本", "TV", "a-1pictures", "偶像", "音乐", "青春"],
+    infobox: [{ key: "动画制作", value: "A-1 Pictures" }],
+  };
+  const positiveReasons = [
+    { role: "tag", roleLabel: "标签", label: "a-1pictures", value: 0.4, support: 6 },
+    { role: "tag", roleLabel: "标签", label: "偶像", value: 0.2, support: 8 },
+    { role: "tag", roleLabel: "标签", label: "日本", value: 0.18, support: 20 },
+  ];
   const evidence = Core.selectRecommendationEvidence({
-    subject: { infobox: [{ key: "动画制作", value: "A-1 Pictures" }] },
-    positiveReasons: [
-      { role: "tag", roleLabel: "标签", label: "a-1pictures", value: 0.4, support: 6 },
-      { role: "tag", roleLabel: "标签", label: "偶像", value: 0.2, support: 8 },
-      { role: "tag", roleLabel: "标签", label: "日本", value: 0.18, support: 20 },
-    ],
+    subject: subjectWithCredits,
+    positiveReasons,
     similarWorks: [],
   });
+  const tags = Core.selectContentTags(subjectWithCredits, positiveReasons);
   assert.ok(evidence.some((entry) => entry.kind === "creative" && entry.role === "studio"));
-  assert.ok(evidence.find((entry) => entry.kind === "preference").reasons.every((entry) =>
-    entry.label !== "a-1pictures" && entry.label !== "日本",
-  ));
+  assert.deepEqual(tags.map((entry) => entry.label), ["偶像", "音乐", "青春"]);
+});
+
+test("unmatched personnel features do not dilute learned tag preference", () => {
+  const rows = [
+    collection(1, 10, ["治愈", "日常"], { globalScore: 7.2 }),
+    collection(2, 9, ["治愈", "青春"], { globalScore: 7.1 }),
+    collection(3, 4, ["后宫", "异世界"], { globalScore: 7.0 }),
+    collection(4, 3, ["后宫", "异世界"], { globalScore: 6.9 }),
+  ];
+  const profile = Core.trainProfile(rows);
+  const plain = Core.scoreSubject(subject(101, 7.4, ["治愈", "日常"]), profile);
+  const noisy = Core.scoreSubject(subject(102, 7.4, ["治愈", "日常"], {
+    infobox: [
+      { key: "导演", value: "从未看过的导演" },
+      { key: "动画制作", value: "从未看过的公司" },
+      { key: "音乐", value: "从未看过的作曲家" },
+    ],
+  }), profile);
+  assert.ok(Math.abs(plain.contentScore - noisy.contentScore) < 1e-12);
+  assert.ok(Core.ROLE_WEIGHTS.tag > Core.ROLE_WEIGHTS.director);
+  assert.ok(Core.ROLE_WEIGHTS.director > Core.ROLE_WEIGHTS.cv);
 });
 
 test("MMR reduces near-duplicate results", () => {

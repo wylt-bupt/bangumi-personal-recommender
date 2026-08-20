@@ -19,16 +19,16 @@
 
   const ROLE_WEIGHTS = Object.freeze({
     tag: 1,
-    meta: 0.9,
-    director: 1,
-    studio: 0.8,
-    creator: 0.7,
-    series: 0.6,
-    script: 0.6,
-    music: 0.45,
-    cv: 0.2,
-    decade: 0.22,
-    format: 0.2,
+    meta: 0.8,
+    director: 0.35,
+    studio: 0.3,
+    creator: 0.35,
+    series: 0.25,
+    script: 0.25,
+    music: 0.2,
+    cv: 0.08,
+    decade: 0.18,
+    format: 0.15,
   });
 
   const ROLE_SHRINKAGE = Object.freeze({
@@ -286,11 +286,22 @@
     const subject = normalizeSubject(subjectInput);
     const groups = new Map();
     const labels = {};
+    const subjectCredits = extractInfoboxCredits(subject.infobox);
+    const creditsByAlias = new Map(subjectCredits.map((credit) => [creditAlias(credit.label), credit]));
+    const creditedLabels = new Set();
 
     const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
       .filter((tag) => !TEMPORAL_TAG.test(tag))
       .slice(0, 18);
-    for (const tag of tagValues) addGroupedFeature(groups, "tag", tag, tag);
+    for (const tag of tagValues) {
+      const credit = creditsByAlias.get(creditAlias(tag));
+      if (credit) {
+        addGroupedFeature(groups, credit.role, `name:${normalizeText(credit.label)}`, credit.label);
+        creditedLabels.add(`${credit.role}:${normalizeText(credit.label)}`);
+      } else {
+        addGroupedFeature(groups, "tag", tag, tag);
+      }
+    }
 
     for (const tag of subject.metaTags.slice(0, 8)) {
       if (!TEMPORAL_TAG.test(tag)) addGroupedFeature(groups, "meta", tag, tag);
@@ -304,17 +315,16 @@
     const format = [...tagValues, ...subject.metaTags].find((tag) => FORMAT_TAGS.has(tag));
     if (format) addGroupedFeature(groups, "format", format, format.toUpperCase());
 
-    const creditedLabels = new Set();
     for (const person of subject.persons) {
       const role = normalizeRole(person.relation || person.type || person.career || person.jobs?.join(" "));
       const id = Number(person.id || person.person_id || 0);
       if (role && id) {
         const label = person.name || person.name_cn || id;
-        addGroupedFeature(groups, role, id, label);
+        if (!creditedLabels.has(`${role}:${normalizeText(label)}`)) addGroupedFeature(groups, role, id, label);
         creditedLabels.add(`${role}:${normalizeText(label)}`);
       }
     }
-    for (const { role, label } of extractInfoboxCredits(subject.infobox)) {
+    for (const { role, label } of subjectCredits) {
       const normalizedLabel = normalizeText(label);
       if (!normalizedLabel || creditedLabels.has(`${role}:${normalizedLabel}`)) continue;
       addGroupedFeature(groups, role, `name:${normalizedLabel}`, label);
@@ -507,6 +517,43 @@
     return selected;
   }
 
+  function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 32) {
+    const subject = normalizeSubject(subjectInput);
+    const creditAliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
+    const genericLabels = new Set(["tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説"]);
+    const positiveTagValues = new Map(
+      positiveReasons
+        .filter((entry) => entry.role === "tag" && Number(entry.value || 0) > 0)
+        .map((entry) => [normalizeText(entry.label), Number(entry.value)]),
+    );
+    const strongestMatch = Math.max(0, ...positiveTagValues.values());
+    const ranked = subject.tags
+      .map((label, index) => ({
+        label,
+        matched: positiveTagValues.has(normalizeText(label)),
+        score:
+          1 / (1 + index * 0.18) +
+          (strongestMatch ? 0.55 * Number(positiveTagValues.get(normalizeText(label)) || 0) / strongestMatch : 0),
+      }))
+      .filter((entry) =>
+        entry.label &&
+        !TEMPORAL_TAG.test(entry.label) &&
+        !genericLabels.has(normalizeText(entry.label)) &&
+        !creditAliases.has(creditAlias(entry.label)) &&
+        [...entry.label].length <= 18,
+      )
+      .sort((a, b) => b.score - a.score);
+    const selected = [];
+    let usedCharacters = 0;
+    for (const entry of ranked) {
+      const cost = [...entry.label].length + (selected.length ? 1 : 0);
+      if (selected.length && usedCharacters + cost > characterBudget) continue;
+      selected.push(entry);
+      usedCharacters += cost;
+    }
+    return selected;
+  }
+
   function selectRecommendationEvidence(scoredSubject, characterBudget = 108) {
     const roleLabels = {
       director: "导演",
@@ -536,20 +583,6 @@
       .sort((a, b) => b.value - a.value);
     const strongestReason = Number(reasons[0]?.value || 0);
     const candidates = [];
-    const preferenceRoles = new Set(["tag", "meta", "format", "decade"]);
-    const preferenceReasons = selectByEvidenceCoverage(
-      reasons.filter((entry) => preferenceRoles.has(entry.role)),
-      28,
-    );
-    if (preferenceReasons.length) {
-      candidates.push({
-        kind: "preference",
-        reasons: preferenceReasons,
-        strength: preferenceReasons.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
-        cost: 18 + preferenceReasons.reduce((sum, entry) => sum + [...entry.label].length, 0),
-      });
-    }
-
     const creativeRoles = new Set(["director", "studio", "creator", "series", "script", "music", "cv"]);
     const creativeGroups = new Map();
     for (const reason of reasons.filter((entry) => creativeRoles.has(entry.role))) {
@@ -557,7 +590,7 @@
       creativeGroups.get(reason.role).push(reason);
     }
     for (const [role, entries] of creativeGroups.entries()) {
-      if (strongestReason && entries[0].value < strongestReason * 0.28) continue;
+      if (strongestReason && entries[0].value < strongestReason * 0.5) continue;
       const selected = selectByEvidenceCoverage(entries, 22, 0.76, 0.45);
       if (!selected.length) continue;
       candidates.push({
@@ -565,7 +598,7 @@
         role,
         roleLabel: selected[0].roleLabel,
         reasons: selected,
-        strength: 0.2 + selected.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
+        strength: selected.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
         cost: 16 + selected.reduce((sum, entry) => sum + [...entry.label].length, 0),
       });
     }
@@ -607,15 +640,7 @@
 
     const selected = [];
     let remaining = Math.max(40, Number(characterBudget) || 108);
-    const strongestCreative = candidates
-      .filter((candidate) => candidate.kind === "creative")
-      .sort((a, b) => b.strength - a.strength)[0];
-    if (strongestCreative) {
-      selected.push(strongestCreative);
-      remaining -= strongestCreative.cost;
-    }
     for (const originalCandidate of [...candidates].sort((a, b) => b.strength - a.strength)) {
-      if (originalCandidate === strongestCreative) continue;
       let candidate = originalCandidate;
       if (candidate.kind === "similarity" && candidate.cost > remaining && candidate.works.length > 1) {
         const works = [...candidate.works];
@@ -630,7 +655,7 @@
       selected.push(candidate);
       remaining -= candidate.cost;
     }
-    const order = { exception: 0, preference: 1, similarity: 2, creative: 3, quality: 4 };
+    const order = { exception: 0, similarity: 1, creative: 2, quality: 3 };
     return selected.sort((a, b) => order[a.kind] - order[b.kind]);
   }
 
@@ -647,7 +672,10 @@
       .filter((entry) => entry.value !== 0)
       .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
 
-    const featureMass = Object.values(vector.features).reduce((sum, value) => sum + Math.abs(value), 0);
+    const featureMass = contributions.reduce(
+      (sum, entry) => sum + Math.abs(Number(vector.features[entry.token] || 0)),
+      0,
+    );
     const contentRaw = contributions.reduce((sum, entry) => sum + entry.value, 0) /
       Math.sqrt(Math.max(1, featureMass));
     const content = Math.tanh(contentRaw * 2.2);
@@ -836,6 +864,7 @@
     weightedJaccard,
     bayesianScore,
     describeToken,
+    selectContentTags,
     selectRecommendationEvidence,
     scoreSubject,
     classifyBookOrigin,

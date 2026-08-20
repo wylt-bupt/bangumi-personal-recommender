@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.1.6";
+  const APP_VERSION = "0.1.7";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -13,7 +13,7 @@
   const CONFIG_KEY = "bgmpr:config:v1";
   const DISMISSED_KEY = "bgmpr:dismissed:v1";
   const BOOK_FEEDBACK_RESET_MARKER = "bgmpr:migration:book-feedback-reset:0.1.2";
-  const RECOMMENDATION_MODEL_VERSION = "7";
+  const RECOMMENDATION_MODEL_VERSION = "8";
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -902,12 +902,16 @@
       const ratingPercent = Math.round(Number(confidenceBreakdown.ratingEvidence || 0) * 100);
       const confidenceExplanation = `证据构成：偏好特征 ${featurePercent}/50，相似收藏 ${neighborPercent}/30，评分样本 ${ratingPercent}/20`;
       const evidence = Core.selectRecommendationEvidence(item);
+      const contentTags = Core.selectContentTags(subject, item.positiveReasons);
+      const contentTagMarkup = contentTags.length
+        ? `<div class="content-tag-row" aria-label="内容标签">
+            <span class="content-tag-label">内容</span>
+            <div class="content-tags">${contentTags.map((tag) => `<span>${escapeHtml(tag.label)}</span>`).join("")}</div>
+          </div>`
+        : "";
       const quotedLabels = (reasons) =>
         `<strong>「${reasons.map((reason) => escapeHtml(reason.label)).join("、")}」</strong>`;
       const evidenceRows = evidence.map((entry) => {
-        if (entry.kind === "preference") {
-          return `<li><span class="evidence-kind">偏好</span><p>你对${quotedLabels(entry.reasons)}相关作品的评分通常高于个人平均</p></li>`;
-        }
         if (entry.kind === "similarity") {
           const works = entry.works.map((work) =>
             `<strong>${Number(work.rate) ? `${Number(work.rate)} 分的` : ""}《${escapeHtml(work.name)}》</strong>`,
@@ -935,7 +939,7 @@
         .filter((entry) => entry.kind === "similarity")
         .reduce((sum, entry) => sum + entry.works.length, 0);
       return `
-        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-evidence-count="${evidence.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
+        <article class="recommendation-card" data-book-origin="${escapeHtml(item.bookOrigin?.status || "")}" data-origin-override="${item.bookOriginOverride ? "true" : "false"}" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
           <div class="rank">${String(index + 1).padStart(2, "0")}</div>
           <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
             ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
@@ -951,6 +955,7 @@
             <div class="metrics">
               <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span>
             </div>
+            ${contentTagMarkup}
             <section class="evidence-panel" aria-label="推荐依据，置信度 ${item.confidence}，${confidencePercent}%">
               <div class="evidence-header"><strong>推荐依据</strong><span class="confidence" title="${escapeHtml(confidenceExplanation)}" aria-label="置信度 ${item.confidence}，${confidencePercent}%。${escapeHtml(confidenceExplanation)}">置信度 ${item.confidence} · ${confidencePercent}%</span></div>
               <ul class="evidence-list">${evidenceRows.join("")}</ul>
@@ -1148,6 +1153,10 @@
         .fit-score strong { color: var(--primary); font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
         .fit-score span { color: var(--text-muted); font-size: 10px; }
         .metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+        .content-tag-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 9px; }
+        .content-tag-label { flex: 0 0 auto; padding-top: 3px; color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+        .content-tags { min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+        .content-tags span { padding: 3px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-alt); color: var(--text); font-size: 11px; line-height: 1.35; }
         .confidence { color: var(--accent); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
         .evidence-panel { margin: 10px 0 12px; padding: 9px 10px 10px; border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border)); border-radius: 10px; background: var(--surface-alt); }
         .evidence-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
