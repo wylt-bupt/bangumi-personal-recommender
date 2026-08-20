@@ -4,7 +4,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.2";
+  const APP_VERSION = "0.2.3";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -25,6 +25,8 @@
 
   const ICONS = Object.freeze({
     spark: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.45 5.05L18.5 8.5l-5.05 1.45L12 15l-1.45-5.05L5.5 8.5l5.05-1.45L12 2Zm6 11 .9 3.1L22 17l-3.1.9L18 21l-.9-3.1L14 17l3.1-.9L18 13Z"/></svg>`,
+    discover: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.25"/><path d="m15.55 8.45-2.18 4.92-4.92 2.18 2.18-4.92 4.92-2.18Z"/><circle cx="12" cy="12" r="1.15"/></svg>`,
+    launchArrow: `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.75 5.25 5.25-5.25 5.25"/></svg>`,
     close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>`,
     refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h8V3l-3.35 3.35Z"/></svg>`,
     arrow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 5-1.4 1.4 4.6 4.6H5v2h11.2l-4.6 4.6L13 19l7-7-7-7Z"/></svg>`,
@@ -533,7 +535,9 @@
       ).join("");
       return `
         <button class="launcher" type="button" aria-label="打开 Bangumi 个性推荐" aria-haspopup="dialog">
-          <span class="icon">${ICONS.spark}</span><span>推荐</span>
+          <span class="launcher-mark">${ICONS.discover}</span>
+          <span class="launcher-copy"><small>FOR YOU</small><strong>个性推荐</strong></span>
+          <span class="launcher-arrow">${ICONS.launchArrow}</span>
         </button>
         <div class="scrim" hidden></div>
         <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="bgmpr-title" aria-hidden="true">
@@ -1053,6 +1057,7 @@
           --danger: #9e2f39;
           --focus: #0e6e82;
           --shadow: 0 20px 60px rgba(39, 20, 26, .22);
+          --launcher-shadow: 0 2px 6px rgba(39, 20, 26, .08), 0 12px 30px rgba(99, 36, 55, .14);
           --z-host: 10000;
           color: var(--text);
           font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
@@ -1076,6 +1081,7 @@
           --danger: #ff9ba4;
           --focus: #77c9d8;
           --shadow: 0 20px 60px rgba(0, 0, 0, .48);
+          --launcher-shadow: 0 2px 8px rgba(0, 0, 0, .28), 0 14px 34px rgba(0, 0, 0, .34);
         }
         *, *::before, *::after { box-sizing: border-box; }
         button, select, a { font: inherit; }
@@ -1089,13 +1095,31 @@
         .icon svg, button svg, a svg { width: 20px; height: 20px; fill: currentColor; flex: 0 0 auto; }
         .launcher {
           position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(76px, calc(env(safe-area-inset-bottom) + 20px));
-          z-index: 10; min-height: 48px; padding: 0 17px; border: 1px solid color-mix(in srgb, var(--primary) 75%, #000 10%);
-          border-radius: 999px; background: var(--primary); color: var(--on-primary); box-shadow: 0 8px 24px rgba(99, 36, 55, .28);
-          display: inline-flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: .02em;
-          transition: background 180ms ease-out, box-shadow 180ms ease-out, transform 120ms ease-out;
+          z-index: 10; min-height: 56px; padding: 7px 11px 7px 8px;
+          border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); border-radius: 17px;
+          background: color-mix(in srgb, var(--surface-raised) 94%, transparent); color: var(--text); box-shadow: var(--launcher-shadow);
+          -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+          display: inline-flex; align-items: center; gap: 10px; text-align: left;
+          transition: background 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out, transform 150ms ease-out;
         }
-        .launcher:hover { background: var(--primary-strong); box-shadow: 0 10px 30px rgba(99, 36, 55, .36); }
-        .launcher:active { transform: scale(.97); }
+        .launcher-mark {
+          width: 40px; height: 40px; border-radius: 12px; background: var(--primary); color: var(--on-primary);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 4px 10px color-mix(in srgb, var(--primary) 24%, transparent);
+          display: grid; place-items: center; flex: 0 0 auto; transition: background 180ms ease-out, transform 180ms ease-out;
+        }
+        .launcher-mark svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+        .launcher-copy { min-width: 62px; display: grid; gap: 2px; line-height: 1; }
+        .launcher-copy small { color: var(--primary); font-size: 9px; font-weight: 850; letter-spacing: .15em; }
+        .launcher-copy strong { white-space: nowrap; font-size: 14px; font-weight: 750; letter-spacing: .01em; }
+        .launcher-arrow { width: 16px; height: 20px; color: var(--text-muted); display: grid; place-items: center; transition: color 180ms ease-out, transform 180ms ease-out; }
+        .launcher-arrow svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .launcher:hover {
+          border-color: color-mix(in srgb, var(--primary) 38%, var(--border)); background: var(--surface-raised);
+          box-shadow: 0 3px 8px rgba(39, 20, 26, .1), 0 16px 36px rgba(99, 36, 55, .18); transform: translateY(-2px);
+        }
+        .launcher:hover .launcher-mark { background: var(--primary-strong); transform: rotate(-3deg); }
+        .launcher:hover .launcher-arrow { color: var(--primary); transform: translateX(2px); }
+        .launcher:active { transform: translateY(0) scale(.98); }
         .scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); }
         .drawer {
           position: fixed; inset: 0 0 0 auto; z-index: 30; width: min(560px, 100vw); height: 100dvh;
@@ -1220,7 +1244,9 @@
           .summary > div { padding: 9px; }
         }
         @media (max-width: 390px) {
-          .launcher { right: 12px; bottom: max(68px, calc(env(safe-area-inset-bottom) + 12px)); }
+          .launcher { right: 12px; bottom: max(68px, calc(env(safe-area-inset-bottom) + 12px)); width: 52px; min-height: 52px; padding: 6px; border-radius: 16px; }
+          .launcher-mark { width: 38px; height: 38px; }
+          .launcher-copy, .launcher-arrow { display: none; }
           .recommendation-card { grid-template-columns: 64px minmax(0, 1fr); }
           .cover { width: 64px; height: 90px; }
           .title-row { gap: 6px; }

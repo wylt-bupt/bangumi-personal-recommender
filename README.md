@@ -6,7 +6,7 @@
 
 - 源码主页：<https://github.com/wylt-bupt/bangumi-personal-recommender>
 - Bangumi 组件：<https://bgm.tv/dev/app/6931>
-- 当前版本：`0.2.2`，开发中，仅由组件创建者 `wylt` 启用，未提交全站审核。
+- 当前版本：`0.2.3`，开发中，仅由组件创建者 `wylt` 启用，未提交全站审核。
 
 ## 已实现功能
 
