@@ -74,6 +74,11 @@ test("extracts creator and production evidence from subject infobox", () => {
     tags: ["濑户口廉也", "人類衰退之後", "致郁", "青春"],
     infobox: [{ key: "作者", value: "唐辺葉介 (瀬戸口廉也)" }],
   }).map((entry) => entry.label), ["致郁", "青春"]);
+  assert.deepEqual(Core.selectContentTags({
+    id: 14,
+    type: 2,
+    tags: ["新房昭之", "催泪", "gal改", "恋爱", "校园", "治愈"],
+  }).map((entry) => entry.label), ["催泪", "gal改", "恋爱", "校园", "治愈"]);
 });
 
 test("learns positive and negative tag preference from rating residuals", () => {
