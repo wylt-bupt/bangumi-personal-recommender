@@ -44,7 +44,8 @@ test("keeps direct adult tags and requires corroboration for ambiguous rating ta
   assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"])), false);
   assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"]), true), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(31, 7, ["成人动画"])), true);
-  assert.equal(Core.isAdultRecommendationCandidate(subject(32, 7, ["R18", "18禁"])), true);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(32, 7, ["R18", "18禁"])), false);
+  assert.equal(Core.isAdultRecommendationCandidate(subject(38, 7, ["里番", "18X"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(33, 7, ["R18", "无码"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(36, 7, ["里番", "成人三部曲"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(34, 7, ["R18", "血腥", "猎奇"])), false);

@@ -128,10 +128,10 @@
     if (containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect)) return true;
     const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
       .filter((value) => tags.has(normalizeText(value))).length;
-    if (supplementalCount >= 2) return true;
     const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
       || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
-    return (hasDirect || supplementalCount === 1) && hasCorroboration;
+    if (hasDirect && supplementalCount >= 1) return true;
+    return (hasDirect || supplementalCount >= 1) && hasCorroboration;
   }
 
   function infoboxValueText(value) {
