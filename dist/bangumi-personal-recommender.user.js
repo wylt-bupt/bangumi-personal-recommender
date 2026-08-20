@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.2.0
+// @version      0.2.1
 // @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -913,14 +913,17 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.2.0";
+  const APP_VERSION = "0.2.1";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "11";
+  const RECOMMENDATION_MODEL_VERSION = "12";
+  const CANDIDATE_TAG_COUNT = 12;
+  const CANDIDATE_TAG_PAGES = 2;
+  const CANDIDATE_RANK_PAGES = 10;
 
   const TYPE_OPTIONS = [2, 1, 4, 3, 6];
   const MODE_LABELS = Object.freeze({
@@ -1227,26 +1230,33 @@
     }
 
     async getCandidates(subjectType, profile, force = false) {
-      const tags = Core.topRetrievalTags(profile, 6);
+      const tags = Core.topRetrievalTags(profile, CANDIDATE_TAG_COUNT);
       const signature = tags.map(Core.normalizeText).sort().join("|");
-      const key = `candidates:v2:${subjectType}:${signature}`;
+      const key = `candidates:v3:${subjectType}:${signature}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
         async () => {
           try {
             const pools = [];
-            this.progress("正在建立候选池…", 0, tags.length + 2);
-            for (const offset of [0, 100]) {
+            const rankOffsets = Array.from({ length: CANDIDATE_RANK_PAGES }, (_, index) => index * 100);
+            const tagQueries = tags.flatMap((tag) =>
+              Array.from({ length: CANDIDATE_TAG_PAGES }, (_, index) => ({ tag, offset: index * 50 })),
+            );
+            const totalRequests = rankOffsets.length + tagQueries.length;
+            let completed = 0;
+            this.progress("正在建立候选池…", completed, totalRequests);
+            for (const offset of rankOffsets) {
               const page = await this.requestJson(
                 `/v0/subjects?type=${subjectType}&sort=rank&limit=100&offset=${offset}`,
               );
               pools.push(...(page.data || []));
-              this.progress("正在建立候选池…", pools.length / 100, tags.length + 2);
+              completed += 1;
+              this.progress("正在建立候选池…", completed, totalRequests);
             }
-            const searched = await concurrentMap(tags, 2, async (tag, index) => {
+            const searched = await concurrentMap(tagQueries, 3, async ({ tag, offset }) => {
               const page = await this.requestJson(
-                "/v0/search/subjects?limit=50&offset=0",
+                `/v0/search/subjects?limit=50&offset=${offset}`,
                 {
                   method: "POST",
                   body: JSON.stringify({
@@ -1256,13 +1266,18 @@
                   }),
                 },
               );
-              this.progress("正在按偏好召回候选…", index + 1, tags.length);
+              completed += 1;
+              this.progress("正在按偏好召回候选…", completed, totalRequests);
               return page.data || [];
             });
             pools.push(...searched.flat());
             return this.dedupeSubjects(pools);
           } catch (error) {
-            this.progress("API 候选不可用，正在使用站内标签页…", 0, tags.length + 3);
+            this.progress(
+              "API 候选不可用，正在使用站内标签页…",
+              0,
+              tags.length * CANDIDATE_TAG_PAGES + CANDIDATE_RANK_PAGES,
+            );
             return this.getCandidatesFromSite(subjectType, tags);
           }
         },
@@ -1283,20 +1298,23 @@
       const type = Core.SUBJECT_TYPES[subjectType];
       const pools = [];
       let done = 0;
-      for (const tag of tags.slice(0, 6)) {
-        const url = `${location.origin}/${type.slug}/tag/${encodeURIComponent(tag)}?sort=collects`;
-        const documentNode = await this.getHtmlDocument(url);
-        pools.push(...this.parseListItems(documentNode, subjectType, 0, tag).map((item) => item.subject));
-        done += 1;
-        this.progress("正在按偏好读取候选…", done, tags.length + 3);
-        await sleep(220);
+      const totalRequests = tags.length * CANDIDATE_TAG_PAGES + CANDIDATE_RANK_PAGES;
+      for (const tag of tags.slice(0, CANDIDATE_TAG_COUNT)) {
+        for (let page = 1; page <= CANDIDATE_TAG_PAGES; page += 1) {
+          const url = `${location.origin}/${type.slug}/tag/${encodeURIComponent(tag)}?sort=collects&page=${page}`;
+          const documentNode = await this.getHtmlDocument(url);
+          pools.push(...this.parseListItems(documentNode, subjectType, 0, tag).map((item) => item.subject));
+          done += 1;
+          this.progress("正在按偏好读取候选…", done, totalRequests);
+          await sleep(220);
+        }
       }
-      for (let page = 1; page <= 3; page += 1) {
+      for (let page = 1; page <= CANDIDATE_RANK_PAGES; page += 1) {
         const url = `${location.origin}/${type.slug}/browser?sort=rank&page=${page}`;
         const documentNode = await this.getHtmlDocument(url);
         pools.push(...this.parseListItems(documentNode, subjectType, 0).map((item) => item.subject));
         done += 1;
-        this.progress("正在补充高质量候选…", done, tags.length + 3);
+        this.progress("正在补充高质量候选…", done, totalRequests);
         await sleep(220);
       }
       return this.dedupeSubjects(pools);
@@ -1331,7 +1349,7 @@
 
     async enrichOriginMetadata(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
-      const uniqueIds = [...new Set(subjectIds)].slice(0, 80);
+      const uniqueIds = [...new Set(subjectIds)].slice(0, 180);
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
         const details = await this.getSubjectDetails(subjectId);
@@ -1672,7 +1690,7 @@
 
     async enhanceWithPeople() {
       const influential = Core.influentialSubjectIds(this.state.collections, this.state.profile, 10, 6);
-      const originPreview = this.state.scoredPool.slice(0, 80).map((item) => item.subject.id);
+      const originPreview = this.state.scoredPool.slice(0, 180).map((item) => item.subject.id);
       let allSubjects = [
         ...this.state.collections.map((item) => item.subject),
         ...this.state.candidates,
