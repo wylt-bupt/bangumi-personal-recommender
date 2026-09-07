@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const output = resolve(root, "dist/bangumi-personal-recommender.user.js");
+const publishOutput = resolve(root, "dist/bangumi-personal-recommender.bgm.txt");
 
 const header = `// ==UserScript==
 // @name         Bangumi 个性推荐
@@ -27,5 +28,7 @@ const stats = await readFile(resolve(root, "src/stats.js"), "utf8");
 const statsViz = await readFile(resolve(root, "src/stats-viz.cjs"), "utf8");
 
 await mkdir(dirname(output), { recursive: true });
-await writeFile(output, `${header}\n${profileUI}\n\n${core}\n\n${statsCore}\n\n${statsViz}\n\n${stats}\n\n${component}\n`, "utf8");
+const bundle = `${header}\n${profileUI}\n\n${core}\n\n${statsCore}\n\n${statsViz}\n\n${stats}\n\n${component}\n`;
+await writeFile(output, bundle, "utf8");
+await writeFile(publishOutput, bundle, "utf8");
 console.log(`Built ${output}`);

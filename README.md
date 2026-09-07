@@ -96,6 +96,7 @@ npm run verify
 
 ```text
 dist/bangumi-personal-recommender.user.js
+dist/bangumi-personal-recommender.bgm.txt
 ```
 
 本地 UI 演示：
@@ -137,6 +138,7 @@ Bangumi 会直接保存组件每个版本的 JavaScript/CSS，外部源码仓库
 - `src/timeline.js`：个人时光机的同源同步、持久化与原版风格热力图界面。
 - `scripts/build-timeline.mjs`：生成独立的个人时光机 UserScript。
 - `scripts/build.mjs`：生成单文件 UserScript。
+- `dist/bangumi-personal-recommender.bgm.txt`：与 UserScript 内容一致、便于在浏览器中粘贴发布的纯文本构建产物。
 - `tests/core.test.cjs`：核心算法测试。
 - `demo/index.html`：Chrome 可视化测试页。
 
