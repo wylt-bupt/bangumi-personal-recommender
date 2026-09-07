@@ -6,8 +6,8 @@ function subject(id, score, tags, extra = {}) {
   return {
     id,
     type: 2,
-    name: `Subject ${id}`,
-    name_cn: `条目 ${id}`,
+    name: extra.name || `Subject ${id}`,
+    name_cn: extra.nameCn || `条目 ${id}`,
     date: extra.date || "2020-01-01",
     tags: tags.map((name, index) => ({ name, count: 100 - index })),
     rating: { score, total: extra.total || 1000 },
@@ -76,7 +76,7 @@ test("normalizes staff roles and keeps role identity separate", () => {
   assert.ok(vector.features["script:10"]);
 });
 
-test("extracts infobox credits for display without changing the original ranking vector", () => {
+test("extracts infobox credits and removes verified creative names from content tags", () => {
   const infobox = [
     { key: "动画制作", value: "WHITE FOX" },
     { key: "导演", value: "佐藤卓哉" },
@@ -88,8 +88,10 @@ test("extracts infobox credits for display without changing the original ranking
     { role: "script", label: "花田十辉" },
     { role: "script", label: "佐藤卓哉" },
   ]);
-  const vector = Core.buildFeatureVector({ ...subject(11, 8, ["科幻"]), infobox });
+  const vector = Core.buildFeatureVector({ ...subject(11, 8, ["科幻", "佐藤卓哉", "WHITE FOX"]), infobox });
   assert.equal(vector.features["studio:name:white fox"], undefined);
+  assert.equal(vector.features["tag:佐藤卓哉"], undefined);
+  assert.equal(vector.features["tag:whitefox"], undefined);
   assert.ok(vector.features["tag:科幻"]);
 
   assert.deepEqual(Core.selectContentTags({
@@ -149,6 +151,43 @@ test("scores a matching candidate above a disliked-pattern candidate", () => {
   const confidenceParts = Object.values(liked.confidenceBreakdown).reduce((sum, value) => sum + value, 0);
   assert.ok(Math.abs(confidenceParts - liked.confidenceScore) < 1e-12);
   assert.ok(liked.confidenceScore >= 0 && liked.confidenceScore <= 1);
+  assert.ok(liked.neighborReliability > 0 && liked.neighborReliability < 1);
+});
+
+test("requires repeated independent content overlap before using a neighbor", () => {
+  const rows = [
+    collection(1, 10, ["科幻", "悬疑"], { globalScore: 7.2 }),
+    collection(2, 9, ["科幻", "轮回"], { globalScore: 7.1 }),
+    collection(3, 8, ["校园", "恋爱"], { globalScore: 7.0 }),
+    collection(4, 7, ["日常", "治愈"], { globalScore: 6.9 }),
+  ];
+  const profile = Core.trainProfile(rows);
+  const oneSharedTag = Core.scoreSubject(subject(101, 7.4, ["科幻", "音乐"]), profile);
+  const twoSharedTags = Core.scoreSubject(subject(102, 7.4, ["科幻", "悬疑"]), profile);
+  assert.equal(oneSharedTag.similarWorks.length, 0);
+  assert.ok(twoSharedTags.similarWorks.length > 0);
+});
+
+test("counts sequel-heavy tag evidence by inferred series instead of episode count", () => {
+  const repeatedSeries = [1, 2, 3].map((id) => collection(id, 8, ["特例标签", "恋爱"], {
+    globalScore: 7,
+    nameCn: `同一系列 第${id}季`,
+  }));
+  const profile = Core.trainProfile([
+    ...repeatedSeries,
+    collection(4, 8, ["特例标签", "校园"], { globalScore: 7, nameCn: "另一部作品" }),
+    collection(5, 10, ["稳定标签", "恋爱"], { globalScore: 7, nameCn: "独立甲" }),
+    collection(6, 10, ["稳定标签", "恋爱"], { globalScore: 7, nameCn: "独立乙" }),
+    collection(7, 10, ["稳定标签", "恋爱"], { globalScore: 7, nameCn: "独立丙" }),
+    collection(8, 10, ["稳定标签", "恋爱"], { globalScore: 7, nameCn: "独立丁" }),
+    ...Array.from({ length: 60 }, (_, index) => collection(100 + index, 9, [`独立标签${index}`], {
+      globalScore: 7,
+      nameCn: `填充作品${index}`,
+    })),
+  ]);
+  assert.equal(profile.featureWeights["tag:特例标签"], undefined);
+  assert.ok(profile.featureWeights["tag:稳定标签"] > 0);
+  assert.equal(profile.featureSupport["tag:稳定标签"], 4);
 });
 
 test("selects varied recommendation evidence by strength and text budget", () => {
@@ -241,6 +280,26 @@ test("MMR reduces near-duplicate results", () => {
   const selected = Core.diversify(pool, 3, "explore", "test");
   assert.ok([1, 2].includes(selected[0].subject.id));
   assert.ok(selected.some((item) => item.subject.id === 3 || item.subject.id === 4));
+});
+
+test("full-pool MMR keeps diversity across pagination boundaries", () => {
+  const series = Array.from({ length: 4 }, (_, index) => ({
+    subject: { id: 100 + index },
+    normalizedScore: 1 - index * 0.01,
+    features: { "tag:圣母在上": 1, "tag:校园": 0.8, "tag:百合": 0.8 },
+  }));
+  const alternatives = Array.from({ length: 12 }, (_, index) => ({
+    subject: { id: 200 + index },
+    normalizedScore: 0.96 - index * 0.012,
+    features: { [`tag:题材${index}`]: 1, [`format:${index % 3}`]: 0.5 },
+  }));
+  const selected = Core.diversify([...series, ...alternatives], 16, "balanced", "full-pool-test");
+  const seriesRanks = selected
+    .map((item, index) => (item.subject.id < 200 ? index + 1 : null))
+    .filter(Boolean);
+  assert.equal(new Set(selected.map((item) => item.subject.id)).size, 16);
+  assert.equal(seriesRanks[0], 1);
+  assert.ok(seriesRanks[1] > 5);
 });
 
 test("supplemental scoring is capped at a weak twenty-percent adjustment", () => {

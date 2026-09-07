@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.3.6
-// @description  根据个人收藏、评分和标签，在未标记条目中推荐最适合的 5 个。
+// @version      0.9.4
+// @description  个人主页的动画回顾与个性推荐：年代柱图、季度分布、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
 // @match        http://bgm.tv/*
@@ -11,6 +11,65 @@
 // @match        https://chii.in/*
 // @match        http://chii.in/*
 // ==/UserScript==
+
+(function attachProfileUI(global) {
+  "use strict";
+  const isProfile = () => /^(bgm\.tv|bangumi\.tv|chii\.in)$/.test(location.hostname)
+    ? /^\/user\/wylt\/?$/.test(location.pathname)
+    : /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && Boolean(document.querySelector('[data-bgm-profile-demo]'));
+  function mount(id, order) {
+    if (!isProfile() || document.getElementById(id)) return null;
+    const column = document.getElementById('user_home');
+    if (!column) return null;
+    let area = document.getElementById('bgmpr-profile-sections');
+    if (!area) {
+      area = document.createElement('div');
+      area.id = 'bgmpr-profile-sections';
+      area.style.cssText = 'display:flex;flex-direction:column;gap:32px;clear:both;width:100%;min-width:0;margin:28px 0 36px';
+      const blog = column.querySelector('#blog');
+      if (blog) blog.after(area); else column.append(area);
+    }
+    const host = document.createElement('div');
+    host.id = id;
+    host.style.cssText = `display:block;min-width:0;width:100%;order:${order}`;
+    area.append(host);
+    return host;
+  }
+  function theme() {
+    const explicit = document.documentElement.getAttribute('data-theme');
+    if (explicit === 'dark' || explicit === 'light') return explicit;
+    return /dark|night/i.test(`${document.documentElement.className} ${document.body?.className || ''}`)
+      || matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function lazy(host, callback) {
+    let started = false;
+    const run = () => { if (!started) { started = true; callback(); } };
+    if (!('IntersectionObserver' in global)) { run(); return; }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); run(); }
+    }, { rootMargin: '300px' });
+    observer.observe(host);
+  }
+  const css = `
+    :host{--ink:#444;--muted:#777;--line:#eee;--surface:#fff;--soft:#fafafa;--pink:#f09199;--pink-soft:#fff1f3;--link:#a74458;--site-link:#16718b;display:block;font:13px/1.6 Arial,"Microsoft YaHei",sans-serif;color:var(--ink);container-type:inline-size;color-scheme:light}
+    :host([data-theme="dark"]){--ink:#ddd;--muted:#aaa;--line:#383838;--surface:#202020;--soft:#282828;--pink:#e99aa7;--pink-soft:#39282d;--link:#efa6b3;--site-link:#8ec9dc;color-scheme:dark}
+    *,*::before,*::after{box-sizing:border-box} [hidden]{display:none!important}
+    button,input,select{font:inherit}button,summary,select{cursor:pointer}button{border:0;background:transparent;color:var(--muted);padding:5px 10px;border-radius:6px;transition:background .18s,color .18s}button:hover:not(:disabled),summary:hover{color:var(--link);background:var(--pink-soft)}button:disabled{opacity:.4;cursor:default}
+    a{color:var(--site-link);text-decoration:none}a:hover{color:var(--link);text-decoration:underline}
+    :is(a,button,input,select,summary):focus-visible{outline:2px solid var(--link);outline-offset:3px}
+    h2,h3,p{margin:0}h2{font-size:18px;font-weight:400;color:var(--muted)}h3{font-size:13px;font-weight:400}
+    .module{min-width:0;background:var(--surface)}.module-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:0 0 9px;border-bottom:1px solid var(--line);margin-bottom:16px}.module-head h2{margin-right:auto}.module-head>button{font-size:12px}
+    .tabs{display:flex;flex-wrap:wrap;gap:3px;padding:3px;background:var(--soft);border-radius:8px;width:fit-content;max-width:100%}.tabs button{padding:4px 12px;font-size:12px}.tabs button[aria-pressed="true"]{background:var(--pink);color:#40232a}
+    .content{min-width:0}.empty,.error{padding:24px 8px;color:var(--muted);text-align:center}.empty button,.error button,.welcome button{color:var(--link);background:var(--pink-soft);margin-top:10px}
+    .progress-region,.progress{margin:10px 0;color:var(--muted);font-size:12px}.progress-copy{display:flex;justify-content:space-between;gap:12px}.progress-track{height:2px;background:var(--line);margin-top:6px}.progress-track span{display:block;height:100%;background:var(--pink);transform-origin:left;transform:scaleX(0)}
+    .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+    svg{width:16px;height:16px;vertical-align:middle}select,input{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:100%}
+    @container(max-width:500px){.module-head{gap:8px}.tabs button{padding:7px 10px}button,summary{min-height:36px}input,select{font-size:16px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+  `;
+  global.BangumiProfileUI = { mount, theme, lazy, css, isProfile };
+})(globalThis);
+
 
 (function attachBangumiRecommenderCore(globalObject) {
   "use strict";
@@ -60,8 +119,8 @@
   });
 
   const ROLE_MIN_SUPPORT = Object.freeze({
-    tag: 2,
-    meta: 2,
+    tag: 4,
+    meta: 3,
     director: 2,
     studio: 3,
     creator: 2,
@@ -87,7 +146,11 @@
       "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
     ]),
   });
-  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃疼|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
+  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|扭曲|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃[疼痛药]|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|乱伦|工口|成人|里番|r18|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
+  const GENERIC_TAGS = new Set([
+    "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
+    "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
+  ]);
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
@@ -347,6 +410,8 @@
 
   function creditAlias(value) {
     return normalizeText(value)
+      .replace(/岡/g, "冈")
+      .replace(/磨里/g, "麿里")
       .replace(/[瀬瀨]/g, "濑")
       .replace(/戸/g, "户")
       .replace(/間/g, "间")
@@ -362,6 +427,77 @@
       .replace(/[\s._・·—–-]+/g, "");
   }
 
+  function canonicalTagAlias(value) {
+    const alias = creditAlias(value);
+    if (/^(?:漫画改|漫畫改|漫改)$/.test(alias)) return "漫改";
+    if (/^(?:轻小说改|輕小說改|ライトノベル改)$/.test(alias)) return "轻小说改";
+    if (/^(?:游戏改|遊戲改|ゲーム改)$/.test(alias)) return "游戏改";
+    if (/^治[愈癒]$/.test(alias)) return "治愈";
+    if (/^校[园園]$/.test(alias)) return "校园";
+    if (/^原[创創]$/.test(alias)) return "原创";
+    if (/^愛情$/.test(alias)) return "爱情";
+    return alias;
+  }
+
+  function subjectCreativeAliases(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const aliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
+    const creativeValues = subject.infobox
+      .filter((entry) => /(?:导演|導演|監督|监修|監修|制作|製作|原作|作者|脚本|劇本|剧本|构成|構成|编剧|編劇|演出|分镜|分鏡|作画|作畫|设计|設計|音响|音響|音乐|音樂|音楽|摄影|攝影|剪辑|剪輯|企画|制片|配給|原画|原畫|美术|美術|色彩|主题歌|主題歌|op|ed|声优|聲優|配音)/i.test(normalizeText(entry?.key || entry?.k || "")))
+      .map((entry) => creditAlias(infoboxValueText(entry?.value ?? entry?.v ?? "")))
+      .filter(Boolean);
+    for (const tag of subject.tags) {
+      const alias = creditAlias(tag);
+      if (alias.length >= 2 && creativeValues.some((value) => value.includes(alias))) aliases.add(alias);
+    }
+    for (const person of subject.persons) {
+      for (const name of [person?.name, person?.name_cn, person?.nameCn]) {
+        const alias = creditAlias(name);
+        if (alias) aliases.add(alias);
+      }
+    }
+    for (const character of subject.characters) {
+      const actors = Array.isArray(character?.actors)
+        ? character.actors
+        : character?.actor
+          ? [character.actor]
+          : [];
+      for (const actor of actors) {
+        for (const name of [actor?.name, actor?.name_cn, actor?.nameCn]) {
+          const alias = creditAlias(name);
+          if (alias) aliases.add(alias);
+        }
+      }
+    }
+    return aliases;
+  }
+
+  function withoutCreativeContributors(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const aliases = subjectCreativeAliases(subject);
+    return {
+      ...subject,
+      tags: subject.tags.filter((tag) => !aliases.has(creditAlias(tag))),
+      metaTags: subject.metaTags.filter((tag) => !aliases.has(creditAlias(tag))),
+      persons: [],
+      characters: [],
+    };
+  }
+
+  function seriesFamilyKey(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const title = creditAlias(subject.nameCn || subject.name);
+    const embedded = subject.tags
+      .map(creditAlias)
+      .filter((tag) => tag.length >= 3 && title.includes(tag) && !GENERIC_TAGS.has(tag) && !CONTENT_TAG_PATTERN.test(tag))
+      .sort((left, right) => left.length - right.length)[0];
+    if (embedded) return `tag:${embedded}`;
+    const stripped = title
+      .replace(/(?:第?[0-9一二三四五六七八九十]+(?:期|季|部|章)|season[0-9]+|[0-9]+(?:st|nd|rd|th)?season|part[0-9]+)$/i, "")
+      .replace(/(?:续篇|續篇|続編|续|續|2nd|second)$/i, "");
+    return `title:${stripped || title || subject.id}`;
+  }
+
   function addGroupedFeature(groups, role, id, label) {
     if (!id || !ROLE_WEIGHTS[role]) return;
     if (!groups.has(role)) groups.set(role, new Map());
@@ -372,14 +508,19 @@
     const subject = normalizeSubject(subjectInput);
     const groups = new Map();
     const labels = {};
+    const creativeAliases = subjectCreativeAliases(subject);
 
     const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
       .filter((tag) => !TEMPORAL_TAG.test(tag))
+      .filter((tag) => !GENERIC_TAGS.has(tag))
+      .filter((tag) => !creativeAliases.has(creditAlias(tag)))
       .slice(0, 18);
-    for (const tag of tagValues) addGroupedFeature(groups, "tag", tag, tag);
+    for (const tag of tagValues) addGroupedFeature(groups, "tag", canonicalTagAlias(tag), tag);
 
     for (const tag of subject.metaTags.slice(0, 8)) {
-      if (!TEMPORAL_TAG.test(tag)) addGroupedFeature(groups, "meta", tag, tag);
+      if (!TEMPORAL_TAG.test(tag) && !GENERIC_TAGS.has(tag) && !creativeAliases.has(creditAlias(tag))) {
+        addGroupedFeature(groups, "meta", canonicalTagAlias(tag), tag);
+      }
     }
 
     const year = Number.parseInt(subject.date.slice(0, 4), 10);
@@ -425,6 +566,20 @@
     return { features, labels };
   }
 
+  function buildSimilarityVector(subjectInput, collectionTags = []) {
+    const vector = buildFeatureVector(subjectInput, collectionTags);
+    const features = {};
+    for (const [token, magnitude] of Object.entries(vector.features)) {
+      const role = tokenPrefix(token);
+      const label = vector.labels[token] || token.slice(token.indexOf(":") + 1);
+      if ((role === "tag" || role === "meta") && CONTENT_TAG_PATTERN.test(label)) {
+        const contentToken = `content:${canonicalTagAlias(label)}`;
+        features[contentToken] = Math.max(Number(features[contentToken] || 0), magnitude);
+      }
+    }
+    return { features, labels: vector.labels };
+  }
+
   function calculateRatingBaseline(collections) {
     const rated = collections.filter((item) => item.rate > 0);
     const userMean = mean(rated.map((item) => item.rate)) || 7;
@@ -457,9 +612,13 @@
     const baseline = calculateRatingBaseline(collections);
     const stats = new Map();
     const anchors = [];
+    const ratedFamilies = new Set();
 
     for (const item of rated) {
       const vector = buildFeatureVector(item.subject, item.tags);
+      const similarityVector = buildSimilarityVector(item.subject, item.tags);
+      const familyKey = seriesFamilyKey(item.subject);
+      ratedFamilies.add(familyKey);
       const expected = expectedRating(item.subject, baseline);
       const residual = clamp((item.rate - expected) / 2.5, -1.5, 1.5);
       anchors.push({
@@ -468,16 +627,19 @@
         rate: item.rate,
         residual,
         features: vector.features,
+        similarityFeatures: similarityVector.features,
+        familyKey,
       });
 
       for (const [token, magnitude] of Object.entries(vector.features)) {
         const current = stats.get(token) || {
-          support: 0,
-          weightedResidual: 0,
+          families: new Map(),
           label: vector.labels[token] || token,
         };
-        current.support += 1;
-        current.weightedResidual += residual * magnitude;
+        const family = current.families.get(familyKey) || { count: 0, weightedResidual: 0 };
+        family.count += 1;
+        family.weightedResidual += residual * magnitude;
+        current.families.set(familyKey, family);
         stats.set(token, current);
       }
     }
@@ -485,14 +647,21 @@
     const featureWeights = {};
     const featureSupport = {};
     const featureLabels = {};
-    const ratedCount = Math.max(1, rated.length);
+    const ratedCount = Math.max(1, ratedFamilies.size);
     for (const [token, stat] of stats.entries()) {
       const role = tokenPrefix(token);
-      if (stat.support < (ROLE_MIN_SUPPORT[role] || 2)) continue;
+      const support = stat.families.size;
+      const configuredMinimum = ROLE_MIN_SUPPORT[role] || 2;
+      const minimumSupport = (role === "tag" || role === "meta")
+        ? Math.min(configuredMinimum, ratedCount >= 60 ? 4 : ratedCount >= 20 ? 3 : 2)
+        : configuredMinimum;
+      if (support < minimumSupport) continue;
       const shrinkage = ROLE_SHRINKAGE[role] || 4;
-      const idf = clamp(Math.log((ratedCount + 1) / (stat.support + 1)) + 1, 1, 2.5);
-      featureWeights[token] = (stat.weightedResidual / (shrinkage + stat.support)) * idf;
-      featureSupport[token] = stat.support;
+      const weightedResidual = [...stat.families.values()]
+        .reduce((sum, family) => sum + family.weightedResidual / family.count, 0);
+      const idf = clamp(Math.log((ratedCount + 1) / (support + 1)) + 1, 1, 2.5);
+      featureWeights[token] = (weightedResidual / (shrinkage + support)) * idf;
+      featureSupport[token] = support;
       featureLabels[token] = stat.label;
     }
 
@@ -585,10 +754,6 @@
   function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 24) {
     const subject = normalizeSubject(subjectInput);
     const creditAliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
-    const genericLabels = new Set([
-      "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
-      "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
-    ]);
     const titleAliases = new Set(
       [subject.name, subject.nameCn]
         .map(creditAlias)
@@ -619,7 +784,7 @@
       .filter((entry) =>
         entry.label &&
         !TEMPORAL_TAG.test(entry.label) &&
-        !genericLabels.has(normalizeText(entry.label)) &&
+        !GENERIC_TAGS.has(normalizeText(entry.label)) &&
         !creditAliases.has(creditAlias(entry.label)) &&
         !titleAliases.has(creditAlias(entry.label)) &&
         [...entry.label].length <= 18,
@@ -752,6 +917,7 @@
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
+    const similarityVector = buildSimilarityVector(subject);
     const contributions = Object.entries(vector.features)
       .map(([token, magnitude]) => ({
         token,
@@ -767,21 +933,41 @@
       Math.sqrt(Math.max(1, featureMass));
     const content = Math.tanh(contentRaw * 2.2);
 
+    const seenFamilies = new Set();
     const neighborCandidates = profile.anchors
-      .map((anchor) => ({
-        anchor,
-        similarity: weightedJaccard(vector.features, anchor.features),
-      }))
+      .map((anchor) => {
+        const anchorFeatures = anchor.similarityFeatures || anchor.features;
+        const sharedContentCount = Object.keys(similarityVector.features)
+          .filter((token) => Number(anchorFeatures[token] || 0) > 0)
+          .length;
+        return {
+          anchor,
+          sharedContentCount,
+          similarity: sharedContentCount >= 2
+            ? weightedJaccard(similarityVector.features, anchorFeatures)
+            : 0,
+        };
+      })
       .filter((entry) => entry.similarity >= 0.04)
       .sort((a, b) => b.similarity - a.similarity)
+      .filter((entry) => {
+        const familyKey = entry.anchor.familyKey || `subject:${entry.anchor.subjectId}`;
+        if (seenFamilies.has(familyKey)) return false;
+        seenFamilies.add(familyKey);
+        return true;
+      })
       .slice(0, 6);
     const similarityMass = neighborCandidates.reduce((sum, entry) => sum + entry.similarity, 0);
-    const neighbor = similarityMass
+    const rawNeighbor = similarityMass
       ? neighborCandidates.reduce(
           (sum, entry) => sum + entry.similarity * entry.anchor.residual,
           0,
         ) / similarityMass
       : 0;
+    const neighborReliability = similarityMass
+      ? (similarityMass / (similarityMass + 0.75)) * Math.min(1, neighborCandidates.length / 3)
+      : 0;
+    const neighbor = rawNeighbor * neighborReliability;
 
     const bayes = bayesianScore(subject, profile.baseline.globalMean);
     const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
@@ -824,6 +1010,8 @@
       bayesianScore: bayes,
       contentScore: content,
       neighborScore: neighbor,
+      rawNeighborScore: rawNeighbor,
+      neighborReliability,
       qualityScore: quality,
       positiveReasons,
       negativeReasons,
@@ -833,6 +1021,8 @@
       confidenceScore,
       confidenceBreakdown,
       features: vector.features,
+      similarityFeatures: similarityVector.features,
+      diversityFeatures: similarityVector.features,
     };
   }
 
@@ -851,7 +1041,9 @@
       contentScore: blend("contentScore"),
       neighborScore: blend("neighborScore"),
       qualityScore: blend("qualityScore"),
-      diversityFeatures: baseScore?.features || supplementalScore?.features || {},
+      similarityFeatures: baseScore?.similarityFeatures || supplementalScore?.similarityFeatures || {},
+      diversityFeatures: baseScore?.diversityFeatures || baseScore?.similarityFeatures || baseScore?.features
+        || supplementalScore?.diversityFeatures || supplementalScore?.similarityFeatures || supplementalScore?.features || {},
     };
   }
 
@@ -867,37 +1059,43 @@
 
   function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
     const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
-    const remaining = scoredInputs.slice();
+    const remaining = scoredInputs.map((item) => ({
+      item,
+      maxSimilarity: 0,
+      sameStudioCount: 0,
+      studioTokens: Object.keys(item.diversityFeatures || item.features || {})
+        .filter((token) => token.startsWith("studio:")),
+    }));
     const selected = [];
     while (selected.length < count && remaining.length) {
       let bestIndex = -1;
       let bestValue = -Infinity;
       for (let index = 0; index < remaining.length; index += 1) {
-        const candidate = remaining[index];
-        const candidateDiversityFeatures = candidate.diversityFeatures || candidate.features;
-        const maxSimilarity = selected.length
-          ? Math.max(
-              ...selected.map((item) =>
-                weightedJaccard(candidateDiversityFeatures, item.diversityFeatures || item.features),
-              ),
-            )
-          : 0;
-        const studioTokens = Object.keys(candidateDiversityFeatures).filter((token) => token.startsWith("studio:"));
-        const sameStudioCount = selected.filter((item) =>
-          studioTokens.some((token) => (item.diversityFeatures || item.features)[token]),
-        ).length;
+        const entry = remaining[index];
+        const candidate = entry.item;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
+        const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
           candidate.normalizedScore -
-          penalty * maxSimilarity -
-          Math.max(0, sameStudioCount - 1) * 0.12 +
+          penalty * entry.maxSimilarity -
+          studioPenalty +
           explorationJitter;
         if (adjusted > bestValue) {
           bestValue = adjusted;
           bestIndex = index;
         }
       }
-      selected.push(remaining.splice(bestIndex, 1)[0]);
+      const [chosen] = remaining.splice(bestIndex, 1);
+      selected.push(chosen.item);
+      const chosenFeatures = chosen.item.diversityFeatures || chosen.item.features || {};
+      for (const entry of remaining) {
+        const candidateFeatures = entry.item.diversityFeatures || entry.item.features || {};
+        entry.maxSimilarity = Math.max(
+          entry.maxSimilarity,
+          weightedJaccard(candidateFeatures, chosenFeatures),
+        );
+        if (entry.studioTokens.some((token) => chosenFeatures[token])) entry.sameStudioCount += 1;
+      }
     }
     return selected;
   }
@@ -950,6 +1148,8 @@
     return profile.topFeatures
       .filter((entry) => entry.weight > 0 && entry.token.startsWith("tag:"))
       .filter((entry) => !TEMPORAL_TAG.test(entry.label))
+      .filter((entry) => !GENERIC_TAGS.has(normalizeText(entry.label)))
+      .filter((entry) => CONTENT_TAG_PATTERN.test(entry.label))
       .slice(0, count)
       .map((entry) => entry.label);
   }
@@ -973,7 +1173,11 @@
     normalizeInfoboxRole,
     splitCreditNames,
     extractInfoboxCredits,
+    subjectCreativeAliases,
+    withoutCreativeContributors,
+    seriesFamilyKey,
     buildFeatureVector,
+    buildSimilarityVector,
     calculateRatingBaseline,
     expectedRating,
     trainProfile,
@@ -996,20 +1200,990 @@
 })(typeof globalThis !== "undefined" ? globalThis : window);
 
 
+(function attachBangumiPersonalStatsCore(globalObject) {
+  "use strict";
+
+  const STATUS_LABELS = Object.freeze({
+    1: "想看",
+    2: "看过",
+    3: "在看",
+    4: "搁置",
+    5: "抛弃",
+  });
+
+  const ROLE_GROUPS = Object.freeze({
+    directors: {
+      label: "导演",
+      test: (relation) => /(?:导演|監督|总导演|總監督|chief director|director)/i.test(relation),
+    },
+    series: {
+      label: "系列构成",
+      test: (relation) => /(?:系列构成|系列構成|シリーズ構成|构成\s*·?\s*脚本|構成\s*·?\s*脚本)/i.test(relation),
+    },
+    studios: {
+      label: "动画制作",
+      test: (relation) => /(?:动画制作|動畫製作|アニメーション制作|动画製作|制作公司)/i.test(relation),
+    },
+    originals: {
+      label: "原作 / 原案",
+      test: (relation) => /(?:原作|原案|漫画原作|漫畫原作|小说原作|小說原作)/i.test(relation),
+    },
+    scripts: {
+      label: "脚本",
+      test: (relation) => /(?:脚本|腳本|剧本|劇本)/i.test(relation),
+    },
+    music: {
+      label: "音乐",
+      test: (relation) => /(?:^|[、,/\s])(?:音乐|音楽|配乐|配樂)(?:$|[、,/\s])/i.test(relation),
+    },
+    characterDesign: {
+      label: "角色设计",
+      test: (relation) => /(?:人物设定|人物設定|角色设计|角色設計|character design)/i.test(relation),
+    },
+  });
+
+  function number(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function text(value) {
+    return String(value || "").trim();
+  }
+
+  function subjectOf(row) {
+    const subject = row?.subject || row || {};
+    return {
+      id: number(subject.id || row?.subject_id),
+      name: text(subject.name),
+      nameCn: text(subject.name_cn || subject.nameCn),
+      date: text(subject.date),
+      eps: number(subject.eps || subject.total_episodes),
+      type: number(subject.type || row?.subject_type),
+      image: text(subject.images?.grid || subject.images?.small || subject.image),
+    };
+  }
+
+  function compactCollection(row) {
+    return {
+      subject: subjectOf(row),
+      subjectId: number(row?.subject_id || row?.subjectId || row?.subject?.id || row?.id),
+      status: number(row?.type || row?.status || row?.collectionType),
+      rate: number(row?.rate),
+      epStatus: number(row?.ep_status || row?.epStatus),
+      tags: Array.isArray(row?.tags) ? row.tags.map(text).filter(Boolean) : [],
+      updatedAt: text(row?.updated_at || row?.updatedAt),
+      private: Boolean(row?.private),
+    };
+  }
+
+  function compactPersons(rows) {
+    return (Array.isArray(rows) ? rows : []).map((row) => ({
+      id: number(row?.id),
+      name: text(row?.name),
+      relation: text(row?.relation),
+      type: number(row?.type),
+      eps: text(row?.eps),
+    })).filter((row) => row.id && row.name && row.relation);
+  }
+
+  function compactCharacters(rows) {
+    return (Array.isArray(rows) ? rows : []).map((character) => ({
+      id: number(character?.id),
+      name: text(character?.name),
+      relation: text(character?.relation),
+      actors: (Array.isArray(character?.actors) ? character.actors : []).map((actor) => ({
+        id: number(actor?.id),
+        name: text(actor?.name),
+      })).filter((actor) => actor.id && actor.name),
+    })).filter((character) => character.id && character.actors.length);
+  }
+
+  function average(scores) {
+    return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+  }
+
+  function yearOfTimestamp(value) {
+    const raw = text(value);
+    const leadingYear = raw.match(/^(?:19|20)\d{2}/)?.[0];
+    if (leadingYear) return number(leadingYear);
+    const numeric = Number(raw);
+    const date = Number.isFinite(numeric) && numeric > 0
+      ? new Date(numeric < 1e12 ? numeric * 1000 : numeric)
+      : new Date(raw);
+    return Number.isNaN(date.getTime()) ? 0 : date.getFullYear();
+  }
+
+  function createBucket(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      works: new Set(),
+      eps: 0,
+      ratedScores: [],
+      characterCount: 0,
+      mainCharacterCount: 0,
+    };
+  }
+
+  function addWork(bucket, collection, extras = {}) {
+    const subjectId = collection.subject.id;
+    if (!bucket.works.has(subjectId)) {
+      bucket.works.add(subjectId);
+      bucket.eps += collection.subject.eps;
+      if (collection.rate > 0) bucket.ratedScores.push(collection.rate);
+    }
+    bucket.characterCount += number(extras.characterCount);
+    bucket.mainCharacterCount += number(extras.mainCharacterCount);
+  }
+
+  function finalizeBuckets(map) {
+    return [...map.values()].map((bucket) => ({
+      id: bucket.id,
+      name: bucket.name,
+      type: bucket.type,
+      works: bucket.works.size,
+      eps: bucket.eps,
+      averageRate: average(bucket.ratedScores),
+      ratedWorks: bucket.ratedScores.length,
+      characterCount: bucket.characterCount,
+      mainCharacterCount: bucket.mainCharacterCount,
+    })).sort((a, b) => b.works - a.works || b.averageRate - a.averageRate || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
+  }
+
+  function rankEntries(entries, mode = "works", topShare = 0.1, minimumWorksExclusive = null) {
+    const rows = Array.isArray(entries) ? [...entries] : [];
+    const byWorks = (a, b) => b.works - a.works || b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN");
+    if (mode !== "average" || !rows.length) return { rows: rows.sort(byWorks), cutoffWorks: 0, eligibleCount: rows.length };
+
+    const validShare = Math.min(1, Math.max(0.01, number(topShare) || 0.1));
+    const workRanked = [...rows].sort(byWorks);
+    const cutoffIndex = Math.max(0, Math.ceil(workRanked.length * validShare) - 1);
+    const cutoffWorks = Number.isFinite(minimumWorksExclusive) ? minimumWorksExclusive + 1 : (workRanked[cutoffIndex]?.works || 0);
+    const eligible = rows.filter((row) => row.works >= cutoffWorks && row.ratedWorks > 0);
+    eligible.sort((a, b) => b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.works - a.works || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
+    return { rows: eligible, cutoffWorks, eligibleCount: eligible.length };
+  }
+
+  function aggregate(collectionRows, personEntries = {}, characterEntries = {}) {
+    const collections = collectionRows.map(compactCollection).filter((row) => row.subject.id);
+    const currentYear = new Date().getFullYear();
+    const rated = collections.filter((row) => row.rate > 0);
+    const knownEps = collections.filter((row) => row.subject.eps > 0);
+    const status = {};
+    const ratingDistribution = {};
+    const years = {};
+    const tags = {};
+    for (const row of collections) status[row.status] = (status[row.status] || 0) + 1;
+    for (const row of rated) ratingDistribution[row.rate] = (ratingDistribution[row.rate] || 0) + 1;
+    for (const row of collections) {
+      const year = row.subject.date.match(/^(?:19|20)\d{2}/)?.[0];
+      if (year) years[year] = (years[year] || 0) + 1;
+      for (const tag of row.tags) {
+        const normalized = text(tag);
+        if (normalized) tags[normalized] = (tags[normalized] || 0) + 1;
+      }
+    }
+
+    const groups = {
+      ...Object.fromEntries(Object.keys(ROLE_GROUPS).map((key) => [key, new Map()])),
+      cast: new Map(),
+    };
+    let peopleSubjects = 0;
+    let castSubjects = 0;
+
+    for (const collection of collections) {
+      const subjectId = collection.subject.id;
+      const people = personEntries[subjectId];
+      if (Array.isArray(people)) {
+        peopleSubjects += 1;
+        const seen = new Set();
+        for (const person of people) {
+          const relation = text(person.relation);
+          for (const [key, group] of Object.entries(ROLE_GROUPS)) {
+            if (!group.test(relation)) continue;
+            const uniqueKey = `${key}:${person.id}`;
+            if (seen.has(uniqueKey)) continue;
+            seen.add(uniqueKey);
+            const bucket = groups[key].get(person.id) || createBucket(person);
+            addWork(bucket, collection);
+            groups[key].set(person.id, bucket);
+          }
+        }
+      }
+
+      const characters = characterEntries[subjectId];
+      if (Array.isArray(characters)) {
+        castSubjects += 1;
+        const actorCharacters = new Map();
+        for (const character of characters) {
+          const isMain = /(?:主角|主役|主人公|main)/i.test(text(character.relation));
+          for (const actor of character.actors || []) {
+            const record = actorCharacters.get(actor.id) || { actor, characters: new Set(), main: new Set() };
+            record.characters.add(character.id);
+            if (isMain) record.main.add(character.id);
+            actorCharacters.set(actor.id, record);
+          }
+        }
+        for (const record of actorCharacters.values()) {
+          const bucket = groups.cast.get(record.actor.id) || createBucket(record.actor);
+          addWork(bucket, collection, {
+            characterCount: record.characters.size,
+            mainCharacterCount: record.main.size,
+          });
+          groups.cast.set(record.actor.id, bucket);
+        }
+      }
+    }
+
+    return {
+      overview: {
+        works: collections.length,
+        ratedWorks: rated.length,
+        averageRate: average(rated.map((row) => row.rate)),
+        knownEpisodes: knownEps.reduce((sum, row) => sum + row.subject.eps, 0),
+        knownEpisodeWorks: knownEps.length,
+        averageEpisodes: knownEps.length ? knownEps.reduce((sum, row) => sum + row.subject.eps, 0) / knownEps.length : 0,
+        watchedEpisodes: collections.reduce((sum, row) => sum + row.epStatus, 0),
+        watchedThisYear: collections.filter((row) => yearOfTimestamp(row.updatedAt) === currentYear).length,
+        currentYear,
+        status: Object.entries(status).map(([id, count]) => ({ id: number(id), label: STATUS_LABELS[id] || "未分类", count })).sort((a, b) => a.id - b.id),
+      },
+      coverage: {
+        peopleSubjects,
+        castSubjects,
+        totalSubjects: collections.length,
+      },
+      groups: Object.fromEntries(Object.entries(groups).map(([key, map]) => [key, finalizeBuckets(map)])),
+      distributions: {
+        ratings: Array.from({ length: 10 }, (_, index) => ({ score: index + 1, count: ratingDistribution[index + 1] || 0 })),
+        years: Object.entries(years).map(([year, count]) => ({ year: number(year), count })).sort((a, b) => b.year - a.year),
+        tags: Object.entries(tags).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
+        longest: [...knownEps].sort((a, b) => b.subject.eps - a.subject.eps || a.subject.name.localeCompare(b.subject.name, "zh-CN")).map((row) => ({
+          id: row.subject.id, name: row.subject.name, nameCn: row.subject.nameCn, eps: row.subject.eps,
+        })),
+      },
+    };
+  }
+
+  const Core = Object.freeze({
+    STATUS_LABELS,
+    ROLE_GROUPS,
+    compactCollection,
+    compactPersons,
+    compactCharacters,
+    rankEntries,
+    aggregate,
+  });
+  if (typeof module !== "undefined" && module.exports) module.exports = Core;
+  globalObject.BangumiPersonalStatsCore = Core;
+})(globalThis);
+
+
+(function attachStatsViz(global) {
+  'use strict';
+  // Pure geometry: no libraries, network access, or changes to collection data.
+  function yearSeries(rows) {
+    const counts = new Map(rows.filter(row => /^\d{4}$/.test(String(row.year))).map(row => [Number(row.year), Math.max(0, Number(row.count) || 0)]));
+    if (!counts.size) return [];
+    const first = Math.min(...counts.keys()), last = Math.max(...counts.keys());
+    return Array.from({ length: last - first + 1 }, (_, index) => ({ year: last - index, count: counts.get(last - index) || 0 }));
+  }
+  function axis(maximum) {
+    const raw = Math.max(1, maximum) / 4;
+    const magnitude = 10 ** Math.floor(Math.log10(raw));
+    const step = Math.max(1, Math.ceil([1, 2, 2.5, 5, 10].map(n => n * magnitude).find(n => n >= raw)));
+    return { max: step * 4, ticks: Array.from({ length: 5 }, (_, i) => step * i) };
+  }
+  function fontSize(count, min, max) {
+    return max === min ? 32 : 14 + 58 * Math.pow(Math.max(0, Math.min(1, (count - min) / (max - min))), 0.85);
+  }
+  function featuredTags(rows) {
+    return rows.filter(row => Number(row.count) > 10).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
+  }
+  function seasonDistribution(rows) {
+    const groups = [1,4,7,10].map((month, index) => ({ month, label: month + ' 月番', season: ['冬','春','夏','秋'][index], count: 0, rated: 0, scoreSum: 0 }));
+    let unknown = 0;
+    for (const row of rows) {
+      const match = String(row.subject?.date || '').match(/^\d{4}-(\d{2})(?:-|$)/);
+      const month = Number(match?.[1]);
+      if (!Number.isInteger(month) || month < 1 || month > 12) { unknown++; continue; }
+      const group = groups[Math.floor((month - 1) / 3)];
+      group.count++;
+      const rate = Number(row.rate);
+      if (rate > 0 && rate <= 10) { group.rated++; group.scoreSum += rate; }
+    }
+    const total = groups.reduce((sum, group) => sum + group.count, 0);
+    return { total, unknown, groups: groups.map(group => ({ ...group, share: total ? group.count / total : 0, average: group.rated ? group.scoreSum / group.rated : null })) };
+  }
+  function overlaps(a, b, gap = 5) {
+    return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
+  }
+  function episodeDistribution(rows) {
+    const counts = new Map();
+    for (const row of rows) {
+      const eps = Number(row.eps);
+      if (Number.isInteger(eps) && eps > 0) counts.set(eps, (counts.get(eps) || 0) + 1);
+    }
+    const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+    const ranked = [...counts].map(([eps, count]) => ({ eps, count })).sort((a, b) => b.count - a.count || a.eps - b.eps);
+    // At most five common episode counts plus one combined low-frequency slice.
+    const common = ranked.filter(row => row.count / total >= 0.03).slice(0, 5);
+    const kept = new Set(common.map(row => row.eps));
+    const rest = ranked.filter(row => !kept.has(row.eps));
+    const groups = common.map(row => ({ ...row, label: row.eps + ' 话' }));
+    if (rest.length) groups.push({ label: '其他', count: rest.reduce((sum, row) => sum + row.count, 0), members: rest.sort((a,b) => a.eps-b.eps) });
+    return { total, groups: groups.map(row => ({ ...row, share: row.count / total })) };
+  }
+  function pieSlices(groups) {
+    let position = -Math.PI / 2;
+    return groups.map(group => {
+      const angle = group.share * 2 * Math.PI, end = position + angle;
+      const startPoint = [120 + 110 * Math.cos(position), 120 + 110 * Math.sin(position)];
+      const endPoint = [120 + 110 * Math.cos(end), 120 + 110 * Math.sin(end)];
+      const path = group.share >= 1 - 1e-10 ? 'M120 10 A110 110 0 1 1 120 230 A110 110 0 1 1 120 10 Z'
+        : 'M120 120 L' + startPoint.join(' ') + ' A110 110 0 ' + (angle > Math.PI ? 1 : 0) + ' 1 ' + endPoint.join(' ') + ' Z';
+      const middle = position + angle / 2;
+      position = end;
+      return { ...group, path, labelX: 120 + 73 * Math.cos(middle), labelY: 120 + 73 * Math.sin(middle) };
+    });
+  }
+  function packCloud(items, width) {
+    if (!items.length) return { items: [], height: 0 };
+    if (items.length > 100) return packDenseCloud(items, width);
+    const area = items.reduce((sum, item) => sum + (item.width + 8) * (item.height + 8), 0);
+    const height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.58));
+    const placed = [];
+    const cells = new Map(), cellSize = 64;
+    const keys = (box, padding = 0) => {
+      const result = [];
+      for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
+        for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
+      return result;
+    };
+    const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
+    let bottom = height;
+    for (const item of items) {
+      let box;
+      // Deterministic elliptical spiral: the most frequent term stays central.
+      for (let step = 0; step < 2200; step++) {
+        const angle = step * 0.38, radius = Math.sqrt(step / 2200) * 0.75;
+        const candidate = { ...item, x: (width - item.width) / 2 + Math.cos(angle) * radius * width, y: (height - item.height) / 2 + Math.sin(angle) * radius * height };
+        if (candidate.x < 8 || candidate.x + item.width > width - 8 || candidate.y < 8 || candidate.y + item.height > height - 8) continue;
+        if (!collides(candidate)) { box = candidate; break; }
+      }
+      // A non-overlapping fallback keeps unusually long labels; nothing is dropped.
+      if (!box) { box = { ...item, x: Math.max(8, (width - item.width) / 2), y: bottom + 8 }; bottom += item.height + 8; }
+      placed.push(box);
+      for (const key of keys(box, 5)) {
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(box);
+      }
+    }
+    const top = Math.min(...placed.map(item => item.y));
+    const end = Math.max(...placed.map(item => item.y + item.height));
+    const actualHeight = Math.max(220, end - top + 24);
+    return { items: placed.map(item => ({ ...item, y: item.y - top + (actualHeight - (end - top)) / 2 })), height: actualHeight };
+  }
+  function packDenseCloud(items, width) {
+    // Complete clouds can contain hundreds of rare tags. Free-rectangle packing
+    // avoids the long fallback tail of a bounded spiral without dropping tags.
+    const area = items.reduce((sum, item) => sum + (item.width + 5) * (item.height + 5), 0);
+    let height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.72));
+    const focusY = Math.min(180, height / 2);
+    let free = [{ x: 8, y: 8, width: width - 16, height: height - 16 }];
+    const placed = [];
+    for (const item of items) {
+      const w = Math.min(width - 16, item.width + 5), h = item.height + 5;
+      let best;
+      for (const rect of free) {
+        if (rect.width < w || rect.height < h) continue;
+        const x = Math.max(rect.x, Math.min((width - w) / 2, rect.x + rect.width - w));
+        const y = Math.max(rect.y, Math.min(focusY - h / 2, rect.y + rect.height - h));
+        const distance = ((x + w / 2 - width / 2) / width) ** 2 + ((y + h / 2 - focusY) / Math.min(height, width)) ** 2;
+        if (!best || distance < best.distance) best = { x, y, width: w, height: h, distance };
+      }
+      if (!best) {
+        free.push({ x: 8, y: height, width: width - 16, height: h });
+        best = { x: 8, y: height, width: w, height: h };
+        height += h;
+      }
+      const split = [];
+      for (const r of free) {
+        if (!overlaps(r, best, 0)) { split.push(r); continue; }
+        if (best.x > r.x) split.push({ ...r, width: best.x - r.x });
+        if (best.x + w < r.x + r.width) split.push({ ...r, x: best.x + w, width: r.x + r.width - best.x - w });
+        if (best.y > r.y) split.push({ ...r, height: best.y - r.y });
+        if (best.y + h < r.y + r.height) split.push({ ...r, y: best.y + h, height: r.y + r.height - best.y - h });
+      }
+      free = split.filter((a, i) => !split.some((b, j) => i !== j && a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height && (j < i || a.width !== b.width || a.height !== b.height)));
+      placed.push({ ...item, x: best.x, y: best.y });
+    }
+    return { items: placed, height: Math.max(...placed.map(item => item.y + item.height)) + 12 };
+  }
+  const api = { yearSeries, axis, fontSize, featuredTags, seasonDistribution, overlaps, packCloud, episodeDistribution, pieSlices };
+  global.BangumiStatsViz = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(globalThis);
+
+
+(function bootstrapBangumiPersonalStats() {
+  "use strict";
+
+  const Core = globalThis.BangumiPersonalStatsCore;
+  const Viz = globalThis.BangumiStatsViz;
+  if (!Core || document.getElementById("bgmstats-host")) return;
+
+  const DEFAULT_USER = "wylt";
+  const API_BASE = "https://api.bgm.tv";
+  const COLLECTION_TTL = 12 * 60 * 60 * 1000;
+  const ENTITY_TTL = 90 * 24 * 60 * 60 * 1000;
+  const ENTITY_CONCURRENCY = 1;
+  const ENTITY_DELAY = 850;
+  const ENTITY_TIMEOUT = 8000;
+  const ENTITY_RETRY_LIMIT = 3;
+  const ENTITY_RETRY_BASE_DELAY = 1200;
+  const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
+  const APP_VERSION = "0.9.4";
+  const RANK_PAGE_SIZE = 12;
+  const TABS = Object.freeze({ overview: "年代", seasons: "季度", tags: "标签", staff: "创作", cast: "声优" });
+
+  function text(value) { return String(value ?? ""); }
+  function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+  function sleep(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
+  function formatNumber(value) { return new Intl.NumberFormat("zh-CN").format(number(value)); }
+  function formatRate(value) { return value ? number(value).toFixed(2) : "—"; }
+  function escapeHtml(value) { return text(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+  const ICONS = Object.freeze({
+    chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10m6 10V4m6 16v-7m4 7H2"/></svg>',
+    launchArrow: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.75 5.25 5.25-5.25 5.25"/></svg>',
+    close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 2 5.4M20 4v7h-7"/></svg>',
+    users: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 20v-1.5a4.5 4.5 0 0 0-4.5-4.5h-4A4.5 4.5 0 0 0 3 18.5V20m12-6a4 4 0 1 0 0-8m3 8a4.5 4.5 0 0 1 3 4.24V20M9.5 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>',
+    database: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.66 3.58 3 8 3s8-1.34 8-3V5m-16 7v7c0 1.66 3.58 3 8 3s8-1.34 8-3v-7"/></svg>',
+    search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>',
+    chevron: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>',
+  });
+
+  class Store {
+    constructor() { this.databasePromise = null; }
+    open() {
+      if (this.databasePromise) return this.databasePromise;
+      this.databasePromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open("bgmpr-stats", 1);
+        request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains("kv")) request.result.createObjectStore("kv"); };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return this.databasePromise;
+    }
+    async get(key) {
+      const database = await this.open();
+      return new Promise((resolve, reject) => {
+        const request = database.transaction("kv", "readonly").objectStore("kv").get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+    async set(key, value) {
+      const database = await this.open();
+      return new Promise((resolve, reject) => {
+        const transaction = database.transaction("kv", "readwrite");
+        transaction.objectStore("kv").put(value, key);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    }
+  }
+
+  class Client {
+    constructor(store, username) { this.store = store; this.username = username; }
+    key(part) { return `stats:v1:${this.username}:${part}`; }
+    async fetchJson(path, timeoutMilliseconds = 20000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMilliseconds);
+      try {
+        const response = await fetch(`${API_BASE}${path}`, { signal: controller.signal, credentials: "omit", headers: { Accept: "application/json" } });
+        if (!response.ok) {
+          const error = new Error(`HTTP ${response.status}`);
+          error.status = response.status;
+          const retryAfter = Number(response.headers.get("Retry-After"));
+          error.retryAfterMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 0;
+          throw error;
+        }
+        return response.json();
+      } finally { clearTimeout(timeout); }
+    }
+    async collections(force, onProgress) {
+      const key = this.key("collections:api");
+      const cached = await this.store.get(key);
+      if (!force && cached && Date.now() - cached.storedAt < COLLECTION_TTL) return cached.value;
+      const rows = [];
+      let offset = 0;
+      let total = Infinity;
+      while (offset < total) {
+        const page = await this.fetchJson(`/v0/users/${encodeURIComponent(this.username)}/collections?subject_type=2&limit=100&offset=${offset}`);
+        const data = Array.isArray(page.data) ? page.data : [];
+        total = number(page.total);
+        rows.push(...data);
+        offset += data.length;
+        onProgress?.("正在同步动画收藏…", Math.min(offset, total), total);
+        if (!data.length) break;
+      }
+      const value = rows.map(Core.compactCollection);
+      await this.store.set(key, { storedAt: Date.now(), value });
+      return value;
+    }
+    async entity(kind, subjectId) {
+      const key = this.key(`${kind}:${subjectId}`);
+      const cached = await this.store.get(key);
+      if (cached && Date.now() - cached.storedAt < ENTITY_TTL) return cached.value;
+      const path = kind === "people" ? `/v0/subjects/${subjectId}/persons` : `/v0/subjects/${subjectId}/characters`;
+      let raw;
+      try {
+        raw = await this.fetchJson(path, ENTITY_TIMEOUT);
+      } catch (error) {
+        if (error?.status !== 404) throw error;
+        raw = [];
+      }
+      const value = kind === "people" ? Core.compactPersons(raw) : Core.compactCharacters(raw);
+      await this.store.set(key, { storedAt: Date.now(), value });
+      return value;
+    }
+    async entityMap(kind, ids) {
+      const result = {};
+      await Promise.all(ids.map(async (id) => {
+        const cached = await this.store.get(this.key(`${kind}:${id}`));
+        if (cached && Date.now() - cached.storedAt < ENTITY_TTL && Array.isArray(cached.value)) result[id] = cached.value;
+      }));
+      return result;
+    }
+    async enrichmentState() {
+      const cached = await this.store.get(this.key("enrichment:state"));
+      return cached?.value || { enabled: false, nextAt: 0 };
+    }
+    async setEnrichmentState(value) {
+      await this.store.set(this.key("enrichment:state"), { storedAt: Date.now(), value });
+    }
+  }
+
+  class StatsDrawer {
+    constructor() {
+      this.store = new Store();
+      this.client = new Client(this.store, DEFAULT_USER);
+      this.state = {
+        open: false,
+        busy: false,
+        syncing: false,
+        jobs: { people: false, cast: false },
+        cancel: false,
+        activeTab: "overview",
+        activeStaffGroup: "directors",
+        search: { staff: "", cast: "" },
+        pages: { staff: 1, cast: 1 },
+        sort: { staff: "works", cast: "works" },
+        collections: [],
+        people: {},
+        cast: {},
+        entityProgress: {
+          people: { cached: 0, total: 0, failed: 0, status: "idle" },
+          cast: { cached: 0, total: 0, failed: 0, status: "idle" },
+        },
+        progress: { label: "等待同步", current: 0, total: 0, countText: "" },
+        lastSync: 0,
+      };
+      this.lastFocused = null;
+    }
+    mount() {
+      this.host = globalThis.BangumiProfileUI?.mount("bgmstats-host", 10);
+      if (!this.host) return;
+      this.shadow = this.host.attachShadow({ mode: "open" });
+      this.render();
+      this.shadow.addEventListener("click", (event) => this.onClick(event));
+      this.shadow.addEventListener("keydown", (event) => this.onKeyDown(event));
+      this.shadow.addEventListener("input", (event) => this.onInput(event));
+      const inspect = (event) => {
+        const label = event.target.closest('[data-viz-label]')?.dataset.vizLabel;
+        const caption = this.$('.viz-caption');
+        if (label && caption) caption.textContent = label;
+      };
+      this.shadow.addEventListener('pointerover', inspect);
+      this.shadow.addEventListener('focusin', inspect);
+      this.shadow.addEventListener('click', inspect);
+      this.shadow.addEventListener('pointerleave', () => {
+        const caption = this.$('.viz-caption');
+        if (caption && !this.shadow.activeElement?.matches('[data-viz-label]')) caption.textContent = caption.dataset.default;
+      });
+      this.cloudObserver = new ResizeObserver(() => this.scheduleCloud());
+      this.cloudObserver.observe(this.host);
+      document.fonts?.ready.then(() => { const cloud = this.$('.tag-cloud'); if (cloud) delete cloud.dataset.width; this.scheduleCloud(); });
+      const updateTheme = () => { this.host.dataset.theme = this.detectTheme(); };
+      updateTheme();
+      new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+      matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", updateTheme);
+      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
+    }
+    detectTheme() { return globalThis.BangumiProfileUI.theme(); }
+    $(selector) { return this.shadow.querySelector(selector); }
+    stats() { return Core.aggregate(this.state.collections, this.state.people, this.state.cast); }
+    isBusy() {
+      this.state.busy = this.state.syncing || Object.values(this.state.jobs).some(Boolean);
+      return this.state.busy;
+    }
+    initializeEntityProgress() {
+      const total = this.state.collections.length;
+      this.state.entityProgress.people = { cached: Object.keys(this.state.people).length, total, failed: 0, status: "idle" };
+      this.state.entityProgress.cast = { cached: Object.keys(this.state.cast).length, total, failed: 0, status: "idle" };
+    }
+    refreshEntityProgress(prefix = "关联资料") {
+      const people = this.state.entityProgress.people;
+      const cast = this.state.entityProgress.cast;
+      const current = people.cached + cast.cached;
+      const total = people.total + cast.total;
+      const percent = total ? Math.round(current / total * 100) : 0;
+      const failed = people.failed + cast.failed;
+      const failedText = failed ? ` · ${formatNumber(failed)} 条暂不可用` : "";
+      this.progress(`${prefix}：创作人员 ${formatNumber(people.cached)} / ${formatNumber(people.total)} · 声优 ${formatNumber(cast.cached)} / ${formatNumber(cast.total)}${failedText}`, current, total, total ? `${percent}%` : "");
+    }
+    async open() {
+      this.state.open = true;
+      if (!this.state.collections.length && !this.isBusy()) await this.sync(false);
+    }
+    close() {}
+    progress(label, current = 0, total = 0, countText = null) {
+      this.state.progress = { label, current, total, countText };
+      const labelNode = this.$('[data-role="progress-label"]');
+      if (!labelNode) { this.render(); return; }
+      labelNode.textContent = label;
+      const count = this.$('[data-role="progress-count"]');
+      const bar = this.$('[data-role="progress-bar"]');
+      if (count) count.textContent = countText ?? (total ? `${formatNumber(current)} / ${formatNumber(total)}` : "");
+      if (bar) bar.style.width = `${total ? Math.min(100, Math.round(current / total * 100)) : 0}%`;
+    }
+    async sync(force) {
+      if (this.isBusy()) return;
+      this.state.syncing = true;
+      this.state.cancel = false;
+      this.render();
+      this.progress("正在同步动画收藏…", 0, 1);
+      let shouldResume = false;
+      try {
+        const allCollections = await this.client.collections(force, (label, current, total) => this.progress(label, current, total));
+        this.state.collections = allCollections.filter((row) => row.status === 2);
+        const ids = this.state.collections.map((row) => row.subjectId);
+        [this.state.people, this.state.cast] = await Promise.all([this.client.entityMap("people", ids), this.client.entityMap("cast", ids)]);
+        this.initializeEntityProgress();
+        this.state.lastSync = Date.now();
+        const enrichmentState = await this.client.enrichmentState();
+        shouldResume = Boolean(enrichmentState.enabled && Date.now() >= number(enrichmentState.nextAt));
+        this.refreshEntityProgress("已同步收藏");
+      } catch (error) { this.progress(`同步失败：${error.message || "网络异常"}`, 0, 0); }
+      finally { this.state.syncing = false; this.render(); }
+      if (shouldResume && !this.state.cancel) this.enrichAll(false);
+    }
+    async enrichAll(userInitiated = true) {
+      if (!this.state.collections.length || this.state.syncing) return;
+      if (userInitiated) await this.client.setEnrichmentState({ enabled: true, nextAt: Date.now() });
+      await Promise.all([this.enrich("people"), this.enrich("cast")]);
+      const people = this.state.entityProgress.people;
+      const cast = this.state.entityProgress.cast;
+      const complete = people.cached >= people.total && cast.cached >= cast.total;
+      const paused = this.state.cancel;
+      await this.client.setEnrichmentState({
+        enabled: !complete && !paused,
+        nextAt: complete || paused ? 0 : Date.now() + AUTO_RESUME_BACKOFF,
+        peopleRemaining: Math.max(0, people.total - people.cached),
+        castRemaining: Math.max(0, cast.total - cast.cached),
+      });
+      this.refreshEntityProgress(complete ? "关联资料已完整缓存" : (paused ? "已暂停" : "本轮补全结束"));
+      this.render();
+    }
+    async enrich(kind) {
+      if (this.state.syncing || this.state.jobs[kind] || !this.state.collections.length) return;
+      const target = kind === "people" ? this.state.people : this.state.cast;
+      const ids = this.state.collections.map((row) => row.subjectId);
+      const missing = ids.filter((id) => !Object.hasOwn(target, id));
+      if (!missing.length) {
+        this.state.entityProgress[kind] = { cached: ids.length, total: ids.length, failed: 0, status: "complete" };
+        this.refreshEntityProgress();
+        return;
+      }
+      this.state.jobs[kind] = true;
+      this.state.cancel = false;
+      this.render();
+      let cachedCount = ids.length - missing.length;
+      let failedCount = 0;
+      const queue = [...missing];
+      const attempts = new Map();
+      this.state.entityProgress[kind] = { cached: cachedCount, total: ids.length, failed: 0, status: "running" };
+      this.refreshEntityProgress("补全中");
+      const isRetryable = (error) => !error?.status || error.status === 408 || error.status === 429 || error.status >= 500;
+      const updateProgress = () => {
+        this.state.entityProgress[kind] = { cached: cachedCount, total: ids.length, failed: failedCount, status: "running" };
+        this.refreshEntityProgress("补全中");
+      };
+      const worker = async () => {
+        while (!this.state.cancel && queue.length) {
+          const id = queue.shift();
+          try {
+            target[id] = await this.client.entity(kind, id);
+            cachedCount += 1;
+          } catch (error) {
+            const attempt = (attempts.get(id) || 0) + 1;
+            attempts.set(id, attempt);
+            if (isRetryable(error) && attempt < ENTITY_RETRY_LIMIT) {
+              queue.push(id);
+              await sleep(Math.max(number(error?.retryAfterMs), ENTITY_RETRY_BASE_DELAY * attempt));
+            } else {
+              failedCount += 1;
+            }
+          }
+          updateProgress();
+          await sleep(ENTITY_DELAY);
+        }
+      };
+      try {
+        await Promise.all(Array.from({ length: ENTITY_CONCURRENCY }, worker));
+        this.state.entityProgress[kind] = { cached: cachedCount, total: ids.length, failed: failedCount, status: cachedCount >= ids.length ? "complete" : (this.state.cancel ? "paused" : "pending") };
+      } finally {
+        this.state.jobs[kind] = false;
+        this.refreshEntityProgress(this.state.cancel ? "已暂停" : "补全中");
+        this.render();
+      }
+    }
+    async pauseEnrichment() {
+      this.state.cancel = true;
+      await this.client.setEnrichmentState({ enabled: false, nextAt: 0 });
+      this.refreshEntityProgress("已暂停");
+    }
+    onClick(event) {
+      const action = event.target.closest("[data-action]")?.dataset.action;
+      if (!action) return;
+      if (action === "open") this.open();
+      if (action === "close") this.close();
+      if (action === "sync") this.sync(true);
+      if (action === "all") this.enrichAll();
+      if (action === "cancel") this.pauseEnrichment();
+      if (action === "tab") { this.state.activeTab = event.target.closest("[data-tab]")?.dataset.tab || "overview"; this.render(); }
+      if (action === "staff-group") { this.state.activeStaffGroup = event.target.closest("[data-group]")?.dataset.group || "directors"; this.state.search.staff = ""; this.state.pages.staff = 1; this.render(); }
+      if (action === "sort") {
+        const button = event.target.closest("[data-sort-kind]");
+        const kind = button?.dataset.sortKind;
+        const mode = button?.dataset.sort;
+        if (kind && Object.hasOwn(this.state.sort, kind) && ["works", "average"].includes(mode)) {
+          this.state.sort[kind] = mode;
+          this.state.pages[kind] = 1;
+          this.render();
+        }
+      }
+      if (action === "page") {
+        const button = event.target.closest("[data-page-kind]");
+        const kind = button?.dataset.pageKind;
+        if (kind) this.state.pages[kind] = Math.max(1, number(button.dataset.page));
+        this.render();
+        const content = this.$(".content");
+        if (content) content.scrollTop = 0;
+      }
+    }
+    onInput(event) {
+      const input = event.target.closest("[data-search]");
+      if (!input || event.isComposing) return;
+      const kind = input.dataset.search;
+      if (!Object.hasOwn(this.state.search, kind)) return;
+      this.state.search[kind] = input.value;
+      this.state.pages[kind] = 1;
+      clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.render();
+        requestAnimationFrame(() => {
+          const next = this.$(`[data-search="${kind}"]`);
+          next?.focus();
+          next?.setSelectionRange?.(next.value.length, next.value.length);
+        });
+      }, 120);
+    }
+    onKeyDown(event) {
+      if (!event.target.matches('.year-column') || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const columns = Array.from(this.shadow.querySelectorAll('.year-column'));
+      const index = columns.indexOf(event.target);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? columns.length - 1 : Math.max(0, Math.min(columns.length - 1, index + (event.key === 'ArrowLeft' ? -1 : 1)));
+      event.preventDefault(); columns[next]?.focus();
+    }
+    filterRows(rows, query) {
+      const normalized = text(query).trim().toLocaleLowerCase();
+      if (!normalized) return rows;
+      return rows.filter((row) => text(row.name).toLocaleLowerCase().includes(normalized));
+    }
+    sortControls(kind) {
+      const active = this.state.sort[kind];
+      const eligibility = kind === 'staff' && this.state.activeStaffGroup === 'studios' ? '仅作品数大于 10 部者入榜' : '仅作品数位于前 10% 者入榜';
+      return `<div class="sort-row"><span>排序</span><div class="sort-switch" role="group" aria-label="排名排序方式"><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="works" aria-pressed="${active === "works"}">作品数</button><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="average" aria-pressed="${active === "average"}">均分</button></div>${active === "average" ? `<small>${eligibility}</small>` : ""}</div>`;
+    }
+    pager(kind, page, pages) {
+      if (pages <= 1) return "";
+      return `<div class="pager" aria-label="分页"><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button><span>${page} / ${pages}</span><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>下一页</button></div>`;
+    }
+    listRows(rows, kind, pageKind) {
+      if (!rows.length) return '<p class="empty">暂无匹配的人物。资料尚未齐全时，可在“更新”中补全。</p>';
+      const pages = Math.max(1, Math.ceil(rows.length / RANK_PAGE_SIZE));
+      const page = Math.min(pages, Math.max(1, this.state.pages[pageKind] || 1));
+      this.state.pages[pageKind] = page;
+      const offset = (page - 1) * RANK_PAGE_SIZE;
+      const shown = rows.slice(offset, offset + RANK_PAGE_SIZE);
+      const byScore = this.state.sort[pageKind] === 'average';
+      const max = byScore ? 10 : Math.max(1, ...this.stats().groups[pageKind === 'cast' ? 'cast' : this.state.activeStaffGroup].map(row => row.works));
+      return `<div class="rank-axis" aria-hidden="true"><span>${byScore ? '个人均分' : '看过的作品'} · 0—${max}${byScore ? ' 分' : ' 部'}</span></div><ol class="people-list" start="${offset + 1}">${shown.map((row, index) => {
+        const detail = `${formatNumber(row.works)} 部 · 均分 ${formatRate(row.averageRate)}`;
+        const share = Math.max(0, Math.min(100, (byScore ? row.averageRate : row.works) / max * 100));
+        return `<li><span class="rank">${offset + index + 1}</span><div><div class="person-heading"><a href="/person/${row.id}" target="_blank" rel="noopener">${escapeHtml(row.name)}</a><span class="person-meta">${byScore ? formatRate(row.averageRate) : `${formatNumber(row.works)} 部`}</span></div><span class="sr-only">${detail}</span><span class="person-track" title="${detail}" aria-hidden="true"><i class="person-bar" style="--share:${share}%"></i></span></div></li>`;
+      }).join("")}</ol>${this.pager(pageKind, page, pages)}`;
+    }
+    overview(stats) {
+      if (!stats.overview.works) return `<p class="empty">${!this.state.lastSync ? (/失败|异常/.test(this.state.progress.label) ? '可通过“更新”重试。' : '正在读取动画收藏…') : '还没有可回顾的动画。'}</p>`;
+      if (this.state.activeTab === 'tags') return this.tags(stats.distributions.tags);
+      if (this.state.activeTab === 'seasons') return this.seasons();
+      return this.years(stats.distributions.years);
+    }
+    years(rows) {
+      const series = Viz.yearSeries(rows);
+      if (!series.length) return '<p class="empty">暂无年代资料。</p>';
+      const axis = Viz.axis(Math.max(...series.map(row => row.count)));
+      const first = series[0].year, last = series.at(-1).year;
+      const caption = `首播年份 · ${first}—${last}`;
+      return `<section class="year-chart" aria-label="看过动画的全部首播年份分布">
+        <div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span></div>
+        <div class="year-plot"><div class="year-grid" aria-hidden="true">${axis.ticks.map(tick => `<span style="bottom:${tick / axis.max * 100}%"><b>${tick}</b></span>`).join('')}</div>
+        <div class="year-columns" style="--columns:${series.length}">${series.map(row => {
+          const label = `${row.year} 年 · ${row.count} 部`;
+          const boundary = row.year === first || row.year === last;
+          const five = boundary || (row.year % 5 === 0 && first - row.year >= 3 && row.year - last >= 3);
+          const ten = boundary || (row.year % 10 === 0 && first - row.year >= 5 && row.year - last >= 5);
+          return `<button class="year-column" aria-label="${label}" title="${label}" data-viz-label="${label}" data-label-five="${five}" data-label-ten="${ten}" style="--height:${row.count / axis.max * 100}%"><span class="column-fill"><span class="column-value">${row.count || ''}</span></span><span class="column-year">${row.year}</span></button>`;
+        }).join('')}</div></div></section>`;
+    }
+    tags(rows) {
+      rows = Viz.featuredTags(rows);
+      if (!rows.length) return '<p class="empty">还没有数量大于 10 部的标签。</p>';
+      const min = rows.at(-1).count, max = rows[0].count;
+      const caption = '常见的喜好';
+      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span></div><div class="tag-cloud">${rows.map(row => {
+        const ratio = row.count / max;
+        const tone = ratio >= 0.6 ? 'hero' : ratio >= 0.28 ? 'strong' : ratio >= 0.1 ? 'medium' : 'quiet';
+        const size = Viz.fontSize(row.count, min, max);
+        return `<button class="cloud-word" data-tone="${tone}" data-count="${row.count}" data-viz-label="${escapeHtml(row.name)} · ${row.count} 部" title="${escapeHtml(row.name)} · ${row.count} 部" aria-label="${escapeHtml(row.name)}，${row.count} 部" data-size="${size}" style="font-size:${size}px">${escapeHtml(row.name)}</button>`;
+      }).join('')}</div></section>`;
+    }
+    seasons() {
+      const distribution = Viz.seasonDistribution(this.state.collections);
+      if (!distribution.total) return '<p class="empty">暂无可归入季度的首播日期。</p>';
+      const slices = Viz.pieSlices(distribution.groups);
+      return `<section aria-label="四个新番季度的数量与个人均分"><div class="viz-heading" title="按首播月份归类：1—3月、4—6月、7—9月、10—12月；均分仅计算已评分作品。">四季新番</div><div class="season-distribution"><svg class="season-pie" viewBox="0 0 240 240" aria-hidden="true">${slices.map((slice, index) => slice.count ? `<path d="${slice.path}" style="fill:var(--season-${index})"><title>${slice.label}：${slice.count} 部，个人均分 ${slice.average === null ? '暂无' : slice.average.toFixed(2)}</title></path>${slice.share >= 0.08 ? `<text x="${slice.labelX}" y="${slice.labelY}" text-anchor="middle" dominant-baseline="middle">${Math.round(slice.share * 100)}%</text>` : ''}` : '').join('')}</svg><div class="season-summary"><div class="season-legend-head" aria-hidden="true"><span>季度</span><span>数量</span><span>个人均分</span></div><ul class="season-legend">${slices.map((slice,index) => `<li aria-label="${slice.label}，${slice.count} 部，占 ${(slice.share*100).toFixed(1)}%，个人均分 ${slice.average === null ? '暂无' : slice.average.toFixed(2)}，${slice.rated} 部已评分"><span class="season-name"><i style="background:var(--season-${index})" aria-hidden="true"></i>${slice.label}</span><span class="season-count">${slice.count} 部</span><b class="season-average" title="${slice.rated} 部已评分">${slice.average === null ? '—' : slice.average.toFixed(2)}</b></li>`).join('')}</ul></div></div>${distribution.unknown ? `<p class="distribution-note">${distribution.unknown} 部首播月份不明，未计入季度</p>` : ''}</section>`;
+    }
+    scheduleCloud() {
+      cancelAnimationFrame(this.cloudFrame);
+      this.cloudFrame = requestAnimationFrame(() => this.layoutCloud());
+    }
+    layoutCloud() {
+      const cloud = this.$('.tag-cloud');
+      if (!cloud) return;
+      const width = cloud.clientWidth;
+      if (width < 40 || cloud.dataset.width === String(width)) return;
+      const words = Array.from(cloud.querySelectorAll('.cloud-word'));
+      // Measure real browser text, including CJK/fallback fonts and browser text scaling.
+      words.forEach(word => {
+        word.style.maxWidth = 'none';
+        const scale = Math.min(1, Math.pow(width / 600, 0.35));
+        word.style.fontSize = Math.max(12, Number(word.dataset.size) * scale) + 'px';
+      });
+      const naturalWidths = words.map(word => word.getBoundingClientRect().width);
+      words.forEach((word, index) => {
+        if (naturalWidths[index] > width - 20) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 20) / naturalWidths[index]) + 'px';
+        word.style.maxWidth = (width - 20) + 'px';
+      });
+      const boxes = words.map((word, index) => {
+        const rect = word.getBoundingClientRect();
+        return { index, width: rect.width, height: rect.height };
+      });
+      const layout = Viz.packCloud(boxes, width);
+      for (const box of layout.items) {
+        const word = words[box.index];
+        word.style.left = box.x + 'px'; word.style.top = box.y + 'px';
+      }
+      cloud.style.height = layout.height + 'px';
+      cloud.dataset.width = width;
+      cloud.classList.add('is-ready');
+    }
+    staff(stats) {
+      const groups = [{ id: "directors", label: "导演" }, { id: "series", label: "系列构成" }, { id: "studios", label: "动画制作" }, { id: "originals", label: "原作 / 原案" }, { id: "scripts", label: "脚本" }, { id: "music", label: "音乐" }, { id: "characterDesign", label: "角色设计" }];
+      const active = groups.find(group => group.id === this.state.activeStaffGroup) || groups[0];
+      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, 0.1, active.id === 'studios' ? 10 : null);
+      const rows = this.filterRows(ranking.rows, this.state.search.staff);
+      return `<div class="role-switch" aria-label="创作职位">${groups.map(group => `<button type="button" data-action="staff-group" data-group="${group.id}" aria-pressed="${group.id === active.id}">${group.label}</button>`).join("")}</div>${this.rankingTools("staff", active.label)}${this.listRows(rows, "staff", "staff")}`;
+    }
+    rankingTools(kind, label) {
+      return `<div class="ranking-tools"><label><span class="sr-only">搜索${label}姓名</span><input type="search" data-search="${kind}" value="${escapeHtml(this.state.search[kind])}" placeholder="搜索${label}" autocomplete="off"></label>${this.sortControls(kind)}</div>`;
+    }
+    cast(stats) {
+      const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast, 0.1);
+      return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast")}`;
+    }
+    content(stats) { if (this.state.activeTab === "staff") return this.staff(stats); if (this.state.activeTab === "cast") return this.cast(stats); return this.overview(stats); }
+    render() {
+      const active = this.shadow.activeElement;
+      const action = active?.getAttribute("data-action");
+      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
+      const name = active?.getAttribute('aria-label');
+      const settingsOpen = this.$(".data-settings")?.open;
+      const stats = this.stats();
+      this.isBusy();
+      const progress = this.state.progress;
+      const needsNotice = this.state.busy || /失败|异常/.test(progress.label);
+      const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
+      this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><details class="data-settings" ${settingsOpen ? "open" : ""}><summary>更新</summary><div><button data-action="sync" ${this.state.busy ? "disabled" : ""}>更新收藏</button><button data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>补全人物资料</button>${this.state.busy ? '<button data-action="cancel">暂停补全</button>' : ""}</div></details></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
+      if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
+        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
+        if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
+      });
+      this.scheduleCloud();
+    }
+    styles() { return `<style>${globalThis.BangumiProfileUI.css}
+      .content{padding:18px 0 0;min-height:230px}.content header{display:none}
+      .data-settings{position:relative;font-size:12px;color:var(--muted)}.data-settings summary{padding:4px 9px;border-radius:6px}.data-settings>div{position:absolute;right:0;top:32px;z-index:2;display:grid;min-width:150px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 3px 12px #0000000a}
+      .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
+      .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
+      .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
+      .tag-cloud{--cloud-hero:#cb4168;--cloud-strong:#a94868;--cloud-medium:#725669;--cloud-quiet:#77727a;position:relative;min-height:260px;visibility:hidden}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-hero:#ff8fb3;--cloud-strong:#e9a4bd;--cloud-medium:#ccb0c8;--cloud-quiet:#aaa0b0}.cloud-word{position:absolute;white-space:nowrap;padding:2px 3px;line-height:1.15;min-height:0!important;font-weight:400;border-radius:4px;color:var(--cloud-quiet);overflow:hidden;text-overflow:ellipsis;letter-spacing:-.025em}.cloud-word[data-tone="hero"]{color:var(--cloud-hero);font-weight:800}.cloud-word[data-tone="strong"]{color:var(--cloud-strong);font-weight:700}.cloud-word[data-tone="medium"]{color:var(--cloud-medium);font-weight:500}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{color:var(--cloud-hero);background:var(--pink-soft)}
+      .season-distribution{--season-0:#93bbcc;--season-1:#efa2b4;--season-2:#e8bd83;--season-3:#baa3ca;display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);align-items:center;gap:42px;max-width:680px;margin:0 auto}.season-pie{width:100%;height:auto}.season-pie path{stroke:var(--surface);stroke-width:2}.season-pie text{fill:#38292c;font:13px Arial,sans-serif;pointer-events:none}.season-legend{list-style:none;margin:0;padding:0;display:grid;gap:0}.season-legend-head,.season-legend li{display:grid;grid-template-columns:minmax(75px,1fr) 70px 70px;align-items:center;gap:10px}.season-legend-head{color:var(--muted);font-size:11px;padding:0 0 9px}.season-legend-head span:not(:first-child){text-align:right}.season-legend li{padding:14px 0;border-top:1px solid var(--line)}.season-name{display:flex;align-items:center;gap:9px}.season-name i{width:9px;height:9px;flex-shrink:0;border-radius:50%}.season-count{text-align:right;font-variant-numeric:tabular-nums}.season-average{font-size:18px;text-align:right;font-weight:500;color:var(--link);font-variant-numeric:tabular-nums}.distribution-note{text-align:center;color:var(--muted);font-size:11px;margin-top:16px}
+      .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
+      .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
+      .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
+      .pager{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:20px;font-size:12px;color:var(--muted)}
+      @container(max-width:500px){.people-list{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:20px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:1px}.year-column[data-label-five="true"] .column-year{display:none}.year-column[data-label-ten="true"] .column-year{display:block}.season-distribution{grid-template-columns:1fr;gap:22px}.season-pie{max-width:250px;justify-self:center}.season-summary{width:100%}}
+    </style>`; }
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => new StatsDrawer().mount(), { once: true });
+  else new StatsDrawer().mount();
+})();
+
+
 (function bootstrapBangumiPersonalRecommender() {
   "use strict";
 
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.6";
+  const APP_VERSION = "0.9.4";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "25";
+  const RECOMMENDATION_MODEL_VERSION = "28";
+  const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -1046,6 +2220,8 @@
     hide: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.7 5.1 10 5.5l.9 1.5-.9 1.5c-.15.2-1.3 1.65-3.2 3L17.35 15A12.7 12.7 0 0 0 20 12c-1.18-1.55-4.28-5-8-5-.76 0-1.48.14-2.16.37L8.27 5.8A9.8 9.8 0 0 1 12 5Zm-8.7-.7 16.4 16.4-1.4 1.4-3.08-3.08A9.8 9.8 0 0 1 12 19c-5.5 0-9.7-5.1-10-5.5L1.1 12l.9-1.5a17.1 17.1 0 0 1 3.1-3.43L1.9 3.7l1.4-1.4ZM6.5 8.5A13.4 13.4 0 0 0 4 12c1.18 1.55 4.28 5 8 5 .56 0 1.1-.08 1.61-.22l-1.7-1.7A3.1 3.1 0 0 1 8.9 12l-2.4-3.5Zm4.35 1.03A3 3 0 0 1 14.47 13l-3.62-3.47Z"/></svg>`,
     info: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 10h2v7h-2v-7Zm0-3h2v2h-2V7Zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>`,
     chevron: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>`,
+    pagePrevious: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.6 6-6 6 6 6 1.4-1.4-4.6-4.6 4.6-4.6L14.6 6Z"/></svg>`,
+    pageNext: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.4 18 6-6-6-6L8 7.4l4.6 4.6L8 16.6 9.4 18Z"/></svg>`,
   });
 
   function escapeHtml(value) {
@@ -1645,7 +2821,9 @@
         profile: null,
         candidates: [],
         scoredPool: [],
+        pageOrder: [],
         current: [],
+        currentPage: 1,
         collections: [],
         eligibleCandidateCount: 0,
         lastSync: null,
@@ -1654,24 +2832,21 @@
       this.lastFocused = null;
       this.previousPageOverflow = "";
       this.excludedBatch = new Set();
+      this.pageByType = new Map();
     }
 
     mount() {
-      this.host = document.createElement("div");
-      this.host.id = "bgmpr-host";
+      this.host = globalThis.BangumiProfileUI?.mount("bgmpr-host", 20);
+      if (!this.host) return;
       this.host.dataset.theme = this.detectTheme();
-      document.documentElement.append(this.host);
       this.shadow = this.host.attachShadow({ mode: "open" });
       this.shadow.innerHTML = `${this.styles()}${this.shell()}`;
       this.bindEvents();
       this.watchTheme();
+      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
     }
 
-    detectTheme() {
-      const className = `${document.documentElement.className} ${document.body?.className || ""}`;
-      if (/dark|night/i.test(className)) return "dark";
-      return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
+    detectTheme() { return globalThis.BangumiProfileUI.theme(); }
 
     watchTheme() {
       const update = () => {
@@ -1683,86 +2858,47 @@
 
     shell() {
       const selectedType = recommendationType(this.config.subjectType);
-      const typeOptions = RECOMMENDATION_TYPES.map(
-        (type) => `<option value="${type.id}" ${type.id === selectedType.id ? "selected" : ""}>${type.label}</option>`,
-      ).join("");
-      return `
-        <button class="launcher" type="button" aria-label="打开 Bangumi 个性推荐" aria-haspopup="dialog">
-          <span class="launcher-mark">${ICONS.discover}</span>
-          <span class="launcher-copy"><small>FOR YOU</small><strong>个性推荐</strong></span>
-          <span class="launcher-arrow">${ICONS.launchArrow}</span>
-        </button>
-        <div class="scrim" hidden></div>
-        <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="bgmpr-title" aria-hidden="true">
-          <header class="drawer-header">
-            <div>
-              <p class="eyebrow">FOR ${escapeHtml(this.config.username)}</p>
-              <h2 id="bgmpr-title">Bangumi 个性推荐</h2>
-              <p class="subline" data-role="sync-label">尚未同步</p>
-            </div>
-            <button class="icon-button close" type="button" aria-label="关闭推荐面板">${ICONS.close}</button>
-          </header>
-          <section class="controls" aria-label="推荐设置">
-            <label class="type-picker">
-              <span class="type-picker-icon">${ICONS.layers}</span>
-              <span class="type-picker-copy">
-                <strong>推荐类型</strong>
-                <small>选择要分析的收藏分类</small>
-              </span>
-              <span class="type-select-shell">
-                <select data-role="type-select" aria-label="推荐类型">${typeOptions}</select>
-                <span class="type-select-arrow">${ICONS.chevron}</span>
-              </span>
-            </label>
-          </section>
-          <section class="progress-region" aria-live="polite">
-            <div class="progress-copy"><span data-role="progress-text">准备就绪</span><span data-role="progress-count"></span></div>
-            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
-          </section>
-          <main class="content" tabindex="-1">
-            <div class="welcome" data-role="welcome">
-              <div class="welcome-mark">${ICONS.spark}</div>
-              <h3>从你的收藏中发现下一部</h3>
-              <p>组件会在本地分析评分、标签、制作人员和声优信息，排除所有已标记条目，再选出 5 个结果。</p>
-              <button class="primary start" type="button">生成推荐</button>
-              <p class="privacy">数据仅保存在当前浏览器，不会上传到第三方服务。</p>
-            </div>
-            <div class="results" data-role="results" hidden></div>
-            <div class="error" data-role="error" hidden>
-              <span class="error-icon">${ICONS.info}</span>
-              <h3>暂时无法生成推荐</h3>
-              <p data-role="error-message"></p>
-              <button class="secondary retry" type="button">重试</button>
-            </div>
-          </main>
-          <footer class="drawer-footer">
-            <button class="secondary refresh-data" type="button">${ICONS.refresh}<span>刷新画像</span></button>
-            <button class="secondary next-batch" type="button">换一批</button>
-            <span class="version">v${APP_VERSION}</span>
-          </footer>
-          <div class="toast" role="status" aria-live="polite" hidden><span></span><button type="button">撤销</button></div>
-        </aside>`;
+      const options = RECOMMENDATION_TYPES.map(type => `<option value="${type.id}" ${type.id === selectedType.id ? "selected" : ""}>${type.label}</option>`).join("");
+      return `<section class="module" aria-labelledby="bgmpr-title">
+        <header class="module-head"><h2 id="bgmpr-title">个性推荐</h2><select data-role="type-select" aria-label="推荐类型">${options}</select><button class="refresh-data" type="button" title="根据最新收藏重新推荐">更新</button></header>
+        <div class="progress-region" aria-live="polite" hidden><div class="progress-copy"><span data-role="progress-text">正在寻找你可能喜欢的作品…</span><span data-role="progress-count"></span></div><div class="progress-track" role="progressbar" aria-label="推荐加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div></div>
+        <div class="content">
+          <div class="welcome" data-role="welcome"><p>从喜欢的作品，遇见下一部。</p><button class="start" type="button">看看推荐</button></div>
+          <div class="results" data-role="results" hidden></div>
+          <div class="error" data-role="error" hidden><p data-role="error-message"></p><button class="retry" type="button">重试</button></div>
+        </div>
+        <div class="toast" role="status" hidden><span></span><button type="button">撤销</button></div>
+      </section>`;
     }
 
     bindEvents() {
-      this.$(".launcher").addEventListener("click", () => this.open());
-      this.$(".close").addEventListener("click", () => this.close());
-      this.$(".scrim").addEventListener("click", () => this.close());
       this.$(".start").addEventListener("click", () => this.ensureRecommendations({ force: true }));
       this.$(".retry").addEventListener("click", () => this.ensureRecommendations({ force: true }));
       this.$(".refresh-data").addEventListener("click", () => this.ensureRecommendations({ force: true }));
-      this.$(".next-batch").addEventListener("click", () => this.nextBatch());
       this.$('[data-role="type-select"]').addEventListener("change", (event) => {
         this.config.subjectType = event.target.value;
         this.persistConfig();
         this.resetViewForType();
-        this.ensureRecommendations({ force: false });
+        this.loadCachedResult().then(loaded => { if (!loaded) this.ensureRecommendations({ force: false }); });
       });
       this.shadow.addEventListener("click", (event) => {
         const dismiss = event.composedPath().find(
           (element) => element instanceof Element && element.matches?.("[data-dismiss-id]"),
         );
-        if (dismiss) this.dismiss(Number(dismiss.dataset.dismissId));
+        if (dismiss) {
+          this.dismiss(Number(dismiss.dataset.dismissId));
+          return;
+        }
+        const pageButton = event.composedPath().find(
+          (element) => element instanceof Element && element.matches?.("[data-page-direction]"),
+        );
+        if (pageButton) this.changePage(this.state.currentPage + Number(pageButton.dataset.pageDirection), "button");
+      });
+      this.shadow.addEventListener("change", (event) => {
+        const pageSelect = event.composedPath().find(
+          (element) => element instanceof Element && element.matches?.("[data-page-select]"),
+        );
+        if (pageSelect) this.changePage(Number(pageSelect.value), "select");
       });
       this.shadow.addEventListener(
         "error",
@@ -1786,57 +2922,24 @@
       saveJson(CONFIG_KEY, this.config);
     }
 
-    open() {
+    async open() {
+      if (this.state.open) return;
       this.state.open = true;
-      this.lastFocused = this.shadow.activeElement || document.activeElement;
-      this.$(".scrim").hidden = false;
-      this.$(".drawer").setAttribute("aria-hidden", "false");
-      requestAnimationFrame(() => this.$(".drawer").classList.add("open"));
-      this.previousPageOverflow = document.documentElement.style.overflow;
-      document.documentElement.style.overflow = "hidden";
-      this.$(".close").focus();
-      this.loadCachedResult().then((loaded) => {
-        if (!loaded && !this.state.busy) this.$('[data-role="welcome"]').hidden = false;
-      });
+      const loaded = await this.loadCachedResult();
+      if (!loaded && !this.state.busy) this.ensureRecommendations({ force: false });
     }
 
-    close() {
-      this.state.open = false;
-      this.$(".drawer").classList.remove("open");
-      this.$(".drawer").setAttribute("aria-hidden", "true");
-      this.$(".scrim").hidden = true;
-      document.documentElement.style.overflow = this.previousPageOverflow;
-      this.lastFocused?.focus?.();
-    }
-
-    onKeyDown(event) {
-      if (!this.state.open) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        this.close();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = [...this.shadow.querySelectorAll('button:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]')]
-        .filter((element) => element.offsetParent !== null);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && this.shadow.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && this.shadow.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
+    close() {}
+    onKeyDown() {}
 
     resetViewForType() {
       this.state.baseProfile = null;
       this.state.profile = null;
       this.state.candidates = [];
       this.state.scoredPool = [];
+      this.state.pageOrder = [];
       this.state.current = [];
+      this.state.currentPage = this.pageByType.get(recommendationType(this.config.subjectType).id) || 1;
       this.excludedBatch.clear();
       this.$('[data-role="results"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
@@ -1849,13 +2952,18 @@
     }
 
     async loadCachedResult() {
-      const cached = await this.store.get(this.cacheKey()).catch(() => null);
-      if (!cached?.value?.recommendations?.length) return false;
+      const key = this.cacheKey();
+      const cached = await this.store.get(key).catch(() => null);
+      if (key !== this.cacheKey()) return true;
+      if (!cached?.value?.pageOrder?.length && !cached?.value?.recommendations?.length) return false;
       const value = cached.value;
       this.state.lastSync = value.generatedAt;
-      this.state.current = value.recommendations;
+      this.state.pageOrder = value.pageOrder || value.recommendations;
+      this.state.scoredPool = this.state.pageOrder;
+      const typeId = recommendationType(this.config.subjectType).id;
+      this.state.currentPage = this.pageByType.get(typeId) || 1;
       this.state.currentSummary = value.summary || {};
-      this.renderRecommendations(value.recommendations, value.summary);
+      this.renderFromPool();
       this.updateSyncLabel();
       if (Date.now() - cached.storedAt > COLLECTION_TTL) {
         this.setProgress("本地结果已显示；打开“刷新画像”可同步最新收藏。", 0, 0);
@@ -1878,14 +2986,25 @@
 
     setBusy(busy) {
       this.state.busy = busy;
-      for (const selector of [".start", ".retry", ".refresh-data", ".next-batch", '[data-role="type-select"]']) {
-        this.$(selector).disabled = busy;
+      for (const selector of [".start", ".retry", ".refresh-data", '[data-role="type-select"]']) {
+        const control = this.$(selector);
+        if (control) control.disabled = busy;
       }
+      this.shadow.querySelectorAll("[data-page-direction], [data-page-select]").forEach((control) => {
+        control.disabled = busy || control.dataset.pageBoundary === "true";
+      });
       this.$(".refresh-data").classList.toggle("spinning", busy);
+      this.$(".progress-region").hidden = !busy;
+      this.$(".content").setAttribute("aria-busy", String(busy));
     }
 
     async ensureRecommendations({ force = false } = {}) {
       if (this.state.busy) return;
+      if (force) {
+        const typeId = recommendationType(this.config.subjectType).id;
+        this.pageByType.set(typeId, 1);
+        this.state.currentPage = 1;
+      }
       this.setBusy(true);
       this.$('[data-role="welcome"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
@@ -1993,7 +3112,7 @@
           const scoredSubject = this.state.baseProfile !== this.state.profile
             ? Core.blendSupplementalScore(
                 Core.scoreSubject(
-                  { ...subject, persons: [], characters: [] },
+                  Core.withoutCreativeContributors(subject),
                   this.state.baseProfile,
                   RECOMMENDATION_MODE,
                 ),
@@ -2016,44 +3135,75 @@
       }
       const poolLimit = !enforceJapanese && this.state.requireAdultEvidence ? 360 : 180;
       this.state.scoredPool = scored.slice(0, poolLimit);
+      this.state.pageOrder = this.buildPageOrder(this.state.scoredPool);
       this.excludedBatch.clear();
       if (render) this.renderFromPool();
     }
 
-    renderFromPool() {
-      const available = this.state.scoredPool.filter((item) => !this.excludedBatch.has(item.subject.id));
-      const source = available.length >= 5 ? available : this.state.scoredPool;
-      const selected = Core.diversify(
-        source,
-        5,
+    buildPageOrder(scoredPool) {
+      return Core.diversify(
+        scoredPool,
+        scoredPool.length,
         RECOMMENDATION_MODE,
-        `${Core.recommendationSalt()}:${this.excludedBatch.size}`,
+        `${Core.recommendationSalt()}:full-pool`,
       );
+    }
+
+    renderFromPool() {
+      if (!this.state.pageOrder.length && this.state.scoredPool.length) {
+        this.state.pageOrder = this.buildPageOrder(this.state.scoredPool);
+      }
+      const available = this.state.pageOrder.filter((item) => !this.excludedBatch.has(Number(item.subject.id)));
+      const pageCount = Math.max(1, Math.ceil(available.length / RECOMMENDATION_PAGE_SIZE));
+      const typeId = recommendationType(this.config.subjectType).id;
+      const requestedPage = this.pageByType.get(typeId) || this.state.currentPage || 1;
+      const currentPage = Math.min(pageCount, Math.max(1, requestedPage));
+      const startIndex = (currentPage - 1) * RECOMMENDATION_PAGE_SIZE;
+      const selected = available.slice(startIndex, startIndex + RECOMMENDATION_PAGE_SIZE);
+      this.state.currentPage = currentPage;
+      this.pageByType.set(typeId, currentPage);
       this.state.current = selected;
       this.renderRecommendations(selected, {
-        collectionCount: this.state.profile.collectionCount,
-        ratedCount: this.state.profile.ratedCount,
-        candidateCount: this.state.eligibleCandidateCount,
+        collectionCount: this.state.profile?.collectionCount || this.state.currentSummary.collectionCount,
+        ratedCount: this.state.profile?.ratedCount || this.state.currentSummary.ratedCount,
+        candidateCount: this.state.eligibleCandidateCount || this.state.currentSummary.candidateCount,
+      }, {
+        page: currentPage,
+        pageCount,
+        total: available.length,
+        startIndex,
       });
     }
 
-    nextBatch() {
-      if (!this.state.scoredPool.length) {
+    changePage(page, focusTarget = "button") {
+      if (!this.state.pageOrder.length) {
         this.ensureRecommendations({ force: false });
         return;
       }
-      for (const item of this.state.current) this.excludedBatch.add(item.subject.id);
-      if (this.state.scoredPool.length - this.excludedBatch.size < 5) this.excludedBatch.clear();
+      const availableCount = this.state.pageOrder.length - this.excludedBatch.size;
+      const pageCount = Math.max(1, Math.ceil(availableCount / RECOMMENDATION_PAGE_SIZE));
+      const nextPage = Math.min(pageCount, Math.max(1, Math.trunc(Number(page) || 1)));
+      if (nextPage === this.state.currentPage) return;
+      const direction = nextPage > this.state.currentPage ? 1 : -1;
+      this.pageByType.set(recommendationType(this.config.subjectType).id, nextPage);
       this.renderFromPool();
+      requestAnimationFrame(() => {
+        const selector = focusTarget === "select"
+          ? "[data-page-select]"
+          : `[data-page-direction="${direction}"]`;
+        this.$(selector)?.focus();
+      });
     }
 
     dismiss(subjectId) {
       const previous = new Set(this.excludedBatch);
+      const previousPage = this.state.currentPage;
       this.excludedBatch.add(Number(subjectId));
       this.renderFromPool();
-      this.showToast("已从当前这批结果中暂时隐藏。", () => {
+      this.showToast("已从推荐结果中暂时隐藏。", () => {
         this.excludedBatch.clear();
         for (const id of previous) this.excludedBatch.add(id);
+        this.pageByType.set(recommendationType(this.config.subjectType).id, previousPage);
         this.renderFromPool();
       });
     }
@@ -2076,110 +3226,57 @@
     recommendationCard(item, index) {
       const subject = item.subject;
       const title = subject.nameCn || subject.name || `条目 ${subject.id}`;
-      const original = subject.nameCn && subject.name && subject.nameCn !== subject.name ? subject.name : "";
       const image = safeImageUrl(subject.image);
-      const globalScore = subject.rating.score ? subject.rating.score.toFixed(1) : "—";
-      const votes = subject.rating.total ? subject.rating.total.toLocaleString("zh-CN") : "样本较少";
-      const confidencePercent = Math.round(Number(item.confidenceScore || 0) * 100);
-      const confidenceBreakdown = item.confidenceBreakdown || {};
-      const featurePercent = Math.round(Number(confidenceBreakdown.featureSupport || 0) * 100);
-      const neighborPercent = Math.round(Number(confidenceBreakdown.neighborEvidence || 0) * 100);
-      const ratingPercent = Math.round(Number(confidenceBreakdown.ratingEvidence || 0) * 100);
-      const confidenceExplanation = `证据构成：偏好特征 ${featurePercent}/50，相似收藏 ${neighborPercent}/30，评分样本 ${ratingPercent}/20`;
+      const tags = Core.selectContentTags(subject, item.positiveReasons).slice(0, 3);
       const evidence = Core.selectRecommendationEvidence(item);
-      const contentTags = Core.selectContentTags(subject, item.positiveReasons);
-      const contentTagMarkup = contentTags.length
-        ? `<div class="content-tag-row" aria-label="内容标签">
-            <span class="content-tag-label">内容</span>
-            <div class="content-tags">${contentTags.map((tag) => `<span>${escapeHtml(tag.label)}</span>`).join("")}</div>
-          </div>`
-        : "";
-      const quotedLabels = (reasons) =>
-        `<strong>「${reasons.map((reason) => escapeHtml(reason.label)).join("、")}」</strong>`;
-      const evidenceRows = evidence.map((entry) => {
-        if (entry.kind === "similarity") {
-          const works = entry.works.map((work) =>
-            `<strong>${Number(work.rate) ? `${Number(work.rate)} 分的` : ""}《${escapeHtml(work.name)}》</strong>`,
-          ).join("、");
-          return `<li><span class="evidence-kind">相似</span><p>与你收藏中 ${works} 特征接近</p></li>`;
-        }
-        if (entry.kind === "creative") {
-          const roleName = {
-            director: "导演",
-            studio: "制作公司",
-            creator: "作者／原作",
-            series: "系列构成",
-            script: "脚本",
-            music: "音乐创作",
-            cv: "声优",
-          }[entry.role] || entry.roleLabel || "创作人员";
-          return `<li><span class="evidence-kind">${escapeHtml(entry.roleLabel || roleName)}</span><p>${escapeHtml(roleName)}${quotedLabels(entry.reasons)}在你的历史评分中表现较好</p></li>`;
-        }
-        return "<li><span class=\"evidence-kind\">口碑</span><p>全站评分与探索价值使它进入本轮候选</p></li>";
-      });
-      const shownSimilarCount = evidence
-        .filter((entry) => entry.kind === "similarity")
-        .reduce((sum, entry) => sum + entry.works.length, 0);
-      return `
-        <article class="recommendation-card" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
-          <div class="rank">${String(index + 1).padStart(2, "0")}</div>
-          <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
-            ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
-          </a>
-          <div class="card-body">
-            <div class="title-row">
-              <div>
-                <h3><a href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
-                ${original ? `<p class="original">${escapeHtml(original)}</p>` : ""}
-              </div>
-              <div class="fit-score"><strong>${item.predicted.toFixed(1)}</strong><span>适合度</span></div>
-            </div>
-            <div class="metrics">
-              <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span>
-            </div>
-            ${contentTagMarkup}
-            <section class="evidence-panel" aria-label="推荐依据，置信度 ${item.confidence}，${confidencePercent}%">
-              <div class="evidence-header"><strong>推荐依据</strong><span class="confidence" title="${escapeHtml(confidenceExplanation)}" aria-label="置信度 ${item.confidence}，${confidencePercent}%。${escapeHtml(confidenceExplanation)}">置信度 ${item.confidence} · ${confidencePercent}%</span></div>
-              <ul class="evidence-list">${evidenceRows.join("")}</ul>
-            </section>
-            <div class="card-actions">
-              <a class="primary compact" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">查看条目 ${ICONS.arrow}</a>
-              <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">${ICONS.hide}<span>暂时隐藏</span></button>
-            </div>
-          </div>
-        </article>`;
+      const similar = evidence.find(entry => entry.kind === "similarity")?.works || [];
+      const creative = evidence.find(entry => entry.kind === "creative");
+      const brief = similar.length ? `与你喜欢的《${similar[0].name}》相近`
+        : creative?.reasons?.length ? `你偏爱的${creative.roleLabel || "创作者"}：${creative.reasons.map(r => r.label).join("、")}`
+        : tags.length ? `也许合你口味的${tags.slice(0, 2).map(t => t.label).join("、")}作品` : "从你的收藏偏好中发现";
+      const rows = evidence.map(entry => {
+        if (entry.kind === "similarity") return `<p>与你看过的${entry.works.map(work => `《${escapeHtml(work.name)}》${Number(work.rate) ? `（${Number(work.rate)} 分）` : ""}`).join("、")}特征接近。</p>`;
+        if (entry.kind === "creative") return `<p>${escapeHtml(entry.roleLabel || "创作人员")}：${entry.reasons.map(reason => escapeHtml(reason.label)).join("、")}，在你的历史评分中表现较好。</p>`;
+        return '<p>结合你的收藏偏好与作品口碑推荐。</p>';
+      }).join("");
+      const url = `${location.origin}/subject/${subject.id}`;
+      return `<article class="recommendation-card">
+        <a class="cover" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
+          ${image ? `<img data-cover src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy" width="140" height="196"><span class="cover-placeholder" hidden>暂无封面</span>` : '<span class="cover-placeholder">暂无封面</span>'}
+        </a>
+        <h3><a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
+        <div class="content-tags">${tags.map(tag => `<span>${escapeHtml(tag.label)}</span>`).join("")}</div>
+        <p class="brief">${escapeHtml(brief)}</p>
+        <details class="evidence-panel"><summary>推荐理由</summary><div class="evidence-body">${rows}<p class="evidence-score">预计评分 ${Number(item.predicted).toFixed(1)} · 站点评分 ${Number(subject.rating?.score || 0).toFixed(1)}</p><button type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">暂时隐藏</button></div></details>
+      </article>`;
     }
 
-    renderRecommendations(recommendations, summary = {}) {
+    paginationMarkup({ page = 1, pageCount = 1, total = 0 } = {}) {
+      const options = Array.from({ length: pageCount }, (_, index) => {
+        const value = index + 1;
+        return `<option value="${value}" ${value === page ? "selected" : ""}>${value}</option>`;
+      }).join("");
+      return `
+        <nav class="pagination" aria-label="推荐结果分页">
+          <button class="page-button page-previous" type="button" data-page-direction="-1" data-page-boundary="${page <= 1}" ${page <= 1 ? "disabled" : ""} aria-label="上一页，第 ${Math.max(1, page - 1)} 页">
+            ${ICONS.pagePrevious}<span>上一页</span>
+          </button>
+          <div class="page-status" aria-live="polite">
+            <label><span>第</span><span class="page-select-shell"><select data-page-select aria-label="跳转到推荐页">${options}</select><span class="page-select-arrow">${ICONS.chevron}</span></span><span>/ ${pageCount} 页</span></label>
+          </div>
+          <button class="page-button page-next" type="button" data-page-direction="1" data-page-boundary="${page >= pageCount}" ${page >= pageCount ? "disabled" : ""} aria-label="下一页，第 ${Math.min(pageCount, page + 1)} 页">
+            <span>下一页</span>${ICONS.pageNext}
+          </button>
+        </nav>`;
+    }
+
+    renderRecommendations(recommendations, summary = {}, pagination = {}) {
       this.state.currentSummary = summary;
       const results = this.$('[data-role="results"]');
       this.$('[data-role="welcome"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
       results.hidden = false;
-      results.innerHTML = `
-        <div class="summary">
-          <div><strong>${Number(summary.collectionCount || 0).toLocaleString("zh-CN")}</strong><span>收藏样本</span></div>
-          <div><strong>${Number(summary.ratedCount || 0).toLocaleString("zh-CN")}</strong><span>评分样本</span></div>
-          <div><strong>${Number(summary.candidateCount || 0).toLocaleString("zh-CN")}</strong><span>未标记候选</span></div>
-        </div>
-        <div class="recommendation-list">${recommendations.map((item, index) => this.recommendationCard(item, index)).join("")}</div>
-        <details class="method-note">
-          <summary>
-            <span class="method-icon">${ICONS.info}</span>
-            <span class="method-copy"><strong>为什么推荐这些？</strong><small>评分校准 · 兴趣画像 · 相似作品 · 多样化</small></span>
-            <span class="method-chevron">${ICONS.chevron}</span>
-          </summary>
-          <div class="method-body">
-            <ol class="method-steps">
-              <li><span class="step-number">1</span><div><strong>校准评分习惯</strong><p>结合你的平均分和条目全站评分，判断哪些作品真正超出你的预期。</p></div></li>
-              <li><span class="step-number">2</span><div><strong>提取个人偏好</strong><p>学习标签、年代、导演、制作公司和声优等特征带来的正负影响。</p></div></li>
-              <li><span class="step-number">3</span><div><strong>排序并保持多样</strong><p>排除所有已标记条目，融合相似度与质量分，再避免五个结果过于重复。</p></div></li>
-            </ol>
-            <p class="method-confidence"><strong>适合度不等于置信度。</strong>适合度预测你可能会打多高的分；置信度表示证据是否充分，由偏好特征支持（50%）、相似收藏（30%）和全站评分样本（20%）组成。</p>
-            <p class="method-privacy">全部计算在当前浏览器完成，不接入 AI，也不会修改你的收藏。</p>
-          </div>
-        </details>`;
-      this.$(".content").scrollTop = 0;
+      results.innerHTML = `<div class="recommendation-list">${recommendations.map((item, index) => this.recommendationCard(item, Number(pagination.startIndex || 0) + index)).join("")}</div>${this.paginationMarkup(pagination)}`;
     }
 
     showError(error) {
@@ -2193,12 +3290,7 @@
     }
 
     updateSyncLabel() {
-      const label = this.$('[data-role="sync-label"]');
-      if (!this.state.lastSync) {
-        label.textContent = "尚未同步";
-        return;
-      }
-      label.textContent = `更新于 ${new Date(this.state.lastSync).toLocaleString("zh-CN", { hour12: false })}`;
+      if (this.state.lastSync) this.$(".refresh-data").title = `根据最新收藏重新推荐；上次更新：${new Date(this.state.lastSync).toLocaleString("zh-CN", { hour12: false })}`;
     }
 
     async saveCurrentResult() {
@@ -2207,6 +3299,7 @@
         value: {
           generatedAt: this.state.lastSync,
           recommendations: this.state.current,
+          pageOrder: this.state.pageOrder,
           summary: {
             collectionCount: this.state.profile.collectionCount,
             ratedCount: this.state.profile.ratedCount,
@@ -2217,240 +3310,18 @@
     }
 
     styles() {
-      return `<style>
-        :host {
-          --primary: #a6405c;
-          --primary-strong: #852f49;
-          --on-primary: #fff;
-          --accent: #0e6e82;
-          --surface: #fff;
-          --surface-alt: #f7f4f5;
-          --surface-raised: #fff;
-          --text: #211b1d;
-          --text-muted: #655b5f;
-          --border: #ded5d8;
-          --scrim: rgba(21, 15, 17, .52);
-          --danger: #9e2f39;
-          --focus: #0e6e82;
-          --shadow: 0 20px 60px rgba(39, 20, 26, .22);
-          --launcher-shadow: 0 2px 6px rgba(39, 20, 26, .08), 0 12px 30px rgba(99, 36, 55, .14);
-          --z-host: 10000;
-          color: var(--text);
-          font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-          font-size: 16px;
-          line-height: 1.5;
-          position: relative;
-          z-index: var(--z-host);
-        }
-        :host([data-theme="dark"]) {
-          --primary: #dd8098;
-          --primary-strong: #ef9caf;
-          --on-primary: #281117;
-          --accent: #77c9d8;
-          --surface: #191516;
-          --surface-alt: #241f21;
-          --surface-raised: #2b2527;
-          --text: #f7f0f2;
-          --text-muted: #c9bcc0;
-          --border: #4b4044;
-          --scrim: rgba(0, 0, 0, .66);
-          --danger: #ff9ba4;
-          --focus: #77c9d8;
-          --shadow: 0 20px 60px rgba(0, 0, 0, .48);
-          --launcher-shadow: 0 2px 8px rgba(0, 0, 0, .28), 0 14px 34px rgba(0, 0, 0, .34);
-        }
-        *, *::before, *::after { box-sizing: border-box; }
-        button, select, a { font: inherit; }
-        button, select { color: inherit; }
-        button { cursor: pointer; }
-        button:disabled { cursor: not-allowed; opacity: .48; }
-        button:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible {
-          outline: 3px solid color-mix(in srgb, var(--focus) 70%, transparent);
-          outline-offset: 2px;
-        }
-        .icon svg, button svg, a svg { width: 20px; height: 20px; fill: currentColor; flex: 0 0 auto; }
-        .launcher {
-          position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(76px, calc(env(safe-area-inset-bottom) + 20px));
-          z-index: 10; min-height: 56px; padding: 7px 11px 7px 8px;
-          border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); border-radius: 17px;
-          background: color-mix(in srgb, var(--surface-raised) 94%, transparent); color: var(--text); box-shadow: var(--launcher-shadow);
-          -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-          display: inline-flex; align-items: center; gap: 10px; text-align: left;
-          transition: background 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out, transform 150ms ease-out;
-        }
-        .launcher-mark {
-          width: 40px; height: 40px; border-radius: 12px; background: var(--primary); color: var(--on-primary);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 4px 10px color-mix(in srgb, var(--primary) 24%, transparent);
-          display: grid; place-items: center; flex: 0 0 auto; transition: background 180ms ease-out, transform 180ms ease-out;
-        }
-        .launcher-mark svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-        .launcher-copy { min-width: 62px; display: grid; gap: 2px; line-height: 1; }
-        .launcher-copy small { color: var(--primary); font-size: 9px; font-weight: 850; letter-spacing: .15em; }
-        .launcher-copy strong { white-space: nowrap; font-size: 14px; font-weight: 750; letter-spacing: .01em; }
-        .launcher-arrow { width: 16px; height: 20px; color: var(--text-muted); display: grid; place-items: center; transition: color 180ms ease-out, transform 180ms ease-out; }
-        .launcher-arrow svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-        .launcher:hover {
-          border-color: color-mix(in srgb, var(--primary) 38%, var(--border)); background: var(--surface-raised);
-          box-shadow: 0 3px 8px rgba(39, 20, 26, .1), 0 16px 36px rgba(99, 36, 55, .18); transform: translateY(-2px);
-        }
-        .launcher:hover .launcher-mark { background: var(--primary-strong); transform: rotate(-3deg); }
-        .launcher:hover .launcher-arrow { color: var(--primary); transform: translateX(2px); }
-        .launcher:active { transform: translateY(0) scale(.98); }
-        .scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); }
-        .drawer {
-          position: fixed; inset: 0 0 0 auto; z-index: 30; width: min(560px, 100vw); height: 100dvh;
-          background: var(--surface); color: var(--text); box-shadow: var(--shadow); transform: translateX(102%);
-          transition: transform 240ms ease-out; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden;
-        }
-        .drawer.open { transform: translateX(0); }
-        .drawer-header { padding: 24px 24px 18px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); }
-        .eyebrow { margin: 0 0 3px; color: var(--primary); font-size: 12px; font-weight: 800; letter-spacing: .16em; }
-        h2 { margin: 0; font-size: 25px; line-height: 1.2; letter-spacing: -.025em; }
-        .subline { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; }
-        .icon-button { width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); display: grid; place-items: center; }
-        .icon-button:hover { border-color: var(--primary); color: var(--primary); }
-        .controls { padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
-        .type-picker {
-          min-height: 68px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised);
-          display: grid; grid-template-columns: 40px minmax(0, 1fr) 124px; align-items: center; gap: 10px;
-          transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out;
-        }
-        .type-picker:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
-        .type-picker:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
-        .type-picker-icon {
-          width: 40px; height: 40px; border-radius: 11px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary);
-          display: grid; place-items: center;
-        }
-        .type-picker-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-        .type-picker-copy { min-width: 0; display: grid; gap: 2px; }
-        .type-picker-copy strong { font-size: 13px; line-height: 1.35; }
-        .type-picker-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-        .type-select-shell { position: relative; min-width: 0; }
-        .type-select-shell select {
-          width: 100%; height: 44px; padding: 0 34px 0 12px; border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border)); border-radius: 10px;
-          appearance: none; -webkit-appearance: none; background: var(--surface-alt); color: var(--text); font-size: 13px; font-weight: 750; cursor: pointer;
-          transition: border-color 180ms ease-out, background 180ms ease-out;
-        }
-        .type-select-shell select:hover { border-color: color-mix(in srgb, var(--primary) 48%, var(--border)); background: var(--surface); }
-        .type-select-arrow { position: absolute; right: 10px; top: 50%; width: 18px; height: 18px; color: var(--primary); pointer-events: none; transform: translateY(-50%); display: grid; place-items: center; }
-        .type-select-arrow svg { width: 17px; height: 17px; fill: currentColor; }
-        .progress-region { padding: 10px 24px 0; min-height: 42px; background: var(--surface); }
-        .progress-copy { display: flex; justify-content: space-between; gap: 16px; color: var(--text-muted); font-size: 12px; }
-        .progress-track { height: 3px; margin-top: 7px; overflow: hidden; background: var(--surface-alt); border-radius: 99px; }
-        .progress-track span { display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left; background: var(--primary); transition: transform 180ms ease-out; }
-        .progress-track.active span { animation: progress-pulse 1.4s ease-in-out infinite; }
-        .content { min-height: 0; overflow: auto; padding: 18px 24px 28px; overscroll-behavior: contain; }
-        .welcome, .error { min-height: 55vh; display: grid; align-content: center; justify-items: center; text-align: center; max-width: 400px; margin: auto; }
-        .welcome-mark, .error-icon { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--surface-alt); color: var(--primary); }
-        .welcome-mark svg, .error-icon svg { width: 32px; height: 32px; fill: currentColor; }
-        .welcome h3, .error h3 { margin: 20px 0 8px; font-size: 22px; }
-        .welcome > p, .error > p { margin: 0 0 22px; color: var(--text-muted); }
-        .privacy { margin-top: 15px !important; font-size: 12px; }
-        .primary, .secondary, .ghost { min-height: 44px; border-radius: 10px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; font-weight: 750; }
-        .primary { border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); }
-        .primary:hover { background: var(--primary-strong); }
-        .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
-        .secondary:hover { border-color: var(--primary); color: var(--primary); }
-        .ghost { border: 1px solid transparent; background: transparent; color: var(--text-muted); }
-        .ghost:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
-        .compact { min-height: 38px; padding: 0 11px; font-size: 13px; }
-        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-        .summary > div { padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); display: grid; gap: 1px; }
-        .summary strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-        .summary span { color: var(--text-muted); font-size: 11px; }
-        .recommendation-list { display: grid; gap: 12px; }
-        .recommendation-card { position: relative; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 15px; padding: 15px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface-raised); }
-        .rank { position: absolute; top: 8px; left: 8px; z-index: 1; min-width: 27px; padding: 3px 6px; border-radius: 7px; background: rgba(23, 23, 23, .82); color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
-        .cover { width: 88px; height: 124px; border-radius: 9px; overflow: hidden; background: var(--surface-alt); display: grid; place-items: center; text-decoration: none; }
-        .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .cover-placeholder { color: var(--text-muted); font-size: 10px; font-weight: 800; line-height: 1.1; text-align: center; }
-        .card-body { min-width: 0; }
-        .title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-        .title-row h3 { margin: 0; font-size: 16px; line-height: 1.35; }
-        .title-row h3 a { color: var(--text); text-decoration: none; }
-        .title-row h3 a:hover { color: var(--primary); }
-        .original { margin: 3px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .fit-score { flex: 0 0 auto; min-width: 54px; display: grid; justify-items: end; }
-        .fit-score strong { color: var(--primary); font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
-        .fit-score span { color: var(--text-muted); font-size: 10px; }
-        .metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-        .content-tag-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 9px; }
-        .content-tag-label { flex: 0 0 auto; padding-top: 3px; color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; }
-        .content-tags { min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; }
-        .content-tags span { padding: 3px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-alt); color: var(--text); font-size: 11px; line-height: 1.35; }
-        .confidence { color: var(--accent); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
-        .evidence-panel { margin: 10px 0 12px; padding: 9px 10px 10px; border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border)); border-radius: 10px; background: var(--surface-alt); }
-        .evidence-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
-        .evidence-header > strong { font-size: 11px; letter-spacing: .04em; }
-        .evidence-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 7px; }
-        .evidence-list li { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 8px; }
-        .evidence-kind { min-width: 38px; padding: 2px 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--text-muted); font-size: 10px; font-weight: 800; line-height: 1.45; text-align: center; }
-        .evidence-list p { min-width: 0; margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-        .evidence-list p strong { color: var(--text); font-weight: 700; }
-        .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-        .method-note { margin-top: 16px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-alt); transition: border-color 180ms ease-out, background 180ms ease-out; }
-        .method-note[open] { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: var(--surface-raised); }
-        .method-note summary { min-height: 64px; padding: 10px 14px; cursor: pointer; display: grid; grid-template-columns: 36px minmax(0, 1fr) 28px; align-items: center; gap: 11px; list-style: none; }
-        .method-note summary::-webkit-details-marker { display: none; }
-        .method-note summary::marker { display: none; content: ""; }
-        .method-note summary:hover .method-copy strong { color: var(--primary); }
-        .method-icon { width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary); display: grid; place-items: center; }
-        .method-icon svg { width: 18px; height: 18px; fill: currentColor; }
-        .method-copy { min-width: 0; display: grid; gap: 2px; }
-        .method-copy strong { font-size: 13px; line-height: 1.35; transition: color 180ms ease-out; }
-        .method-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-        .method-chevron { width: 28px; height: 28px; border-radius: 8px; color: var(--text-muted); display: grid; place-items: center; transition: transform 180ms ease-out, color 180ms ease-out; }
-        .method-chevron svg { width: 18px; height: 18px; fill: currentColor; }
-        .method-note[open] .method-chevron { transform: rotate(180deg); color: var(--primary); }
-        .method-body { padding: 14px; border-top: 1px solid var(--border); }
-        .method-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
-        .method-steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 10px; }
-        .step-number { width: 26px; height: 26px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 8px; color: var(--primary); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; display: grid; place-items: center; }
-        .method-steps strong { display: block; margin: 1px 0 2px; font-size: 12px; line-height: 1.4; }
-        .method-steps p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
-        .method-confidence { margin: 13px 0 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
-        .method-confidence strong { color: var(--text); }
-        .method-privacy { margin: 13px 0 0; padding: 10px 11px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-muted); font-size: 11px; line-height: 1.5; }
-        .drawer-footer { min-height: 66px; padding: 10px 24px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 8px; }
-        .drawer-footer button { min-height: 44px; }
-        .version { margin-left: auto; color: var(--text-muted); font-size: 11px; }
-        .refresh-data svg { width: 17px; height: 17px; }
-        .spinning svg { animation: spin 1s linear infinite; }
-        .toast { position: absolute; left: 20px; right: 20px; bottom: 76px; z-index: 5; min-height: 50px; padding: 8px 10px 8px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--text); color: var(--surface); box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; }
-        .toast[hidden] { display: none; }
-        .toast span { flex: 1; font-size: 13px; }
-        .toast button { min-width: 56px; min-height: 36px; border: 0; border-radius: 8px; background: var(--surface); color: var(--text); font-weight: 700; }
-        [hidden] { display: none !important; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes progress-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-        @media (max-width: 560px) {
-          .drawer-header { padding: 18px 16px 14px; }
-          h2 { font-size: 22px; }
-          .controls { padding: 12px 16px; }
-          .progress-region { padding-inline: 16px; }
-          .content { padding: 15px 16px 24px; }
-          .drawer-footer { padding-inline: 16px; }
-          .recommendation-card { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 12px; }
-          .cover { width: 72px; height: 102px; }
-          .fit-score strong { font-size: 20px; }
-          .ghost.compact span { display: none; }
-          .summary > div { padding: 9px; }
-        }
-        @media (max-width: 390px) {
-          .launcher { right: 12px; bottom: max(68px, calc(env(safe-area-inset-bottom) + 12px)); width: 52px; min-height: 52px; padding: 6px; border-radius: 16px; }
-          .launcher-mark { width: 38px; height: 38px; }
-          .launcher-copy, .launcher-arrow { display: none; }
-          .type-picker { grid-template-columns: 40px minmax(0, 1fr) 110px; padding-inline: 10px; }
-          .type-picker-copy small { display: none; }
-          .recommendation-card { grid-template-columns: 64px minmax(0, 1fr); }
-          .cover { width: 64px; height: 90px; }
-          .title-row { gap: 6px; }
-          .metrics span:nth-child(2) { display: none; }
-          .drawer-footer .refresh-data span { display: none; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
-        }
+      return `<style>${globalThis.BangumiProfileUI.css}
+        .module-head select{font-size:12px;border:0;background:var(--soft);padding:4px 24px 4px 9px}.module-head .refresh-data{font-size:12px}
+        .welcome{padding:28px 0;color:var(--muted);text-align:center}
+        .recommendation-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;align-items:start}
+        .recommendation-card{min-width:0}.cover{display:block;aspect-ratio:5/7;background:var(--soft);overflow:hidden;border-radius:7px}.cover img{display:block;width:100%;height:100%;object-fit:cover;transition:opacity .18s}.cover:hover img{opacity:.88}.cover-placeholder{display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:var(--muted)}
+        .recommendation-card h3{margin-top:9px;font-size:13px;line-height:1.5}.recommendation-card h3 a{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}
+        .content-tags{display:flex;flex-wrap:wrap;gap:4px 7px;margin:5px 0;color:var(--link);font-size:11px;min-height:18px}.brief{font-size:12px;line-height:1.6;color:var(--muted);margin:6px 0 8px}
+        .evidence-panel{font-size:12px}.evidence-panel summary{color:var(--site-link);width:fit-content;border-radius:4px;list-style:none}.evidence-panel summary::after{content:" ›"}.evidence-panel[open] summary::after{content:" ‹"}.evidence-body{padding-top:8px;line-height:1.75;overflow-wrap:anywhere}.evidence-body p{margin-bottom:8px}.evidence-score{color:var(--muted);font-size:11px}.evidence-body button{color:var(--muted);padding-left:0}
+        .pagination{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.page-button{display:flex;align-items:center;gap:3px}.page-button svg{fill:currentColor;width:14px;height:14px}.page-status label{display:flex;align-items:center;gap:5px}.page-select-shell select{border:0;padding:3px 4px;background:var(--soft);font-size:12px}.page-select-arrow{display:none}
+        .toast{margin-top:12px;padding:8px 12px;background:var(--pink-soft);border-radius:6px;color:var(--link);font-size:12px}.toast button{margin-left:8px;color:var(--link)}
+        @container(max-width:620px){.recommendation-list{gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}}
+        @container(max-width:400px){.recommendation-list{gap:20px 14px;grid-template-columns:repeat(2,minmax(0,1fr))}.pagination{gap:9px}.page-button{padding:5px}.module-head select{font-size:16px}}
       </style>`;
     }
   }

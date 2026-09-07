@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bangumi 主页组件预览</title>
+<style>
+body{margin:0;background:#fff;color:#555;font:13px/1.6 Arial,"Microsoft YaHei",sans-serif}header.site{border-bottom:1px solid #eee;padding:14px 24px;color:#f09199;font-size:22px}main{max-width:1180px;margin:24px auto;padding:0 20px}.layout{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:24px}h1{font-size:20px;font-weight:400}h2{font-size:18px;font-weight:400;margin:0 0 10px;color:#777}.section{padding:16px 0;border-bottom:1px solid #eee}.section p{margin:5px 0;color:#777}.site-note{color:#888;padding:16px;background:#fafafa;border-radius:8px}html[data-theme=dark] body{background:#202020;color:#ddd}html[data-theme=dark] .site-note{background:#282828}html[data-theme=dark] header.site,html[data-theme=dark] .section{border-color:#383838}@media(max-width:900px){.layout{display:block}.site-note{display:none}}a{color:#16718b}.preview-tools{display:flex;gap:12px;margin-bottom:12px}.preview-tools a{font-size:12px}
+</style></head><body data-bgm-profile-demo>
+<header class="site">Bangumi</header><main><h1>wylt 的时光机</h1><div class="preview-tools"><a href="?theme=light">浅色</a><a href="?theme=dark">暗色</a><a href="?width=375">窄屏</a><a href="?width=667">横屏</a><a href="?empty=1">空状态</a><a href="?error=1">网络失败</a></div><div class="layout"><div id="user_home"><section id="blog" class="section"><h2>我的日志</h2><p>在原有个人主页栏目下方，继续你的动画记忆。</p></section></div><aside class="site-note">本地预览 · 使用演示数据<br>不会修改你的收藏或线上组件。</aside></div></main>
+<script>
+const query = new URLSearchParams(location.search);
+document.documentElement.dataset.theme = query.get('theme') || 'light';
+if(query.has('width')){document.querySelector('.layout').style.display='block';document.querySelector('main').style.maxWidth=query.get('width')+'px';document.querySelector('.site-note').hidden=true;}
+const fixtureNames=['鲁邦三世 -名为峰不二子的女人-','玉响～毕业写真～','星之梦～星之人～','强风吹拂','悠久之翼2'];
+const fixtureImages=['https://lain.bgm.tv/r/400/pic/cover/l/e6/33/36355_dt0WH.jpg','https://lain.bgm.tv/r/400/pic/cover/l/2b/30/109869_w5vOo.jpg','https://lain.bgm.tv/r/400/pic/cover/l/5e/b1/178884_5tZ0I.jpg'];
+const fixtureTags=['日常','治愈','青春','科幻','悬疑','恋爱','奇幻','校园','原创','轻小说改','漫画改','冒险','战斗','搞笑','音乐','运动','成长','群像','公路片','少女','历史','机战','魔法','异世界','亲情','友情','温馨','偶像','致郁','推理','剧情','短篇','实验动画','OVA','剧场版','TV','夏天','旅行','社团','青春期的细腻情感与成长','京都动画','吉卜力','经典','童年','美食','职场','文学','复古','家庭','童话','未来','宇宙','妖怪','节奏舒缓','画面优美','都市'];
+const fixtureCollections = Array.from({length:80},(_,i)=>({subject_id:i+1,type:2,rate:6+i%5,tags:fixtureTags.filter((tag,j)=>(i*17+j*3)%80<Math.max(1,70-j*1.2)),ep_status:12,subject:{id:i+1,type:2,name:fixtureNames[i%5],date:(1980+Math.floor(Math.sqrt(i/79)*46))+ '-' + String(i%12+1).padStart(2,'0') + '-01',eps:i<36?12:i<48?24:i<58?13:i<66?1:i<72?26:30+i,images:{small:fixtureImages[i%3]}}}));
+if(query.has('dense'))fixtureCollections.forEach((row,i)=>{row.tags=['日常','原创',...Array.from({length:700},(_,n)=>n).filter(n=>n%80===i).map(n=>n%2?'标签'+n:'Animation-'+n)];});
+window.fetch=async(input)=>{const url=String(input);if(query.has('error'))throw new Error('演示网络不可用');let data=[];if(url.includes('/collections'))return new Response(JSON.stringify({total:query.has('empty')?0:80,data:query.has('empty')?[]:fixtureCollections}),{status:200});if(url.includes('/persons'))data=[{id:100+Number(url.match(/subjects\/(\d+)/)[1])%15,name:['山田尚子','京都动画','新房昭之','今敏','汤浅政明'][Number(url.match(/subjects\/(\d+)/)[1])%5],relation:'导演'}];if(url.includes('/characters'))data=[{id:1,actors:[{id:201,name:'花泽香菜'}]}];return new Response(JSON.stringify(data),{status:200});};
+</script><script src="../dist/bangumi-personal-recommender.user.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+const app=window.BangumiPersonalRecommender;
+if(!app?.host)return;
+app.state.open=true;
+if(query.has('empty'))return;
+if(query.has('error')){app.showError(new Error('暂时无法读取收藏，请稍后重试。'));return;}
+const tags=['治愈','青春','奇幻','日常','成长'];
+app.state.pageOrder=Array.from({length:18},(_,i)=>({subject:{id:900000+i,name:fixtureNames[i%5],nameCn:fixtureNames[i%5],image:fixtureImages[i%3],rating:{score:7.9,total:1200},tags:[{name:tags[i%5],count:100},{name:'日本动画',count:90}],persons:[],characters:[]},predicted:8.5,confidence:'高',confidenceScore:.85,positiveReasons:[{type:'tag',label:tags[i%5],weight:.8}],negativeReasons:[],similarWorks:[],nearest:[],features:{}}));
+app.state.scoredPool=app.state.pageOrder;app.renderFromPool();
+});
+</script></body></html>

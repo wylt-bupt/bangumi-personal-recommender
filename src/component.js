@@ -4,14 +4,15 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.3.6";
+  const APP_VERSION = "0.9.4";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "25";
+  const RECOMMENDATION_MODEL_VERSION = "28";
+  const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
   const CANDIDATE_RANK_PAGES = 10;
@@ -48,6 +49,8 @@
     hide: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.7 5.1 10 5.5l.9 1.5-.9 1.5c-.15.2-1.3 1.65-3.2 3L17.35 15A12.7 12.7 0 0 0 20 12c-1.18-1.55-4.28-5-8-5-.76 0-1.48.14-2.16.37L8.27 5.8A9.8 9.8 0 0 1 12 5Zm-8.7-.7 16.4 16.4-1.4 1.4-3.08-3.08A9.8 9.8 0 0 1 12 19c-5.5 0-9.7-5.1-10-5.5L1.1 12l.9-1.5a17.1 17.1 0 0 1 3.1-3.43L1.9 3.7l1.4-1.4ZM6.5 8.5A13.4 13.4 0 0 0 4 12c1.18 1.55 4.28 5 8 5 .56 0 1.1-.08 1.61-.22l-1.7-1.7A3.1 3.1 0 0 1 8.9 12l-2.4-3.5Zm4.35 1.03A3 3 0 0 1 14.47 13l-3.62-3.47Z"/></svg>`,
     info: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 10h2v7h-2v-7Zm0-3h2v2h-2V7Zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>`,
     chevron: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>`,
+    pagePrevious: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.6 6-6 6 6 6 1.4-1.4-4.6-4.6 4.6-4.6L14.6 6Z"/></svg>`,
+    pageNext: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.4 18 6-6-6-6L8 7.4l4.6 4.6L8 16.6 9.4 18Z"/></svg>`,
   });
 
   function escapeHtml(value) {
@@ -647,7 +650,9 @@
         profile: null,
         candidates: [],
         scoredPool: [],
+        pageOrder: [],
         current: [],
+        currentPage: 1,
         collections: [],
         eligibleCandidateCount: 0,
         lastSync: null,
@@ -656,24 +661,21 @@
       this.lastFocused = null;
       this.previousPageOverflow = "";
       this.excludedBatch = new Set();
+      this.pageByType = new Map();
     }
 
     mount() {
-      this.host = document.createElement("div");
-      this.host.id = "bgmpr-host";
+      this.host = globalThis.BangumiProfileUI?.mount("bgmpr-host", 20);
+      if (!this.host) return;
       this.host.dataset.theme = this.detectTheme();
-      document.documentElement.append(this.host);
       this.shadow = this.host.attachShadow({ mode: "open" });
       this.shadow.innerHTML = `${this.styles()}${this.shell()}`;
       this.bindEvents();
       this.watchTheme();
+      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
     }
 
-    detectTheme() {
-      const className = `${document.documentElement.className} ${document.body?.className || ""}`;
-      if (/dark|night/i.test(className)) return "dark";
-      return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
+    detectTheme() { return globalThis.BangumiProfileUI.theme(); }
 
     watchTheme() {
       const update = () => {
@@ -685,86 +687,47 @@
 
     shell() {
       const selectedType = recommendationType(this.config.subjectType);
-      const typeOptions = RECOMMENDATION_TYPES.map(
-        (type) => `<option value="${type.id}" ${type.id === selectedType.id ? "selected" : ""}>${type.label}</option>`,
-      ).join("");
-      return `
-        <button class="launcher" type="button" aria-label="打开 Bangumi 个性推荐" aria-haspopup="dialog">
-          <span class="launcher-mark">${ICONS.discover}</span>
-          <span class="launcher-copy"><small>FOR YOU</small><strong>个性推荐</strong></span>
-          <span class="launcher-arrow">${ICONS.launchArrow}</span>
-        </button>
-        <div class="scrim" hidden></div>
-        <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="bgmpr-title" aria-hidden="true">
-          <header class="drawer-header">
-            <div>
-              <p class="eyebrow">FOR ${escapeHtml(this.config.username)}</p>
-              <h2 id="bgmpr-title">Bangumi 个性推荐</h2>
-              <p class="subline" data-role="sync-label">尚未同步</p>
-            </div>
-            <button class="icon-button close" type="button" aria-label="关闭推荐面板">${ICONS.close}</button>
-          </header>
-          <section class="controls" aria-label="推荐设置">
-            <label class="type-picker">
-              <span class="type-picker-icon">${ICONS.layers}</span>
-              <span class="type-picker-copy">
-                <strong>推荐类型</strong>
-                <small>选择要分析的收藏分类</small>
-              </span>
-              <span class="type-select-shell">
-                <select data-role="type-select" aria-label="推荐类型">${typeOptions}</select>
-                <span class="type-select-arrow">${ICONS.chevron}</span>
-              </span>
-            </label>
-          </section>
-          <section class="progress-region" aria-live="polite">
-            <div class="progress-copy"><span data-role="progress-text">准备就绪</span><span data-role="progress-count"></span></div>
-            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
-          </section>
-          <main class="content" tabindex="-1">
-            <div class="welcome" data-role="welcome">
-              <div class="welcome-mark">${ICONS.spark}</div>
-              <h3>从你的收藏中发现下一部</h3>
-              <p>组件会在本地分析评分、标签、制作人员和声优信息，排除所有已标记条目，再选出 5 个结果。</p>
-              <button class="primary start" type="button">生成推荐</button>
-              <p class="privacy">数据仅保存在当前浏览器，不会上传到第三方服务。</p>
-            </div>
-            <div class="results" data-role="results" hidden></div>
-            <div class="error" data-role="error" hidden>
-              <span class="error-icon">${ICONS.info}</span>
-              <h3>暂时无法生成推荐</h3>
-              <p data-role="error-message"></p>
-              <button class="secondary retry" type="button">重试</button>
-            </div>
-          </main>
-          <footer class="drawer-footer">
-            <button class="secondary refresh-data" type="button">${ICONS.refresh}<span>刷新画像</span></button>
-            <button class="secondary next-batch" type="button">换一批</button>
-            <span class="version">v${APP_VERSION}</span>
-          </footer>
-          <div class="toast" role="status" aria-live="polite" hidden><span></span><button type="button">撤销</button></div>
-        </aside>`;
+      const options = RECOMMENDATION_TYPES.map(type => `<option value="${type.id}" ${type.id === selectedType.id ? "selected" : ""}>${type.label}</option>`).join("");
+      return `<section class="module" aria-labelledby="bgmpr-title">
+        <header class="module-head"><h2 id="bgmpr-title">个性推荐</h2><select data-role="type-select" aria-label="推荐类型">${options}</select><button class="refresh-data" type="button" title="根据最新收藏重新推荐">更新</button></header>
+        <div class="progress-region" aria-live="polite" hidden><div class="progress-copy"><span data-role="progress-text">正在寻找你可能喜欢的作品…</span><span data-role="progress-count"></span></div><div class="progress-track" role="progressbar" aria-label="推荐加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div></div>
+        <div class="content">
+          <div class="welcome" data-role="welcome"><p>从喜欢的作品，遇见下一部。</p><button class="start" type="button">看看推荐</button></div>
+          <div class="results" data-role="results" hidden></div>
+          <div class="error" data-role="error" hidden><p data-role="error-message"></p><button class="retry" type="button">重试</button></div>
+        </div>
+        <div class="toast" role="status" hidden><span></span><button type="button">撤销</button></div>
+      </section>`;
     }
 
     bindEvents() {
-      this.$(".launcher").addEventListener("click", () => this.open());
-      this.$(".close").addEventListener("click", () => this.close());
-      this.$(".scrim").addEventListener("click", () => this.close());
       this.$(".start").addEventListener("click", () => this.ensureRecommendations({ force: true }));
       this.$(".retry").addEventListener("click", () => this.ensureRecommendations({ force: true }));
       this.$(".refresh-data").addEventListener("click", () => this.ensureRecommendations({ force: true }));
-      this.$(".next-batch").addEventListener("click", () => this.nextBatch());
       this.$('[data-role="type-select"]').addEventListener("change", (event) => {
         this.config.subjectType = event.target.value;
         this.persistConfig();
         this.resetViewForType();
-        this.ensureRecommendations({ force: false });
+        this.loadCachedResult().then(loaded => { if (!loaded) this.ensureRecommendations({ force: false }); });
       });
       this.shadow.addEventListener("click", (event) => {
         const dismiss = event.composedPath().find(
           (element) => element instanceof Element && element.matches?.("[data-dismiss-id]"),
         );
-        if (dismiss) this.dismiss(Number(dismiss.dataset.dismissId));
+        if (dismiss) {
+          this.dismiss(Number(dismiss.dataset.dismissId));
+          return;
+        }
+        const pageButton = event.composedPath().find(
+          (element) => element instanceof Element && element.matches?.("[data-page-direction]"),
+        );
+        if (pageButton) this.changePage(this.state.currentPage + Number(pageButton.dataset.pageDirection), "button");
+      });
+      this.shadow.addEventListener("change", (event) => {
+        const pageSelect = event.composedPath().find(
+          (element) => element instanceof Element && element.matches?.("[data-page-select]"),
+        );
+        if (pageSelect) this.changePage(Number(pageSelect.value), "select");
       });
       this.shadow.addEventListener(
         "error",
@@ -788,57 +751,24 @@
       saveJson(CONFIG_KEY, this.config);
     }
 
-    open() {
+    async open() {
+      if (this.state.open) return;
       this.state.open = true;
-      this.lastFocused = this.shadow.activeElement || document.activeElement;
-      this.$(".scrim").hidden = false;
-      this.$(".drawer").setAttribute("aria-hidden", "false");
-      requestAnimationFrame(() => this.$(".drawer").classList.add("open"));
-      this.previousPageOverflow = document.documentElement.style.overflow;
-      document.documentElement.style.overflow = "hidden";
-      this.$(".close").focus();
-      this.loadCachedResult().then((loaded) => {
-        if (!loaded && !this.state.busy) this.$('[data-role="welcome"]').hidden = false;
-      });
+      const loaded = await this.loadCachedResult();
+      if (!loaded && !this.state.busy) this.ensureRecommendations({ force: false });
     }
 
-    close() {
-      this.state.open = false;
-      this.$(".drawer").classList.remove("open");
-      this.$(".drawer").setAttribute("aria-hidden", "true");
-      this.$(".scrim").hidden = true;
-      document.documentElement.style.overflow = this.previousPageOverflow;
-      this.lastFocused?.focus?.();
-    }
-
-    onKeyDown(event) {
-      if (!this.state.open) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        this.close();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = [...this.shadow.querySelectorAll('button:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]')]
-        .filter((element) => element.offsetParent !== null);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && this.shadow.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && this.shadow.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
+    close() {}
+    onKeyDown() {}
 
     resetViewForType() {
       this.state.baseProfile = null;
       this.state.profile = null;
       this.state.candidates = [];
       this.state.scoredPool = [];
+      this.state.pageOrder = [];
       this.state.current = [];
+      this.state.currentPage = this.pageByType.get(recommendationType(this.config.subjectType).id) || 1;
       this.excludedBatch.clear();
       this.$('[data-role="results"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
@@ -851,13 +781,18 @@
     }
 
     async loadCachedResult() {
-      const cached = await this.store.get(this.cacheKey()).catch(() => null);
-      if (!cached?.value?.recommendations?.length) return false;
+      const key = this.cacheKey();
+      const cached = await this.store.get(key).catch(() => null);
+      if (key !== this.cacheKey()) return true;
+      if (!cached?.value?.pageOrder?.length && !cached?.value?.recommendations?.length) return false;
       const value = cached.value;
       this.state.lastSync = value.generatedAt;
-      this.state.current = value.recommendations;
+      this.state.pageOrder = value.pageOrder || value.recommendations;
+      this.state.scoredPool = this.state.pageOrder;
+      const typeId = recommendationType(this.config.subjectType).id;
+      this.state.currentPage = this.pageByType.get(typeId) || 1;
       this.state.currentSummary = value.summary || {};
-      this.renderRecommendations(value.recommendations, value.summary);
+      this.renderFromPool();
       this.updateSyncLabel();
       if (Date.now() - cached.storedAt > COLLECTION_TTL) {
         this.setProgress("本地结果已显示；打开“刷新画像”可同步最新收藏。", 0, 0);
@@ -880,14 +815,25 @@
 
     setBusy(busy) {
       this.state.busy = busy;
-      for (const selector of [".start", ".retry", ".refresh-data", ".next-batch", '[data-role="type-select"]']) {
-        this.$(selector).disabled = busy;
+      for (const selector of [".start", ".retry", ".refresh-data", '[data-role="type-select"]']) {
+        const control = this.$(selector);
+        if (control) control.disabled = busy;
       }
+      this.shadow.querySelectorAll("[data-page-direction], [data-page-select]").forEach((control) => {
+        control.disabled = busy || control.dataset.pageBoundary === "true";
+      });
       this.$(".refresh-data").classList.toggle("spinning", busy);
+      this.$(".progress-region").hidden = !busy;
+      this.$(".content").setAttribute("aria-busy", String(busy));
     }
 
     async ensureRecommendations({ force = false } = {}) {
       if (this.state.busy) return;
+      if (force) {
+        const typeId = recommendationType(this.config.subjectType).id;
+        this.pageByType.set(typeId, 1);
+        this.state.currentPage = 1;
+      }
       this.setBusy(true);
       this.$('[data-role="welcome"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
@@ -995,7 +941,7 @@
           const scoredSubject = this.state.baseProfile !== this.state.profile
             ? Core.blendSupplementalScore(
                 Core.scoreSubject(
-                  { ...subject, persons: [], characters: [] },
+                  Core.withoutCreativeContributors(subject),
                   this.state.baseProfile,
                   RECOMMENDATION_MODE,
                 ),
@@ -1018,44 +964,75 @@
       }
       const poolLimit = !enforceJapanese && this.state.requireAdultEvidence ? 360 : 180;
       this.state.scoredPool = scored.slice(0, poolLimit);
+      this.state.pageOrder = this.buildPageOrder(this.state.scoredPool);
       this.excludedBatch.clear();
       if (render) this.renderFromPool();
     }
 
-    renderFromPool() {
-      const available = this.state.scoredPool.filter((item) => !this.excludedBatch.has(item.subject.id));
-      const source = available.length >= 5 ? available : this.state.scoredPool;
-      const selected = Core.diversify(
-        source,
-        5,
+    buildPageOrder(scoredPool) {
+      return Core.diversify(
+        scoredPool,
+        scoredPool.length,
         RECOMMENDATION_MODE,
-        `${Core.recommendationSalt()}:${this.excludedBatch.size}`,
+        `${Core.recommendationSalt()}:full-pool`,
       );
+    }
+
+    renderFromPool() {
+      if (!this.state.pageOrder.length && this.state.scoredPool.length) {
+        this.state.pageOrder = this.buildPageOrder(this.state.scoredPool);
+      }
+      const available = this.state.pageOrder.filter((item) => !this.excludedBatch.has(Number(item.subject.id)));
+      const pageCount = Math.max(1, Math.ceil(available.length / RECOMMENDATION_PAGE_SIZE));
+      const typeId = recommendationType(this.config.subjectType).id;
+      const requestedPage = this.pageByType.get(typeId) || this.state.currentPage || 1;
+      const currentPage = Math.min(pageCount, Math.max(1, requestedPage));
+      const startIndex = (currentPage - 1) * RECOMMENDATION_PAGE_SIZE;
+      const selected = available.slice(startIndex, startIndex + RECOMMENDATION_PAGE_SIZE);
+      this.state.currentPage = currentPage;
+      this.pageByType.set(typeId, currentPage);
       this.state.current = selected;
       this.renderRecommendations(selected, {
-        collectionCount: this.state.profile.collectionCount,
-        ratedCount: this.state.profile.ratedCount,
-        candidateCount: this.state.eligibleCandidateCount,
+        collectionCount: this.state.profile?.collectionCount || this.state.currentSummary.collectionCount,
+        ratedCount: this.state.profile?.ratedCount || this.state.currentSummary.ratedCount,
+        candidateCount: this.state.eligibleCandidateCount || this.state.currentSummary.candidateCount,
+      }, {
+        page: currentPage,
+        pageCount,
+        total: available.length,
+        startIndex,
       });
     }
 
-    nextBatch() {
-      if (!this.state.scoredPool.length) {
+    changePage(page, focusTarget = "button") {
+      if (!this.state.pageOrder.length) {
         this.ensureRecommendations({ force: false });
         return;
       }
-      for (const item of this.state.current) this.excludedBatch.add(item.subject.id);
-      if (this.state.scoredPool.length - this.excludedBatch.size < 5) this.excludedBatch.clear();
+      const availableCount = this.state.pageOrder.length - this.excludedBatch.size;
+      const pageCount = Math.max(1, Math.ceil(availableCount / RECOMMENDATION_PAGE_SIZE));
+      const nextPage = Math.min(pageCount, Math.max(1, Math.trunc(Number(page) || 1)));
+      if (nextPage === this.state.currentPage) return;
+      const direction = nextPage > this.state.currentPage ? 1 : -1;
+      this.pageByType.set(recommendationType(this.config.subjectType).id, nextPage);
       this.renderFromPool();
+      requestAnimationFrame(() => {
+        const selector = focusTarget === "select"
+          ? "[data-page-select]"
+          : `[data-page-direction="${direction}"]`;
+        this.$(selector)?.focus();
+      });
     }
 
     dismiss(subjectId) {
       const previous = new Set(this.excludedBatch);
+      const previousPage = this.state.currentPage;
       this.excludedBatch.add(Number(subjectId));
       this.renderFromPool();
-      this.showToast("已从当前这批结果中暂时隐藏。", () => {
+      this.showToast("已从推荐结果中暂时隐藏。", () => {
         this.excludedBatch.clear();
         for (const id of previous) this.excludedBatch.add(id);
+        this.pageByType.set(recommendationType(this.config.subjectType).id, previousPage);
         this.renderFromPool();
       });
     }
@@ -1078,110 +1055,57 @@
     recommendationCard(item, index) {
       const subject = item.subject;
       const title = subject.nameCn || subject.name || `条目 ${subject.id}`;
-      const original = subject.nameCn && subject.name && subject.nameCn !== subject.name ? subject.name : "";
       const image = safeImageUrl(subject.image);
-      const globalScore = subject.rating.score ? subject.rating.score.toFixed(1) : "—";
-      const votes = subject.rating.total ? subject.rating.total.toLocaleString("zh-CN") : "样本较少";
-      const confidencePercent = Math.round(Number(item.confidenceScore || 0) * 100);
-      const confidenceBreakdown = item.confidenceBreakdown || {};
-      const featurePercent = Math.round(Number(confidenceBreakdown.featureSupport || 0) * 100);
-      const neighborPercent = Math.round(Number(confidenceBreakdown.neighborEvidence || 0) * 100);
-      const ratingPercent = Math.round(Number(confidenceBreakdown.ratingEvidence || 0) * 100);
-      const confidenceExplanation = `证据构成：偏好特征 ${featurePercent}/50，相似收藏 ${neighborPercent}/30，评分样本 ${ratingPercent}/20`;
+      const tags = Core.selectContentTags(subject, item.positiveReasons).slice(0, 3);
       const evidence = Core.selectRecommendationEvidence(item);
-      const contentTags = Core.selectContentTags(subject, item.positiveReasons);
-      const contentTagMarkup = contentTags.length
-        ? `<div class="content-tag-row" aria-label="内容标签">
-            <span class="content-tag-label">内容</span>
-            <div class="content-tags">${contentTags.map((tag) => `<span>${escapeHtml(tag.label)}</span>`).join("")}</div>
-          </div>`
-        : "";
-      const quotedLabels = (reasons) =>
-        `<strong>「${reasons.map((reason) => escapeHtml(reason.label)).join("、")}」</strong>`;
-      const evidenceRows = evidence.map((entry) => {
-        if (entry.kind === "similarity") {
-          const works = entry.works.map((work) =>
-            `<strong>${Number(work.rate) ? `${Number(work.rate)} 分的` : ""}《${escapeHtml(work.name)}》</strong>`,
-          ).join("、");
-          return `<li><span class="evidence-kind">相似</span><p>与你收藏中 ${works} 特征接近</p></li>`;
-        }
-        if (entry.kind === "creative") {
-          const roleName = {
-            director: "导演",
-            studio: "制作公司",
-            creator: "作者／原作",
-            series: "系列构成",
-            script: "脚本",
-            music: "音乐创作",
-            cv: "声优",
-          }[entry.role] || entry.roleLabel || "创作人员";
-          return `<li><span class="evidence-kind">${escapeHtml(entry.roleLabel || roleName)}</span><p>${escapeHtml(roleName)}${quotedLabels(entry.reasons)}在你的历史评分中表现较好</p></li>`;
-        }
-        return "<li><span class=\"evidence-kind\">口碑</span><p>全站评分与探索价值使它进入本轮候选</p></li>";
-      });
-      const shownSimilarCount = evidence
-        .filter((entry) => entry.kind === "similarity")
-        .reduce((sum, entry) => sum + entry.works.length, 0);
-      return `
-        <article class="recommendation-card" data-evidence-count="${evidence.length}" data-content-tag-count="${contentTags.length}" data-similar-count="${shownSimilarCount}" data-confidence="${confidencePercent}" data-confidence-feature="${featurePercent}" data-confidence-neighbor="${neighborPercent}" data-confidence-rating="${ratingPercent}">
-          <div class="rank">${String(index + 1).padStart(2, "0")}</div>
-          <a class="cover" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
-            ${image ? `<img data-cover src="${escapeHtml(image)}" alt="《${escapeHtml(title)}》封面" loading="lazy" width="88" height="124"><span class="cover-placeholder" hidden>NO<br>COVER</span>` : `<span class="cover-placeholder">NO<br>COVER</span>`}
-          </a>
-          <div class="card-body">
-            <div class="title-row">
-              <div>
-                <h3><a href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
-                ${original ? `<p class="original">${escapeHtml(original)}</p>` : ""}
-              </div>
-              <div class="fit-score"><strong>${item.predicted.toFixed(1)}</strong><span>适合度</span></div>
-            </div>
-            <div class="metrics">
-              <span>BGM ${globalScore}</span><span>${escapeHtml(votes)} 人评分</span>
-            </div>
-            ${contentTagMarkup}
-            <section class="evidence-panel" aria-label="推荐依据，置信度 ${item.confidence}，${confidencePercent}%">
-              <div class="evidence-header"><strong>推荐依据</strong><span class="confidence" title="${escapeHtml(confidenceExplanation)}" aria-label="置信度 ${item.confidence}，${confidencePercent}%。${escapeHtml(confidenceExplanation)}">置信度 ${item.confidence} · ${confidencePercent}%</span></div>
-              <ul class="evidence-list">${evidenceRows.join("")}</ul>
-            </section>
-            <div class="card-actions">
-              <a class="primary compact" href="${location.origin}/subject/${subject.id}" target="_blank" rel="noopener noreferrer">查看条目 ${ICONS.arrow}</a>
-              <button class="ghost compact" type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">${ICONS.hide}<span>暂时隐藏</span></button>
-            </div>
-          </div>
-        </article>`;
+      const similar = evidence.find(entry => entry.kind === "similarity")?.works || [];
+      const creative = evidence.find(entry => entry.kind === "creative");
+      const brief = similar.length ? `与你喜欢的《${similar[0].name}》相近`
+        : creative?.reasons?.length ? `你偏爱的${creative.roleLabel || "创作者"}：${creative.reasons.map(r => r.label).join("、")}`
+        : tags.length ? `也许合你口味的${tags.slice(0, 2).map(t => t.label).join("、")}作品` : "从你的收藏偏好中发现";
+      const rows = evidence.map(entry => {
+        if (entry.kind === "similarity") return `<p>与你看过的${entry.works.map(work => `《${escapeHtml(work.name)}》${Number(work.rate) ? `（${Number(work.rate)} 分）` : ""}`).join("、")}特征接近。</p>`;
+        if (entry.kind === "creative") return `<p>${escapeHtml(entry.roleLabel || "创作人员")}：${entry.reasons.map(reason => escapeHtml(reason.label)).join("、")}，在你的历史评分中表现较好。</p>`;
+        return '<p>结合你的收藏偏好与作品口碑推荐。</p>';
+      }).join("");
+      const url = `${location.origin}/subject/${subject.id}`;
+      return `<article class="recommendation-card">
+        <a class="cover" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
+          ${image ? `<img data-cover src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy" width="140" height="196"><span class="cover-placeholder" hidden>暂无封面</span>` : '<span class="cover-placeholder">暂无封面</span>'}
+        </a>
+        <h3><a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
+        <div class="content-tags">${tags.map(tag => `<span>${escapeHtml(tag.label)}</span>`).join("")}</div>
+        <p class="brief">${escapeHtml(brief)}</p>
+        <details class="evidence-panel"><summary>推荐理由</summary><div class="evidence-body">${rows}<p class="evidence-score">预计评分 ${Number(item.predicted).toFixed(1)} · 站点评分 ${Number(subject.rating?.score || 0).toFixed(1)}</p><button type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">暂时隐藏</button></div></details>
+      </article>`;
     }
 
-    renderRecommendations(recommendations, summary = {}) {
+    paginationMarkup({ page = 1, pageCount = 1, total = 0 } = {}) {
+      const options = Array.from({ length: pageCount }, (_, index) => {
+        const value = index + 1;
+        return `<option value="${value}" ${value === page ? "selected" : ""}>${value}</option>`;
+      }).join("");
+      return `
+        <nav class="pagination" aria-label="推荐结果分页">
+          <button class="page-button page-previous" type="button" data-page-direction="-1" data-page-boundary="${page <= 1}" ${page <= 1 ? "disabled" : ""} aria-label="上一页，第 ${Math.max(1, page - 1)} 页">
+            ${ICONS.pagePrevious}<span>上一页</span>
+          </button>
+          <div class="page-status" aria-live="polite">
+            <label><span>第</span><span class="page-select-shell"><select data-page-select aria-label="跳转到推荐页">${options}</select><span class="page-select-arrow">${ICONS.chevron}</span></span><span>/ ${pageCount} 页</span></label>
+          </div>
+          <button class="page-button page-next" type="button" data-page-direction="1" data-page-boundary="${page >= pageCount}" ${page >= pageCount ? "disabled" : ""} aria-label="下一页，第 ${Math.min(pageCount, page + 1)} 页">
+            <span>下一页</span>${ICONS.pageNext}
+          </button>
+        </nav>`;
+    }
+
+    renderRecommendations(recommendations, summary = {}, pagination = {}) {
       this.state.currentSummary = summary;
       const results = this.$('[data-role="results"]');
       this.$('[data-role="welcome"]').hidden = true;
       this.$('[data-role="error"]').hidden = true;
       results.hidden = false;
-      results.innerHTML = `
-        <div class="summary">
-          <div><strong>${Number(summary.collectionCount || 0).toLocaleString("zh-CN")}</strong><span>收藏样本</span></div>
-          <div><strong>${Number(summary.ratedCount || 0).toLocaleString("zh-CN")}</strong><span>评分样本</span></div>
-          <div><strong>${Number(summary.candidateCount || 0).toLocaleString("zh-CN")}</strong><span>未标记候选</span></div>
-        </div>
-        <div class="recommendation-list">${recommendations.map((item, index) => this.recommendationCard(item, index)).join("")}</div>
-        <details class="method-note">
-          <summary>
-            <span class="method-icon">${ICONS.info}</span>
-            <span class="method-copy"><strong>为什么推荐这些？</strong><small>评分校准 · 兴趣画像 · 相似作品 · 多样化</small></span>
-            <span class="method-chevron">${ICONS.chevron}</span>
-          </summary>
-          <div class="method-body">
-            <ol class="method-steps">
-              <li><span class="step-number">1</span><div><strong>校准评分习惯</strong><p>结合你的平均分和条目全站评分，判断哪些作品真正超出你的预期。</p></div></li>
-              <li><span class="step-number">2</span><div><strong>提取个人偏好</strong><p>学习标签、年代、导演、制作公司和声优等特征带来的正负影响。</p></div></li>
-              <li><span class="step-number">3</span><div><strong>排序并保持多样</strong><p>排除所有已标记条目，融合相似度与质量分，再避免五个结果过于重复。</p></div></li>
-            </ol>
-            <p class="method-confidence"><strong>适合度不等于置信度。</strong>适合度预测你可能会打多高的分；置信度表示证据是否充分，由偏好特征支持（50%）、相似收藏（30%）和全站评分样本（20%）组成。</p>
-            <p class="method-privacy">全部计算在当前浏览器完成，不接入 AI，也不会修改你的收藏。</p>
-          </div>
-        </details>`;
-      this.$(".content").scrollTop = 0;
+      results.innerHTML = `<div class="recommendation-list">${recommendations.map((item, index) => this.recommendationCard(item, Number(pagination.startIndex || 0) + index)).join("")}</div>${this.paginationMarkup(pagination)}`;
     }
 
     showError(error) {
@@ -1195,12 +1119,7 @@
     }
 
     updateSyncLabel() {
-      const label = this.$('[data-role="sync-label"]');
-      if (!this.state.lastSync) {
-        label.textContent = "尚未同步";
-        return;
-      }
-      label.textContent = `更新于 ${new Date(this.state.lastSync).toLocaleString("zh-CN", { hour12: false })}`;
+      if (this.state.lastSync) this.$(".refresh-data").title = `根据最新收藏重新推荐；上次更新：${new Date(this.state.lastSync).toLocaleString("zh-CN", { hour12: false })}`;
     }
 
     async saveCurrentResult() {
@@ -1209,6 +1128,7 @@
         value: {
           generatedAt: this.state.lastSync,
           recommendations: this.state.current,
+          pageOrder: this.state.pageOrder,
           summary: {
             collectionCount: this.state.profile.collectionCount,
             ratedCount: this.state.profile.ratedCount,
@@ -1219,240 +1139,18 @@
     }
 
     styles() {
-      return `<style>
-        :host {
-          --primary: #a6405c;
-          --primary-strong: #852f49;
-          --on-primary: #fff;
-          --accent: #0e6e82;
-          --surface: #fff;
-          --surface-alt: #f7f4f5;
-          --surface-raised: #fff;
-          --text: #211b1d;
-          --text-muted: #655b5f;
-          --border: #ded5d8;
-          --scrim: rgba(21, 15, 17, .52);
-          --danger: #9e2f39;
-          --focus: #0e6e82;
-          --shadow: 0 20px 60px rgba(39, 20, 26, .22);
-          --launcher-shadow: 0 2px 6px rgba(39, 20, 26, .08), 0 12px 30px rgba(99, 36, 55, .14);
-          --z-host: 10000;
-          color: var(--text);
-          font-family: Inter, "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-          font-size: 16px;
-          line-height: 1.5;
-          position: relative;
-          z-index: var(--z-host);
-        }
-        :host([data-theme="dark"]) {
-          --primary: #dd8098;
-          --primary-strong: #ef9caf;
-          --on-primary: #281117;
-          --accent: #77c9d8;
-          --surface: #191516;
-          --surface-alt: #241f21;
-          --surface-raised: #2b2527;
-          --text: #f7f0f2;
-          --text-muted: #c9bcc0;
-          --border: #4b4044;
-          --scrim: rgba(0, 0, 0, .66);
-          --danger: #ff9ba4;
-          --focus: #77c9d8;
-          --shadow: 0 20px 60px rgba(0, 0, 0, .48);
-          --launcher-shadow: 0 2px 8px rgba(0, 0, 0, .28), 0 14px 34px rgba(0, 0, 0, .34);
-        }
-        *, *::before, *::after { box-sizing: border-box; }
-        button, select, a { font: inherit; }
-        button, select { color: inherit; }
-        button { cursor: pointer; }
-        button:disabled { cursor: not-allowed; opacity: .48; }
-        button:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible {
-          outline: 3px solid color-mix(in srgb, var(--focus) 70%, transparent);
-          outline-offset: 2px;
-        }
-        .icon svg, button svg, a svg { width: 20px; height: 20px; fill: currentColor; flex: 0 0 auto; }
-        .launcher {
-          position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(76px, calc(env(safe-area-inset-bottom) + 20px));
-          z-index: 10; min-height: 56px; padding: 7px 11px 7px 8px;
-          border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)); border-radius: 17px;
-          background: color-mix(in srgb, var(--surface-raised) 94%, transparent); color: var(--text); box-shadow: var(--launcher-shadow);
-          -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-          display: inline-flex; align-items: center; gap: 10px; text-align: left;
-          transition: background 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out, transform 150ms ease-out;
-        }
-        .launcher-mark {
-          width: 40px; height: 40px; border-radius: 12px; background: var(--primary); color: var(--on-primary);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 4px 10px color-mix(in srgb, var(--primary) 24%, transparent);
-          display: grid; place-items: center; flex: 0 0 auto; transition: background 180ms ease-out, transform 180ms ease-out;
-        }
-        .launcher-mark svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-        .launcher-copy { min-width: 62px; display: grid; gap: 2px; line-height: 1; }
-        .launcher-copy small { color: var(--primary); font-size: 9px; font-weight: 850; letter-spacing: .15em; }
-        .launcher-copy strong { white-space: nowrap; font-size: 14px; font-weight: 750; letter-spacing: .01em; }
-        .launcher-arrow { width: 16px; height: 20px; color: var(--text-muted); display: grid; place-items: center; transition: color 180ms ease-out, transform 180ms ease-out; }
-        .launcher-arrow svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-        .launcher:hover {
-          border-color: color-mix(in srgb, var(--primary) 38%, var(--border)); background: var(--surface-raised);
-          box-shadow: 0 3px 8px rgba(39, 20, 26, .1), 0 16px 36px rgba(99, 36, 55, .18); transform: translateY(-2px);
-        }
-        .launcher:hover .launcher-mark { background: var(--primary-strong); transform: rotate(-3deg); }
-        .launcher:hover .launcher-arrow { color: var(--primary); transform: translateX(2px); }
-        .launcher:active { transform: translateY(0) scale(.98); }
-        .scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); }
-        .drawer {
-          position: fixed; inset: 0 0 0 auto; z-index: 30; width: min(560px, 100vw); height: 100dvh;
-          background: var(--surface); color: var(--text); box-shadow: var(--shadow); transform: translateX(102%);
-          transition: transform 240ms ease-out; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden;
-        }
-        .drawer.open { transform: translateX(0); }
-        .drawer-header { padding: 24px 24px 18px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--border); }
-        .eyebrow { margin: 0 0 3px; color: var(--primary); font-size: 12px; font-weight: 800; letter-spacing: .16em; }
-        h2 { margin: 0; font-size: 25px; line-height: 1.2; letter-spacing: -.025em; }
-        .subline { margin: 5px 0 0; color: var(--text-muted); font-size: 13px; }
-        .icon-button { width: 44px; height: 44px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); display: grid; place-items: center; }
-        .icon-button:hover { border-color: var(--primary); color: var(--primary); }
-        .controls { padding: 12px 24px; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
-        .type-picker {
-          min-height: 68px; padding: 10px 11px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised);
-          display: grid; grid-template-columns: 40px minmax(0, 1fr) 124px; align-items: center; gap: 10px;
-          transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out;
-        }
-        .type-picker:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
-        .type-picker:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
-        .type-picker-icon {
-          width: 40px; height: 40px; border-radius: 11px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary);
-          display: grid; place-items: center;
-        }
-        .type-picker-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
-        .type-picker-copy { min-width: 0; display: grid; gap: 2px; }
-        .type-picker-copy strong { font-size: 13px; line-height: 1.35; }
-        .type-picker-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-        .type-select-shell { position: relative; min-width: 0; }
-        .type-select-shell select {
-          width: 100%; height: 44px; padding: 0 34px 0 12px; border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border)); border-radius: 10px;
-          appearance: none; -webkit-appearance: none; background: var(--surface-alt); color: var(--text); font-size: 13px; font-weight: 750; cursor: pointer;
-          transition: border-color 180ms ease-out, background 180ms ease-out;
-        }
-        .type-select-shell select:hover { border-color: color-mix(in srgb, var(--primary) 48%, var(--border)); background: var(--surface); }
-        .type-select-arrow { position: absolute; right: 10px; top: 50%; width: 18px; height: 18px; color: var(--primary); pointer-events: none; transform: translateY(-50%); display: grid; place-items: center; }
-        .type-select-arrow svg { width: 17px; height: 17px; fill: currentColor; }
-        .progress-region { padding: 10px 24px 0; min-height: 42px; background: var(--surface); }
-        .progress-copy { display: flex; justify-content: space-between; gap: 16px; color: var(--text-muted); font-size: 12px; }
-        .progress-track { height: 3px; margin-top: 7px; overflow: hidden; background: var(--surface-alt); border-radius: 99px; }
-        .progress-track span { display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left; background: var(--primary); transition: transform 180ms ease-out; }
-        .progress-track.active span { animation: progress-pulse 1.4s ease-in-out infinite; }
-        .content { min-height: 0; overflow: auto; padding: 18px 24px 28px; overscroll-behavior: contain; }
-        .welcome, .error { min-height: 55vh; display: grid; align-content: center; justify-items: center; text-align: center; max-width: 400px; margin: auto; }
-        .welcome-mark, .error-icon { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; background: var(--surface-alt); color: var(--primary); }
-        .welcome-mark svg, .error-icon svg { width: 32px; height: 32px; fill: currentColor; }
-        .welcome h3, .error h3 { margin: 20px 0 8px; font-size: 22px; }
-        .welcome > p, .error > p { margin: 0 0 22px; color: var(--text-muted); }
-        .privacy { margin-top: 15px !important; font-size: 12px; }
-        .primary, .secondary, .ghost { min-height: 44px; border-radius: 10px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; font-weight: 750; }
-        .primary { border: 1px solid var(--primary); background: var(--primary); color: var(--on-primary); }
-        .primary:hover { background: var(--primary-strong); }
-        .secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
-        .secondary:hover { border-color: var(--primary); color: var(--primary); }
-        .ghost { border: 1px solid transparent; background: transparent; color: var(--text-muted); }
-        .ghost:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
-        .compact { min-height: 38px; padding: 0 11px; font-size: 13px; }
-        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
-        .summary > div { padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); display: grid; gap: 1px; }
-        .summary strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-        .summary span { color: var(--text-muted); font-size: 11px; }
-        .recommendation-list { display: grid; gap: 12px; }
-        .recommendation-card { position: relative; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 15px; padding: 15px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface-raised); }
-        .rank { position: absolute; top: 8px; left: 8px; z-index: 1; min-width: 27px; padding: 3px 6px; border-radius: 7px; background: rgba(23, 23, 23, .82); color: #fff; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
-        .cover { width: 88px; height: 124px; border-radius: 9px; overflow: hidden; background: var(--surface-alt); display: grid; place-items: center; text-decoration: none; }
-        .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .cover-placeholder { color: var(--text-muted); font-size: 10px; font-weight: 800; line-height: 1.1; text-align: center; }
-        .card-body { min-width: 0; }
-        .title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-        .title-row h3 { margin: 0; font-size: 16px; line-height: 1.35; }
-        .title-row h3 a { color: var(--text); text-decoration: none; }
-        .title-row h3 a:hover { color: var(--primary); }
-        .original { margin: 3px 0 0; color: var(--text-muted); font-size: 11px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .fit-score { flex: 0 0 auto; min-width: 54px; display: grid; justify-items: end; }
-        .fit-score strong { color: var(--primary); font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
-        .fit-score span { color: var(--text-muted); font-size: 10px; }
-        .metrics { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-        .content-tag-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 9px; }
-        .content-tag-label { flex: 0 0 auto; padding-top: 3px; color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; }
-        .content-tags { min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; }
-        .content-tags span { padding: 3px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-alt); color: var(--text); font-size: 11px; line-height: 1.35; }
-        .confidence { color: var(--accent); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: underline dotted color-mix(in srgb, var(--accent) 55%, transparent); text-underline-offset: 3px; cursor: help; }
-        .evidence-panel { margin: 10px 0 12px; padding: 9px 10px 10px; border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border)); border-radius: 10px; background: var(--surface-alt); }
-        .evidence-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
-        .evidence-header > strong { font-size: 11px; letter-spacing: .04em; }
-        .evidence-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 7px; }
-        .evidence-list li { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 8px; }
-        .evidence-kind { min-width: 38px; padding: 2px 5px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); color: var(--text-muted); font-size: 10px; font-weight: 800; line-height: 1.45; text-align: center; }
-        .evidence-list p { min-width: 0; margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-        .evidence-list p strong { color: var(--text); font-weight: 700; }
-        .card-actions { display: flex; flex-wrap: wrap; gap: 7px; }
-        .method-note { margin-top: 16px; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-alt); transition: border-color 180ms ease-out, background 180ms ease-out; }
-        .method-note[open] { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: var(--surface-raised); }
-        .method-note summary { min-height: 64px; padding: 10px 14px; cursor: pointer; display: grid; grid-template-columns: 36px minmax(0, 1fr) 28px; align-items: center; gap: 11px; list-style: none; }
-        .method-note summary::-webkit-details-marker { display: none; }
-        .method-note summary::marker { display: none; content: ""; }
-        .method-note summary:hover .method-copy strong { color: var(--primary); }
-        .method-icon { width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary); display: grid; place-items: center; }
-        .method-icon svg { width: 18px; height: 18px; fill: currentColor; }
-        .method-copy { min-width: 0; display: grid; gap: 2px; }
-        .method-copy strong { font-size: 13px; line-height: 1.35; transition: color 180ms ease-out; }
-        .method-copy small { overflow: hidden; color: var(--text-muted); font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-        .method-chevron { width: 28px; height: 28px; border-radius: 8px; color: var(--text-muted); display: grid; place-items: center; transition: transform 180ms ease-out, color 180ms ease-out; }
-        .method-chevron svg { width: 18px; height: 18px; fill: currentColor; }
-        .method-note[open] .method-chevron { transform: rotate(180deg); color: var(--primary); }
-        .method-body { padding: 14px; border-top: 1px solid var(--border); }
-        .method-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
-        .method-steps li { display: grid; grid-template-columns: 26px minmax(0, 1fr); align-items: start; gap: 10px; }
-        .step-number { width: 26px; height: 26px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 8px; color: var(--primary); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; display: grid; place-items: center; }
-        .method-steps strong { display: block; margin: 1px 0 2px; font-size: 12px; line-height: 1.4; }
-        .method-steps p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
-        .method-confidence { margin: 13px 0 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 9px; color: var(--text-muted); font-size: 11px; line-height: 1.55; }
-        .method-confidence strong { color: var(--text); }
-        .method-privacy { margin: 13px 0 0; padding: 10px 11px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text-muted); font-size: 11px; line-height: 1.5; }
-        .drawer-footer { min-height: 66px; padding: 10px 24px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; gap: 8px; }
-        .drawer-footer button { min-height: 44px; }
-        .version { margin-left: auto; color: var(--text-muted); font-size: 11px; }
-        .refresh-data svg { width: 17px; height: 17px; }
-        .spinning svg { animation: spin 1s linear infinite; }
-        .toast { position: absolute; left: 20px; right: 20px; bottom: 76px; z-index: 5; min-height: 50px; padding: 8px 10px 8px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--text); color: var(--surface); box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; }
-        .toast[hidden] { display: none; }
-        .toast span { flex: 1; font-size: 13px; }
-        .toast button { min-width: 56px; min-height: 36px; border: 0; border-radius: 8px; background: var(--surface); color: var(--text); font-weight: 700; }
-        [hidden] { display: none !important; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes progress-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-        @media (max-width: 560px) {
-          .drawer-header { padding: 18px 16px 14px; }
-          h2 { font-size: 22px; }
-          .controls { padding: 12px 16px; }
-          .progress-region { padding-inline: 16px; }
-          .content { padding: 15px 16px 24px; }
-          .drawer-footer { padding-inline: 16px; }
-          .recommendation-card { grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 12px; }
-          .cover { width: 72px; height: 102px; }
-          .fit-score strong { font-size: 20px; }
-          .ghost.compact span { display: none; }
-          .summary > div { padding: 9px; }
-        }
-        @media (max-width: 390px) {
-          .launcher { right: 12px; bottom: max(68px, calc(env(safe-area-inset-bottom) + 12px)); width: 52px; min-height: 52px; padding: 6px; border-radius: 16px; }
-          .launcher-mark { width: 38px; height: 38px; }
-          .launcher-copy, .launcher-arrow { display: none; }
-          .type-picker { grid-template-columns: 40px minmax(0, 1fr) 110px; padding-inline: 10px; }
-          .type-picker-copy small { display: none; }
-          .recommendation-card { grid-template-columns: 64px minmax(0, 1fr); }
-          .cover { width: 64px; height: 90px; }
-          .title-row { gap: 6px; }
-          .metrics span:nth-child(2) { display: none; }
-          .drawer-footer .refresh-data span { display: none; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
-        }
+      return `<style>${globalThis.BangumiProfileUI.css}
+        .module-head select{font-size:12px;border:0;background:var(--soft);padding:4px 24px 4px 9px}.module-head .refresh-data{font-size:12px}
+        .welcome{padding:28px 0;color:var(--muted);text-align:center}
+        .recommendation-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;align-items:start}
+        .recommendation-card{min-width:0}.cover{display:block;aspect-ratio:5/7;background:var(--soft);overflow:hidden;border-radius:7px}.cover img{display:block;width:100%;height:100%;object-fit:cover;transition:opacity .18s}.cover:hover img{opacity:.88}.cover-placeholder{display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:var(--muted)}
+        .recommendation-card h3{margin-top:9px;font-size:13px;line-height:1.5}.recommendation-card h3 a{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}
+        .content-tags{display:flex;flex-wrap:wrap;gap:4px 7px;margin:5px 0;color:var(--link);font-size:11px;min-height:18px}.brief{font-size:12px;line-height:1.6;color:var(--muted);margin:6px 0 8px}
+        .evidence-panel{font-size:12px}.evidence-panel summary{color:var(--site-link);width:fit-content;border-radius:4px;list-style:none}.evidence-panel summary::after{content:" ›"}.evidence-panel[open] summary::after{content:" ‹"}.evidence-body{padding-top:8px;line-height:1.75;overflow-wrap:anywhere}.evidence-body p{margin-bottom:8px}.evidence-score{color:var(--muted);font-size:11px}.evidence-body button{color:var(--muted);padding-left:0}
+        .pagination{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.page-button{display:flex;align-items:center;gap:3px}.page-button svg{fill:currentColor;width:14px;height:14px}.page-status label{display:flex;align-items:center;gap:5px}.page-select-shell select{border:0;padding:3px 4px;background:var(--soft);font-size:12px}.page-select-arrow{display:none}
+        .toast{margin-top:12px;padding:8px 12px;background:var(--pink-soft);border-radius:6px;color:var(--link);font-size:12px}.toast button{margin-left:8px;color:var(--link)}
+        @container(max-width:620px){.recommendation-list{gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}}
+        @container(max-width:400px){.recommendation-list{gap:20px 14px;grid-template-columns:repeat(2,minmax(0,1fr))}.pagination{gap:9px}.page-button{padding:5px}.module-head select{font-size:16px}}
       </style>`;
     }
   }

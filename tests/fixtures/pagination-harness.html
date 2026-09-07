@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>推荐分页测试</title>
+    <style>
+      body { margin: 0; min-height: 100vh; background: #f4f1f2; }
+    </style>
+  </head>
+  <body data-bgm-profile-demo>
+    <div id="user_home"><div id="blog"></div></div>
+    <script>
+      document.title = "分页测试：载入中";
+      document.querySelectorAll("#bgmpr-host, #bgmstats-host").forEach((element) => element.remove());
+    </script>
+    <script src="/dist/bangumi-personal-recommender.user.js"></script>
+    <script>
+      document.title = "分页测试：脚本已载入";
+      setTimeout(() => {
+        const app = window.BangumiPersonalRecommender;
+        if (!app) {
+          document.title = "分页测试：组件未挂载";
+          return;
+        }
+        const labels = ["治愈", "青春", "奇幻", "日常", "成长"];
+        const pageOrder = Array.from({ length: 180 }, (_, index) => ({
+          subject: {
+            id: 900001 + index,
+            name: `Pagination Test ${index + 1}`,
+            nameCn: `分页测试作品 ${index + 1}`,
+            image: "invalid:",
+            rating: { score: 8.4 - index * 0.08, total: 1200 - index * 25 },
+            tags: [
+              { name: labels[index % labels.length], count: 100 - index },
+              { name: "日本动画", count: 80 - index },
+            ],
+            persons: [],
+            characters: [],
+          },
+          predicted: 8.7 - index * 0.06,
+          normalizedScore: 0.9 - index * 0.03,
+          confidence: index < 5 ? "高" : "中",
+          confidenceScore: index < 5 ? 0.82 : 0.67,
+          confidenceBreakdown: { featureSupport: 0.42, neighborEvidence: 0.2, ratingEvidence: 0.18 },
+          positiveReasons: [{ type: "tag", label: labels[index % labels.length], weight: 0.8 }],
+          negativeReasons: [],
+          similarWorks: [],
+          nearest: [],
+          features: { [`tag:${labels[index % labels.length]}`]: 1 },
+        }));
+        app.open();
+        setTimeout(() => {
+          try {
+            app.state.profile = { collectionCount: 240, ratedCount: 168 };
+            app.state.eligibleCandidateCount = 180;
+            app.state.pageOrder = pageOrder;
+            app.state.scoredPool = pageOrder.slice();
+            app.renderFromPool();
+            const pageStatus = app.shadow.querySelector(".page-status")?.innerText || "分页缺失";
+            document.title = `分页测试：${app.state.current.length} 个｜${pageStatus.replace(/\s+/g, " ")}`;
+          } catch (error) {
+            document.title = `分页测试错误：${error.message}`;
+          }
+        }, 800);
+      }, 200);
+    </script>
+  </body>
+</html>

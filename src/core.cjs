@@ -46,8 +46,8 @@
   });
 
   const ROLE_MIN_SUPPORT = Object.freeze({
-    tag: 2,
-    meta: 2,
+    tag: 4,
+    meta: 3,
     director: 2,
     studio: 3,
     creator: 2,
@@ -73,7 +73,11 @@
       "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
     ]),
   });
-  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃疼|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
+  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|扭曲|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃[疼痛药]|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|乱伦|工口|成人|里番|r18|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
+  const GENERIC_TAGS = new Set([
+    "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
+    "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
+  ]);
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
@@ -333,6 +337,8 @@
 
   function creditAlias(value) {
     return normalizeText(value)
+      .replace(/岡/g, "冈")
+      .replace(/磨里/g, "麿里")
       .replace(/[瀬瀨]/g, "濑")
       .replace(/戸/g, "户")
       .replace(/間/g, "间")
@@ -348,6 +354,77 @@
       .replace(/[\s._・·—–-]+/g, "");
   }
 
+  function canonicalTagAlias(value) {
+    const alias = creditAlias(value);
+    if (/^(?:漫画改|漫畫改|漫改)$/.test(alias)) return "漫改";
+    if (/^(?:轻小说改|輕小說改|ライトノベル改)$/.test(alias)) return "轻小说改";
+    if (/^(?:游戏改|遊戲改|ゲーム改)$/.test(alias)) return "游戏改";
+    if (/^治[愈癒]$/.test(alias)) return "治愈";
+    if (/^校[园園]$/.test(alias)) return "校园";
+    if (/^原[创創]$/.test(alias)) return "原创";
+    if (/^愛情$/.test(alias)) return "爱情";
+    return alias;
+  }
+
+  function subjectCreativeAliases(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const aliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
+    const creativeValues = subject.infobox
+      .filter((entry) => /(?:导演|導演|監督|监修|監修|制作|製作|原作|作者|脚本|劇本|剧本|构成|構成|编剧|編劇|演出|分镜|分鏡|作画|作畫|设计|設計|音响|音響|音乐|音樂|音楽|摄影|攝影|剪辑|剪輯|企画|制片|配給|原画|原畫|美术|美術|色彩|主题歌|主題歌|op|ed|声优|聲優|配音)/i.test(normalizeText(entry?.key || entry?.k || "")))
+      .map((entry) => creditAlias(infoboxValueText(entry?.value ?? entry?.v ?? "")))
+      .filter(Boolean);
+    for (const tag of subject.tags) {
+      const alias = creditAlias(tag);
+      if (alias.length >= 2 && creativeValues.some((value) => value.includes(alias))) aliases.add(alias);
+    }
+    for (const person of subject.persons) {
+      for (const name of [person?.name, person?.name_cn, person?.nameCn]) {
+        const alias = creditAlias(name);
+        if (alias) aliases.add(alias);
+      }
+    }
+    for (const character of subject.characters) {
+      const actors = Array.isArray(character?.actors)
+        ? character.actors
+        : character?.actor
+          ? [character.actor]
+          : [];
+      for (const actor of actors) {
+        for (const name of [actor?.name, actor?.name_cn, actor?.nameCn]) {
+          const alias = creditAlias(name);
+          if (alias) aliases.add(alias);
+        }
+      }
+    }
+    return aliases;
+  }
+
+  function withoutCreativeContributors(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const aliases = subjectCreativeAliases(subject);
+    return {
+      ...subject,
+      tags: subject.tags.filter((tag) => !aliases.has(creditAlias(tag))),
+      metaTags: subject.metaTags.filter((tag) => !aliases.has(creditAlias(tag))),
+      persons: [],
+      characters: [],
+    };
+  }
+
+  function seriesFamilyKey(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const title = creditAlias(subject.nameCn || subject.name);
+    const embedded = subject.tags
+      .map(creditAlias)
+      .filter((tag) => tag.length >= 3 && title.includes(tag) && !GENERIC_TAGS.has(tag) && !CONTENT_TAG_PATTERN.test(tag))
+      .sort((left, right) => left.length - right.length)[0];
+    if (embedded) return `tag:${embedded}`;
+    const stripped = title
+      .replace(/(?:第?[0-9一二三四五六七八九十]+(?:期|季|部|章)|season[0-9]+|[0-9]+(?:st|nd|rd|th)?season|part[0-9]+)$/i, "")
+      .replace(/(?:续篇|續篇|続編|续|續|2nd|second)$/i, "");
+    return `title:${stripped || title || subject.id}`;
+  }
+
   function addGroupedFeature(groups, role, id, label) {
     if (!id || !ROLE_WEIGHTS[role]) return;
     if (!groups.has(role)) groups.set(role, new Map());
@@ -358,14 +435,19 @@
     const subject = normalizeSubject(subjectInput);
     const groups = new Map();
     const labels = {};
+    const creativeAliases = subjectCreativeAliases(subject);
 
     const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
       .filter((tag) => !TEMPORAL_TAG.test(tag))
+      .filter((tag) => !GENERIC_TAGS.has(tag))
+      .filter((tag) => !creativeAliases.has(creditAlias(tag)))
       .slice(0, 18);
-    for (const tag of tagValues) addGroupedFeature(groups, "tag", tag, tag);
+    for (const tag of tagValues) addGroupedFeature(groups, "tag", canonicalTagAlias(tag), tag);
 
     for (const tag of subject.metaTags.slice(0, 8)) {
-      if (!TEMPORAL_TAG.test(tag)) addGroupedFeature(groups, "meta", tag, tag);
+      if (!TEMPORAL_TAG.test(tag) && !GENERIC_TAGS.has(tag) && !creativeAliases.has(creditAlias(tag))) {
+        addGroupedFeature(groups, "meta", canonicalTagAlias(tag), tag);
+      }
     }
 
     const year = Number.parseInt(subject.date.slice(0, 4), 10);
@@ -411,6 +493,20 @@
     return { features, labels };
   }
 
+  function buildSimilarityVector(subjectInput, collectionTags = []) {
+    const vector = buildFeatureVector(subjectInput, collectionTags);
+    const features = {};
+    for (const [token, magnitude] of Object.entries(vector.features)) {
+      const role = tokenPrefix(token);
+      const label = vector.labels[token] || token.slice(token.indexOf(":") + 1);
+      if ((role === "tag" || role === "meta") && CONTENT_TAG_PATTERN.test(label)) {
+        const contentToken = `content:${canonicalTagAlias(label)}`;
+        features[contentToken] = Math.max(Number(features[contentToken] || 0), magnitude);
+      }
+    }
+    return { features, labels: vector.labels };
+  }
+
   function calculateRatingBaseline(collections) {
     const rated = collections.filter((item) => item.rate > 0);
     const userMean = mean(rated.map((item) => item.rate)) || 7;
@@ -443,9 +539,13 @@
     const baseline = calculateRatingBaseline(collections);
     const stats = new Map();
     const anchors = [];
+    const ratedFamilies = new Set();
 
     for (const item of rated) {
       const vector = buildFeatureVector(item.subject, item.tags);
+      const similarityVector = buildSimilarityVector(item.subject, item.tags);
+      const familyKey = seriesFamilyKey(item.subject);
+      ratedFamilies.add(familyKey);
       const expected = expectedRating(item.subject, baseline);
       const residual = clamp((item.rate - expected) / 2.5, -1.5, 1.5);
       anchors.push({
@@ -454,16 +554,19 @@
         rate: item.rate,
         residual,
         features: vector.features,
+        similarityFeatures: similarityVector.features,
+        familyKey,
       });
 
       for (const [token, magnitude] of Object.entries(vector.features)) {
         const current = stats.get(token) || {
-          support: 0,
-          weightedResidual: 0,
+          families: new Map(),
           label: vector.labels[token] || token,
         };
-        current.support += 1;
-        current.weightedResidual += residual * magnitude;
+        const family = current.families.get(familyKey) || { count: 0, weightedResidual: 0 };
+        family.count += 1;
+        family.weightedResidual += residual * magnitude;
+        current.families.set(familyKey, family);
         stats.set(token, current);
       }
     }
@@ -471,14 +574,21 @@
     const featureWeights = {};
     const featureSupport = {};
     const featureLabels = {};
-    const ratedCount = Math.max(1, rated.length);
+    const ratedCount = Math.max(1, ratedFamilies.size);
     for (const [token, stat] of stats.entries()) {
       const role = tokenPrefix(token);
-      if (stat.support < (ROLE_MIN_SUPPORT[role] || 2)) continue;
+      const support = stat.families.size;
+      const configuredMinimum = ROLE_MIN_SUPPORT[role] || 2;
+      const minimumSupport = (role === "tag" || role === "meta")
+        ? Math.min(configuredMinimum, ratedCount >= 60 ? 4 : ratedCount >= 20 ? 3 : 2)
+        : configuredMinimum;
+      if (support < minimumSupport) continue;
       const shrinkage = ROLE_SHRINKAGE[role] || 4;
-      const idf = clamp(Math.log((ratedCount + 1) / (stat.support + 1)) + 1, 1, 2.5);
-      featureWeights[token] = (stat.weightedResidual / (shrinkage + stat.support)) * idf;
-      featureSupport[token] = stat.support;
+      const weightedResidual = [...stat.families.values()]
+        .reduce((sum, family) => sum + family.weightedResidual / family.count, 0);
+      const idf = clamp(Math.log((ratedCount + 1) / (support + 1)) + 1, 1, 2.5);
+      featureWeights[token] = (weightedResidual / (shrinkage + support)) * idf;
+      featureSupport[token] = support;
       featureLabels[token] = stat.label;
     }
 
@@ -571,10 +681,6 @@
   function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 24) {
     const subject = normalizeSubject(subjectInput);
     const creditAliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
-    const genericLabels = new Set([
-      "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
-      "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
-    ]);
     const titleAliases = new Set(
       [subject.name, subject.nameCn]
         .map(creditAlias)
@@ -605,7 +711,7 @@
       .filter((entry) =>
         entry.label &&
         !TEMPORAL_TAG.test(entry.label) &&
-        !genericLabels.has(normalizeText(entry.label)) &&
+        !GENERIC_TAGS.has(normalizeText(entry.label)) &&
         !creditAliases.has(creditAlias(entry.label)) &&
         !titleAliases.has(creditAlias(entry.label)) &&
         [...entry.label].length <= 18,
@@ -738,6 +844,7 @@
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
+    const similarityVector = buildSimilarityVector(subject);
     const contributions = Object.entries(vector.features)
       .map(([token, magnitude]) => ({
         token,
@@ -753,21 +860,41 @@
       Math.sqrt(Math.max(1, featureMass));
     const content = Math.tanh(contentRaw * 2.2);
 
+    const seenFamilies = new Set();
     const neighborCandidates = profile.anchors
-      .map((anchor) => ({
-        anchor,
-        similarity: weightedJaccard(vector.features, anchor.features),
-      }))
+      .map((anchor) => {
+        const anchorFeatures = anchor.similarityFeatures || anchor.features;
+        const sharedContentCount = Object.keys(similarityVector.features)
+          .filter((token) => Number(anchorFeatures[token] || 0) > 0)
+          .length;
+        return {
+          anchor,
+          sharedContentCount,
+          similarity: sharedContentCount >= 2
+            ? weightedJaccard(similarityVector.features, anchorFeatures)
+            : 0,
+        };
+      })
       .filter((entry) => entry.similarity >= 0.04)
       .sort((a, b) => b.similarity - a.similarity)
+      .filter((entry) => {
+        const familyKey = entry.anchor.familyKey || `subject:${entry.anchor.subjectId}`;
+        if (seenFamilies.has(familyKey)) return false;
+        seenFamilies.add(familyKey);
+        return true;
+      })
       .slice(0, 6);
     const similarityMass = neighborCandidates.reduce((sum, entry) => sum + entry.similarity, 0);
-    const neighbor = similarityMass
+    const rawNeighbor = similarityMass
       ? neighborCandidates.reduce(
           (sum, entry) => sum + entry.similarity * entry.anchor.residual,
           0,
         ) / similarityMass
       : 0;
+    const neighborReliability = similarityMass
+      ? (similarityMass / (similarityMass + 0.75)) * Math.min(1, neighborCandidates.length / 3)
+      : 0;
+    const neighbor = rawNeighbor * neighborReliability;
 
     const bayes = bayesianScore(subject, profile.baseline.globalMean);
     const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
@@ -810,6 +937,8 @@
       bayesianScore: bayes,
       contentScore: content,
       neighborScore: neighbor,
+      rawNeighborScore: rawNeighbor,
+      neighborReliability,
       qualityScore: quality,
       positiveReasons,
       negativeReasons,
@@ -819,6 +948,8 @@
       confidenceScore,
       confidenceBreakdown,
       features: vector.features,
+      similarityFeatures: similarityVector.features,
+      diversityFeatures: similarityVector.features,
     };
   }
 
@@ -837,7 +968,9 @@
       contentScore: blend("contentScore"),
       neighborScore: blend("neighborScore"),
       qualityScore: blend("qualityScore"),
-      diversityFeatures: baseScore?.features || supplementalScore?.features || {},
+      similarityFeatures: baseScore?.similarityFeatures || supplementalScore?.similarityFeatures || {},
+      diversityFeatures: baseScore?.diversityFeatures || baseScore?.similarityFeatures || baseScore?.features
+        || supplementalScore?.diversityFeatures || supplementalScore?.similarityFeatures || supplementalScore?.features || {},
     };
   }
 
@@ -853,37 +986,43 @@
 
   function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
     const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
-    const remaining = scoredInputs.slice();
+    const remaining = scoredInputs.map((item) => ({
+      item,
+      maxSimilarity: 0,
+      sameStudioCount: 0,
+      studioTokens: Object.keys(item.diversityFeatures || item.features || {})
+        .filter((token) => token.startsWith("studio:")),
+    }));
     const selected = [];
     while (selected.length < count && remaining.length) {
       let bestIndex = -1;
       let bestValue = -Infinity;
       for (let index = 0; index < remaining.length; index += 1) {
-        const candidate = remaining[index];
-        const candidateDiversityFeatures = candidate.diversityFeatures || candidate.features;
-        const maxSimilarity = selected.length
-          ? Math.max(
-              ...selected.map((item) =>
-                weightedJaccard(candidateDiversityFeatures, item.diversityFeatures || item.features),
-              ),
-            )
-          : 0;
-        const studioTokens = Object.keys(candidateDiversityFeatures).filter((token) => token.startsWith("studio:"));
-        const sameStudioCount = selected.filter((item) =>
-          studioTokens.some((token) => (item.diversityFeatures || item.features)[token]),
-        ).length;
+        const entry = remaining[index];
+        const candidate = entry.item;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
+        const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
           candidate.normalizedScore -
-          penalty * maxSimilarity -
-          Math.max(0, sameStudioCount - 1) * 0.12 +
+          penalty * entry.maxSimilarity -
+          studioPenalty +
           explorationJitter;
         if (adjusted > bestValue) {
           bestValue = adjusted;
           bestIndex = index;
         }
       }
-      selected.push(remaining.splice(bestIndex, 1)[0]);
+      const [chosen] = remaining.splice(bestIndex, 1);
+      selected.push(chosen.item);
+      const chosenFeatures = chosen.item.diversityFeatures || chosen.item.features || {};
+      for (const entry of remaining) {
+        const candidateFeatures = entry.item.diversityFeatures || entry.item.features || {};
+        entry.maxSimilarity = Math.max(
+          entry.maxSimilarity,
+          weightedJaccard(candidateFeatures, chosenFeatures),
+        );
+        if (entry.studioTokens.some((token) => chosenFeatures[token])) entry.sameStudioCount += 1;
+      }
     }
     return selected;
   }
@@ -936,6 +1075,8 @@
     return profile.topFeatures
       .filter((entry) => entry.weight > 0 && entry.token.startsWith("tag:"))
       .filter((entry) => !TEMPORAL_TAG.test(entry.label))
+      .filter((entry) => !GENERIC_TAGS.has(normalizeText(entry.label)))
+      .filter((entry) => CONTENT_TAG_PATTERN.test(entry.label))
       .slice(0, count)
       .map((entry) => entry.label);
   }
@@ -959,7 +1100,11 @@
     normalizeInfoboxRole,
     splitCreditNames,
     extractInfoboxCredits,
+    subjectCreativeAliases,
+    withoutCreativeContributors,
+    seriesFamilyKey,
     buildFeatureVector,
+    buildSimilarityVector,
     calculateRatingBaseline,
     expectedRating,
     trainProfile,
