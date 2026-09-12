@@ -1,0 +1,9 @@
+# Personal snapshots and generated results stay local.
+data/
+snapshot.json
+characters.json
+results.json
+simple-results.json
+rankings.csv
+REPORT.md
+run-output.txt

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.10.3
-// @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
+// @version      0.9.1
+// @description  个人主页的动画回顾与个性推荐：年代柱图、标签词云、长篇片架与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
 // @match        http://bgm.tv/*
@@ -119,8 +119,8 @@
   });
 
   const ROLE_MIN_SUPPORT = Object.freeze({
-    tag: 4,
-    meta: 3,
+    tag: 2,
+    meta: 2,
     director: 2,
     studio: 3,
     creator: 2,
@@ -146,11 +146,7 @@
       "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
     ]),
   });
-  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|扭曲|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃[疼痛药]|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|乱伦|工口|成人|里番|r18|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
-  const GENERIC_TAGS = new Set([
-    "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
-    "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
-  ]);
+  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃疼|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
 
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
@@ -194,21 +190,6 @@
     if (!target) return false;
     const collection = normalizeCollection(collectionInput);
     return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
-  }
-
-  function candidateExclusion(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const title = normalizeText(`${subject.name} ${subject.nameCn}`);
-    const tagText = normalizeText([...subject.metaTags, ...subject.tags].join(" "));
-    const formatText = `${normalizeText(subject.platform)} ${tagText}`;
-    if (/(?:剧场版|劇場版|映画|movie|film|ova|oad|special|特别篇|特別篇|sp\b)/i.test(`${title} ${formatText}`)) {
-      return "movie-or-special";
-    }
-    if (/(?:总集篇|總集篇|総集編|重制版|重製版|重置版|remake|リメイク|再编辑|再編輯|再編集|re-?edit|recap|digest|etv版)/i.test(`${title} ${tagText}`)) {
-      return "recut-or-remake";
-    }
-    if (subject.totalEpisodes > 0 && subject.totalEpisodes < 10) return "under-10-episodes";
-    return null;
   }
 
   function isAdultRecommendationCandidate(subjectInput, allowDirectOnly = false) {
@@ -292,8 +273,6 @@
         : [],
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
-      platform: String(raw.platform || ""),
-      totalEpisodes: Number(raw.total_episodes || raw.eps || raw.totalEpisodes || 0),
       adultEvidenceVerified: raw.adultEvidenceVerified === undefined
         ? undefined
         : Boolean(raw.adultEvidenceVerified),
@@ -427,8 +406,6 @@
 
   function creditAlias(value) {
     return normalizeText(value)
-      .replace(/岡/g, "冈")
-      .replace(/磨里/g, "麿里")
       .replace(/[瀬瀨]/g, "濑")
       .replace(/戸/g, "户")
       .replace(/間/g, "间")
@@ -444,77 +421,6 @@
       .replace(/[\s._・·—–-]+/g, "");
   }
 
-  function canonicalTagAlias(value) {
-    const alias = creditAlias(value);
-    if (/^(?:漫画改|漫畫改|漫改)$/.test(alias)) return "漫改";
-    if (/^(?:轻小说改|輕小說改|ライトノベル改)$/.test(alias)) return "轻小说改";
-    if (/^(?:游戏改|遊戲改|ゲーム改)$/.test(alias)) return "游戏改";
-    if (/^治[愈癒]$/.test(alias)) return "治愈";
-    if (/^校[园園]$/.test(alias)) return "校园";
-    if (/^原[创創]$/.test(alias)) return "原创";
-    if (/^愛情$/.test(alias)) return "爱情";
-    return alias;
-  }
-
-  function subjectCreativeAliases(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const aliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
-    const creativeValues = subject.infobox
-      .filter((entry) => /(?:导演|導演|監督|监修|監修|制作|製作|原作|作者|脚本|劇本|剧本|构成|構成|编剧|編劇|演出|分镜|分鏡|作画|作畫|设计|設計|音响|音響|音乐|音樂|音楽|摄影|攝影|剪辑|剪輯|企画|制片|配給|原画|原畫|美术|美術|色彩|主题歌|主題歌|op|ed|声优|聲優|配音)/i.test(normalizeText(entry?.key || entry?.k || "")))
-      .map((entry) => creditAlias(infoboxValueText(entry?.value ?? entry?.v ?? "")))
-      .filter(Boolean);
-    for (const tag of subject.tags) {
-      const alias = creditAlias(tag);
-      if (alias.length >= 2 && creativeValues.some((value) => value.includes(alias))) aliases.add(alias);
-    }
-    for (const person of subject.persons) {
-      for (const name of [person?.name, person?.name_cn, person?.nameCn]) {
-        const alias = creditAlias(name);
-        if (alias) aliases.add(alias);
-      }
-    }
-    for (const character of subject.characters) {
-      const actors = Array.isArray(character?.actors)
-        ? character.actors
-        : character?.actor
-          ? [character.actor]
-          : [];
-      for (const actor of actors) {
-        for (const name of [actor?.name, actor?.name_cn, actor?.nameCn]) {
-          const alias = creditAlias(name);
-          if (alias) aliases.add(alias);
-        }
-      }
-    }
-    return aliases;
-  }
-
-  function withoutCreativeContributors(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const aliases = subjectCreativeAliases(subject);
-    return {
-      ...subject,
-      tags: subject.tags.filter((tag) => !aliases.has(creditAlias(tag))),
-      metaTags: subject.metaTags.filter((tag) => !aliases.has(creditAlias(tag))),
-      persons: [],
-      characters: [],
-    };
-  }
-
-  function seriesFamilyKey(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const title = creditAlias(subject.nameCn || subject.name);
-    const embedded = subject.tags
-      .map(creditAlias)
-      .filter((tag) => tag.length >= 3 && title.includes(tag) && !GENERIC_TAGS.has(tag) && !CONTENT_TAG_PATTERN.test(tag))
-      .sort((left, right) => left.length - right.length)[0];
-    if (embedded) return `tag:${embedded}`;
-    const stripped = title
-      .replace(/(?:第?[0-9一二三四五六七八九十]+(?:期|季|部|章)|season[0-9]+|[0-9]+(?:st|nd|rd|th)?season|part[0-9]+)$/i, "")
-      .replace(/(?:续篇|續篇|続編|续|續|2nd|second)$/i, "");
-    return `title:${stripped || title || subject.id}`;
-  }
-
   function addGroupedFeature(groups, role, id, label) {
     if (!id || !ROLE_WEIGHTS[role]) return;
     if (!groups.has(role)) groups.set(role, new Map());
@@ -525,19 +431,14 @@
     const subject = normalizeSubject(subjectInput);
     const groups = new Map();
     const labels = {};
-    const creativeAliases = subjectCreativeAliases(subject);
 
     const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
       .filter((tag) => !TEMPORAL_TAG.test(tag))
-      .filter((tag) => !GENERIC_TAGS.has(tag))
-      .filter((tag) => !creativeAliases.has(creditAlias(tag)))
       .slice(0, 18);
-    for (const tag of tagValues) addGroupedFeature(groups, "tag", canonicalTagAlias(tag), tag);
+    for (const tag of tagValues) addGroupedFeature(groups, "tag", tag, tag);
 
     for (const tag of subject.metaTags.slice(0, 8)) {
-      if (!TEMPORAL_TAG.test(tag) && !GENERIC_TAGS.has(tag) && !creativeAliases.has(creditAlias(tag))) {
-        addGroupedFeature(groups, "meta", canonicalTagAlias(tag), tag);
-      }
+      if (!TEMPORAL_TAG.test(tag)) addGroupedFeature(groups, "meta", tag, tag);
     }
 
     const year = Number.parseInt(subject.date.slice(0, 4), 10);
@@ -583,20 +484,6 @@
     return { features, labels };
   }
 
-  function buildSimilarityVector(subjectInput, collectionTags = []) {
-    const vector = buildFeatureVector(subjectInput, collectionTags);
-    const features = {};
-    for (const [token, magnitude] of Object.entries(vector.features)) {
-      const role = tokenPrefix(token);
-      const label = vector.labels[token] || token.slice(token.indexOf(":") + 1);
-      if ((role === "tag" || role === "meta") && CONTENT_TAG_PATTERN.test(label)) {
-        const contentToken = `content:${canonicalTagAlias(label)}`;
-        features[contentToken] = Math.max(Number(features[contentToken] || 0), magnitude);
-      }
-    }
-    return { features, labels: vector.labels };
-  }
-
   function calculateRatingBaseline(collections) {
     const rated = collections.filter((item) => item.rate > 0);
     const userMean = mean(rated.map((item) => item.rate)) || 7;
@@ -629,38 +516,27 @@
     const baseline = calculateRatingBaseline(collections);
     const stats = new Map();
     const anchors = [];
-    const ratedFamilies = new Set();
 
     for (const item of rated) {
       const vector = buildFeatureVector(item.subject, item.tags);
-      const similarityVector = buildSimilarityVector(item.subject, item.tags);
-      const familyKey = seriesFamilyKey(item.subject);
-      ratedFamilies.add(familyKey);
-      // Personal ratings are an absolute rubric: 7 is neutral, 8+ is liked,
-      // and 6- is disliked. Site score is handled separately by the quality
-      // term and must not turn a neutral 7 into positive preference evidence.
-      const residual = clamp((item.rate - 7) / 3, -1, 1);
-      if (residual !== 0) {
-        anchors.push({
-          subjectId: item.subjectId,
-          name: item.subject.nameCn || item.subject.name,
-          rate: item.rate,
-          residual,
-          features: vector.features,
-          similarityFeatures: similarityVector.features,
-          familyKey,
-        });
-      }
+      const expected = expectedRating(item.subject, baseline);
+      const residual = clamp((item.rate - expected) / 2.5, -1.5, 1.5);
+      anchors.push({
+        subjectId: item.subjectId,
+        name: item.subject.nameCn || item.subject.name,
+        rate: item.rate,
+        residual,
+        features: vector.features,
+      });
 
       for (const [token, magnitude] of Object.entries(vector.features)) {
         const current = stats.get(token) || {
-          families: new Map(),
+          support: 0,
+          weightedResidual: 0,
           label: vector.labels[token] || token,
         };
-        const family = current.families.get(familyKey) || { count: 0, weightedResidual: 0 };
-        family.count += 1;
-        family.weightedResidual += residual * magnitude;
-        current.families.set(familyKey, family);
+        current.support += 1;
+        current.weightedResidual += residual * magnitude;
         stats.set(token, current);
       }
     }
@@ -668,21 +544,14 @@
     const featureWeights = {};
     const featureSupport = {};
     const featureLabels = {};
-    const ratedCount = Math.max(1, ratedFamilies.size);
+    const ratedCount = Math.max(1, rated.length);
     for (const [token, stat] of stats.entries()) {
       const role = tokenPrefix(token);
-      const support = stat.families.size;
-      const configuredMinimum = ROLE_MIN_SUPPORT[role] || 2;
-      const minimumSupport = (role === "tag" || role === "meta")
-        ? Math.min(configuredMinimum, ratedCount >= 60 ? 4 : ratedCount >= 20 ? 3 : 2)
-        : configuredMinimum;
-      if (support < minimumSupport) continue;
+      if (stat.support < (ROLE_MIN_SUPPORT[role] || 2)) continue;
       const shrinkage = ROLE_SHRINKAGE[role] || 4;
-      const weightedResidual = [...stat.families.values()]
-        .reduce((sum, family) => sum + family.weightedResidual / family.count, 0);
-      const idf = clamp(Math.log((ratedCount + 1) / (support + 1)) + 1, 1, 2.5);
-      featureWeights[token] = (weightedResidual / (shrinkage + support)) * idf;
-      featureSupport[token] = support;
+      const idf = clamp(Math.log((ratedCount + 1) / (stat.support + 1)) + 1, 1, 2.5);
+      featureWeights[token] = (stat.weightedResidual / (shrinkage + stat.support)) * idf;
+      featureSupport[token] = stat.support;
       featureLabels[token] = stat.label;
     }
 
@@ -775,6 +644,10 @@
   function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 24) {
     const subject = normalizeSubject(subjectInput);
     const creditAliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
+    const genericLabels = new Set([
+      "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
+      "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
+    ]);
     const titleAliases = new Set(
       [subject.name, subject.nameCn]
         .map(creditAlias)
@@ -805,7 +678,7 @@
       .filter((entry) =>
         entry.label &&
         !TEMPORAL_TAG.test(entry.label) &&
-        !GENERIC_TAGS.has(normalizeText(entry.label)) &&
+        !genericLabels.has(normalizeText(entry.label)) &&
         !creditAliases.has(creditAlias(entry.label)) &&
         !titleAliases.has(creditAlias(entry.label)) &&
         [...entry.label].length <= 18,
@@ -938,7 +811,6 @@
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
-    const similarityVector = buildSimilarityVector(subject);
     const contributions = Object.entries(vector.features)
       .map(([token, magnitude]) => ({
         token,
@@ -954,48 +826,29 @@
       Math.sqrt(Math.max(1, featureMass));
     const content = Math.tanh(contentRaw * 2.2);
 
-    const seenFamilies = new Set();
     const neighborCandidates = profile.anchors
-      .map((anchor) => {
-        const anchorFeatures = anchor.similarityFeatures || anchor.features;
-        const sharedContentCount = Object.keys(similarityVector.features)
-          .filter((token) => Number(anchorFeatures[token] || 0) > 0)
-          .length;
-        return {
-          anchor,
-          sharedContentCount,
-          similarity: sharedContentCount >= 2
-            ? weightedJaccard(similarityVector.features, anchorFeatures)
-            : 0,
-        };
-      })
+      .map((anchor) => ({
+        anchor,
+        similarity: weightedJaccard(vector.features, anchor.features),
+      }))
       .filter((entry) => entry.similarity >= 0.04)
       .sort((a, b) => b.similarity - a.similarity)
-      .filter((entry) => {
-        const familyKey = entry.anchor.familyKey || `subject:${entry.anchor.subjectId}`;
-        if (seenFamilies.has(familyKey)) return false;
-        seenFamilies.add(familyKey);
-        return true;
-      })
       .slice(0, 6);
     const similarityMass = neighborCandidates.reduce((sum, entry) => sum + entry.similarity, 0);
-    const rawNeighbor = similarityMass
+    const neighbor = similarityMass
       ? neighborCandidates.reduce(
           (sum, entry) => sum + entry.similarity * entry.anchor.residual,
           0,
         ) / similarityMass
       : 0;
-    const neighborReliability = similarityMass
-      ? (similarityMass / (similarityMass + 0.75)) * Math.min(1, neighborCandidates.length / 3)
-      : 0;
-    const neighbor = rawNeighbor * neighborReliability;
 
     const bayes = bayesianScore(subject, profile.baseline.globalMean);
     const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
-    // Nearest titles remain available as human-readable evidence, but no
-    // longer affect ranking. The global profile already aggregates the full
-    // collection and proved more robust than a second, six-title correction.
-    const weights = { content: 0.8, neighbor: 0, quality: 0.2 };
+    const weights = {
+      stable: { content: 0.5, neighbor: 0.2, quality: 0.3 },
+      balanced: { content: 0.6, neighbor: 0.25, quality: 0.15 },
+      explore: { content: 0.67, neighbor: 0.25, quality: 0.08 },
+    }[mode] || { content: 0.6, neighbor: 0.25, quality: 0.15 };
     const normalizedScore =
       weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
     const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
@@ -1029,9 +882,7 @@
       normalizedScore,
       bayesianScore: bayes,
       contentScore: content,
-      neighborScore: 0,
-      rawNeighborScore: rawNeighbor,
-      neighborReliability,
+      neighborScore: neighbor,
       qualityScore: quality,
       positiveReasons,
       negativeReasons,
@@ -1041,8 +892,6 @@
       confidenceScore,
       confidenceBreakdown,
       features: vector.features,
-      similarityFeatures: similarityVector.features,
-      diversityFeatures: similarityVector.features,
     };
   }
 
@@ -1061,9 +910,7 @@
       contentScore: blend("contentScore"),
       neighborScore: blend("neighborScore"),
       qualityScore: blend("qualityScore"),
-      similarityFeatures: baseScore?.similarityFeatures || supplementalScore?.similarityFeatures || {},
-      diversityFeatures: baseScore?.diversityFeatures || baseScore?.similarityFeatures || baseScore?.features
-        || supplementalScore?.diversityFeatures || supplementalScore?.similarityFeatures || supplementalScore?.features || {},
+      diversityFeatures: baseScore?.features || supplementalScore?.features || {},
     };
   }
 
@@ -1079,10 +926,6 @@
 
   function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
     const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
-    const scores = scoredInputs.map((item) => Number(item.normalizedScore || 0));
-    const highestScore = scores.length ? Math.max(...scores) : 0;
-    const lowestScore = scores.length ? Math.min(...scores) : 0;
-    const scoreRange = highestScore - lowestScore;
     const remaining = scoredInputs.map((item) => ({
       item,
       maxSimilarity: 0,
@@ -1097,13 +940,10 @@
       for (let index = 0; index < remaining.length; index += 1) {
         const entry = remaining[index];
         const candidate = entry.item;
-        const relevance = scoreRange > 1e-9
-          ? (Number(candidate.normalizedScore || 0) - lowestScore) / scoreRange
-          : 1;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
         const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
-          relevance -
+          candidate.normalizedScore -
           penalty * entry.maxSimilarity -
           studioPenalty +
           explorationJitter;
@@ -1175,8 +1015,6 @@
     return profile.topFeatures
       .filter((entry) => entry.weight > 0 && entry.token.startsWith("tag:"))
       .filter((entry) => !TEMPORAL_TAG.test(entry.label))
-      .filter((entry) => !GENERIC_TAGS.has(normalizeText(entry.label)))
-      .filter((entry) => CONTENT_TAG_PATTERN.test(entry.label))
       .slice(0, count)
       .map((entry) => entry.label);
   }
@@ -1191,7 +1029,6 @@
     normalizeTagList,
     subjectHasTag,
     collectionHasTag,
-    candidateExclusion,
     isAdultRecommendationCandidate,
     normalizeInfoboxEntries,
     normalizeSubject,
@@ -1201,11 +1038,7 @@
     normalizeInfoboxRole,
     splitCreditNames,
     extractInfoboxCredits,
-    subjectCreativeAliases,
-    withoutCreativeContributors,
-    seriesFamilyKey,
     buildFeatureVector,
-    buildSimilarityVector,
     calculateRatingBaseline,
     expectedRating,
     trainProfile,
@@ -1380,7 +1213,7 @@
     })).sort((a, b) => b.works - a.works || b.averageRate - a.averageRate || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
   }
 
-  function rankEntries(entries, mode = "works", topShare = 0.1, minimumWorksExclusive = null) {
+  function rankEntries(entries, mode = "works", topShare = 0.1) {
     const rows = Array.isArray(entries) ? [...entries] : [];
     const byWorks = (a, b) => b.works - a.works || b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN");
     if (mode !== "average" || !rows.length) return { rows: rows.sort(byWorks), cutoffWorks: 0, eligibleCount: rows.length };
@@ -1388,7 +1221,7 @@
     const validShare = Math.min(1, Math.max(0.01, number(topShare) || 0.1));
     const workRanked = [...rows].sort(byWorks);
     const cutoffIndex = Math.max(0, Math.ceil(workRanked.length * validShare) - 1);
-    const cutoffWorks = Number.isFinite(minimumWorksExclusive) ? minimumWorksExclusive + 1 : (workRanked[cutoffIndex]?.works || 0);
+    const cutoffWorks = workRanked[cutoffIndex]?.works || 0;
     const eligible = rows.filter((row) => row.works >= cutoffWorks && row.ratedWorks > 0);
     eligible.sort((a, b) => b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.works - a.works || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
     return { rows: eligible, cutoffWorks, eligibleCount: eligible.length };
@@ -1410,14 +1243,7 @@
       if (year) years[year] = (years[year] || 0) + 1;
       for (const tag of row.tags) {
         const normalized = text(tag);
-        if (!normalized) continue;
-        const bucket = tags[normalized] || { count: 0, ratedCount: 0, scoreSum: 0 };
-        bucket.count += 1;
-        if (row.rate > 0) {
-          bucket.ratedCount += 1;
-          bucket.scoreSum += row.rate;
-        }
-        tags[normalized] = bucket;
+        if (normalized) tags[normalized] = (tags[normalized] || 0) + 1;
       }
     }
 
@@ -1494,12 +1320,7 @@
       distributions: {
         ratings: Array.from({ length: 10 }, (_, index) => ({ score: index + 1, count: ratingDistribution[index + 1] || 0 })),
         years: Object.entries(years).map(([year, count]) => ({ year: number(year), count })).sort((a, b) => b.year - a.year),
-        tags: Object.entries(tags).map(([name, bucket]) => ({
-          name,
-          count: bucket.count,
-          ratedCount: bucket.ratedCount,
-          averageRate: bucket.ratedCount ? bucket.scoreSum / bucket.ratedCount : 0,
-        })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
+        tags: Object.entries(tags).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
         longest: [...knownEps].sort((a, b) => b.subject.eps - a.subject.eps || a.subject.name.localeCompare(b.subject.name, "zh-CN")).map((row) => ({
           id: row.subject.id, name: row.subject.name, nameCn: row.subject.nameCn, eps: row.subject.eps,
         })),
@@ -1528,7 +1349,7 @@
     const counts = new Map(rows.filter(row => /^\d{4}$/.test(String(row.year))).map(row => [Number(row.year), Math.max(0, Number(row.count) || 0)]));
     if (!counts.size) return [];
     const first = Math.min(...counts.keys()), last = Math.max(...counts.keys());
-    return Array.from({ length: last - first + 1 }, (_, index) => ({ year: last - index, count: counts.get(last - index) || 0 }));
+    return Array.from({ length: last - first + 1 }, (_, index) => ({ year: first + index, count: counts.get(first + index) || 0 }));
   }
   function axis(maximum) {
     const raw = Math.max(1, maximum) / 4;
@@ -1537,191 +1358,36 @@
     return { max: step * 4, ticks: Array.from({ length: 5 }, (_, i) => step * i) };
   }
   function fontSize(count, min, max) {
-    return max === min ? 30 : 12 + 38 * Math.pow(Math.max(0, Math.min(1, (count - min) / (max - min))), 0.82);
-  }
-  function scoreFontSize(score, scores) {
-    const values = (Array.isArray(scores) ? scores : []).map(Number).filter(Number.isFinite);
-    if (values.length < 2) return 26;
-    // Average scores occupy a narrow numeric range. Use their empirical percentile
-    // for visual weight, while keeping the exact score in the label/tooltip.
-    const rounded = Math.round(Number(score) * 100) / 100;
-    const levels = [...new Set(values.map(value => Math.round(value * 100) / 100))].sort((a, b) => a - b);
-    if (levels.length < 2) return 26;
-    const percentile = Math.max(0, Math.min(1, levels.indexOf(rounded) / (levels.length - 1)));
-    return 13 + 35 * Math.pow(percentile, 1.65);
-  }
-  function isTemporalTag(value) {
-    const tag = String(value || '').trim().replace(/\s+/g, '');
-    return /^(?:19|20)\d{2}(?:年)?$/.test(tag)
-      || /^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$/.test(tag)
-      || /^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$/.test(tag)
-      || /^(?:1|4|7|10)月(?:番|新番)$/.test(tag);
-  }
-  function featuredTags(rows) {
-    return rows.filter(row => Number(row.count) > 10 && !isTemporalTag(row.name)).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
-  }
-  function circularItems(items, width, spread = false) {
-    if (!items.length) return items;
-    if (width >= 460) return items;
-    const radius = Math.max(1, (width - 20) / 2);
-    const budget = Math.PI * radius * radius * (width < 460 ? 0.38 : 0.36);
-    const candidates = spread
-      ? items.flatMap((_, index) => index >= Math.ceil(items.length / 2) ? [] : [items[index], items[items.length - 1 - index]]).filter((item, index, rows) => rows.indexOf(item) === index)
-      : items;
-    const selected = [];
-    let area = 0;
-    for (const item of candidates) {
-      const next = (item.width + 5) * (item.height + 5);
-      if (selected.length >= 8 && area + next > budget) {
-        if (!spread) break;
-        continue;
-      }
-      area += next;
-      selected.push(item);
-    }
-    return selected.sort((a, b) => a.index - b.index);
+    return max === min ? 24 : 13 + 23 * (Math.sqrt(Math.max(min, count)) - Math.sqrt(min)) / (Math.sqrt(max) - Math.sqrt(min));
   }
   function overlaps(a, b, gap = 5) {
     return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
   }
-  function episodeDistribution(rows) {
-    const counts = new Map();
-    for (const row of rows) {
-      const eps = Number(row.eps);
-      if (Number.isInteger(eps) && eps > 0) counts.set(eps, (counts.get(eps) || 0) + 1);
-    }
-    const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
-    const ranked = [...counts].map(([eps, count]) => ({ eps, count })).sort((a, b) => b.count - a.count || a.eps - b.eps);
-    // At most five common episode counts plus one combined low-frequency slice.
-    const common = ranked.filter(row => row.count / total >= 0.03).slice(0, 5);
-    const kept = new Set(common.map(row => row.eps));
-    const rest = ranked.filter(row => !kept.has(row.eps));
-    const groups = common.map(row => ({ ...row, label: row.eps + ' 话' }));
-    if (rest.length) groups.push({ label: '其他', count: rest.reduce((sum, row) => sum + row.count, 0), members: rest.sort((a,b) => a.eps-b.eps) });
-    return { total, groups: groups.map(row => ({ ...row, share: row.count / total })) };
-  }
-  function pieSlices(groups) {
-    let position = -Math.PI / 2;
-    return groups.map(group => {
-      const angle = group.share * 2 * Math.PI, end = position + angle;
-      const startPoint = [120 + 110 * Math.cos(position), 120 + 110 * Math.sin(position)];
-      const endPoint = [120 + 110 * Math.cos(end), 120 + 110 * Math.sin(end)];
-      const path = group.share >= 1 - 1e-10 ? 'M120 10 A110 110 0 1 1 120 230 A110 110 0 1 1 120 10 Z'
-        : 'M120 120 L' + startPoint.join(' ') + ' A110 110 0 ' + (angle > Math.PI ? 1 : 0) + ' 1 ' + endPoint.join(' ') + ' Z';
-      const middle = position + angle / 2;
-      position = end;
-      return { ...group, path, labelX: 120 + 73 * Math.cos(middle), labelY: 120 + 73 * Math.sin(middle) };
-    });
-  }
   function packCloud(items, width) {
     if (!items.length) return { items: [], height: 0 };
-    const baseHeight = Math.max(width * 1.02, 260);
-    const maximumHeight = Math.max(width * 1.08, 260);
-    const tryEllipse = (candidates, currentHeight, scale) => {
-      candidates = candidates.map(item => ({
-        ...item,
-        width: Math.ceil(item.width * scale),
-        height: Math.ceil(item.height * scale),
-        fitScale: scale
-      }));
-      const placed = [];
-      const cells = new Map(), cellSize = 56;
-      const keys = (box, padding = 0) => {
-        const result = [];
-        for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
-          for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
-        return result;
-      };
-      const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
-      const insideEllipse = box => {
-        const radiusX = width / 2 - 8, radiusY = currentHeight / 2 - 8;
-        const distanceX = Math.abs(box.x + box.width / 2 - width / 2) + box.width / 2;
-        const distanceY = Math.abs(box.y + box.height / 2 - currentHeight / 2) + box.height / 2;
-        return (distanceX / radiusX) ** 2 + (distanceY / radiusY) ** 2 <= 1;
-      };
-      for (const item of candidates) {
-        let box;
-        const seed = Math.abs(Number(item.seed) || item.index + 1);
-        const phase = (seed % 6283) / 1000;
-        const direction = seed % 2 ? 1 : -1;
-        const angularStep = 0.31 + (seed % 11) / 100;
-        for (let step = 0; step < 5200; step++) {
-          const progress = step / 5200;
-          const angle = phase + direction * step * angularStep;
-          const radius = Math.pow(progress, 0.57);
-          const candidate = {
-            ...item,
-            x: (width - item.width) / 2 + Math.cos(angle) * radius * (width / 2 - 10 - item.width / 2),
-            y: (currentHeight - item.height) / 2 + Math.sin(angle) * radius * (currentHeight / 2 - 10 - item.height / 2)
-          };
-          if (insideEllipse(candidate) && !collides(candidate)) { box = candidate; break; }
-        }
-        if (!box) return null;
-        placed.push(box);
-        for (const key of keys(box, 5)) {
-          if (!cells.has(key)) cells.set(key, []);
-          cells.get(key).push(box);
-        }
-      }
-      return placed;
-    };
-    let candidates = items.slice(), reduced = false;
-    while (candidates.length) {
-      const scales = reduced ? [0.78, 0.72] : [1, 0.92, 0.85, 0.78, 0.72];
-      for (const scale of scales) {
-        for (let attempt = 0; attempt < 4; attempt++) {
-          const height = Math.ceil(Math.min(maximumHeight, baseHeight + width * 0.02 * attempt));
-          const placed = tryEllipse(candidates, height, scale);
-          if (placed) return { items: placed, height, scale, shape: 'ellipse', omitted: items.length - candidates.length };
-        }
-      }
-      if (candidates.length <= 8) break;
-      candidates = candidates.slice(0, Math.max(8, candidates.length - Math.max(1, Math.ceil(candidates.length * 0.1))));
-      reduced = true;
-    }
-    return packDenseCloud(candidates, width);
-  }
-  function packDenseCloud(items, width) {
-    // Complete clouds can contain hundreds of rare tags. Free-rectangle packing
-    // avoids the long fallback tail of a bounded spiral without dropping tags.
-    const area = items.reduce((sum, item) => sum + (item.width + 5) * (item.height + 5), 0);
-    let height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.72));
-    const focusY = Math.min(180, height / 2);
-    let free = [{ x: 8, y: 8, width: width - 16, height: height - 16 }];
+    const area = items.reduce((sum, item) => sum + (item.width + 8) * (item.height + 8), 0);
+    const height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.58));
     const placed = [];
+    let bottom = height;
     for (const item of items) {
-      const w = Math.min(width - 16, item.width + 5), h = item.height + 5;
-      const seed = Math.abs(Number(item.seed) || item.index + 1);
-      const phase = (seed % 6283) / 1000;
-      const targetX = width / 2 + Math.cos(phase) * width * 0.17;
-      const targetY = focusY + Math.sin(phase) * Math.min(width, height) * 0.12;
-      let best;
-      for (const rect of free) {
-        if (rect.width < w || rect.height < h) continue;
-        const x = Math.max(rect.x, Math.min(targetX - w / 2, rect.x + rect.width - w));
-        const y = Math.max(rect.y, Math.min(targetY - h / 2, rect.y + rect.height - h));
-        const distance = ((x + w / 2 - targetX) / width) ** 2 + ((y + h / 2 - targetY) / Math.min(height, width)) ** 2;
-        if (!best || distance < best.distance) best = { x, y, width: w, height: h, distance };
+      let box;
+      // Deterministic elliptical spiral: the most frequent term stays central.
+      for (let step = 0; step < 2200; step++) {
+        const angle = step * 0.38, radius = Math.sqrt(step / 2200) * 0.75;
+        const candidate = { ...item, x: (width - item.width) / 2 + Math.cos(angle) * radius * width, y: (height - item.height) / 2 + Math.sin(angle) * radius * height };
+        if (candidate.x < 8 || candidate.x + item.width > width - 8 || candidate.y < 8 || candidate.y + item.height > height - 8) continue;
+        if (!placed.some(other => overlaps(candidate, other))) { box = candidate; break; }
       }
-      if (!best) {
-        free.push({ x: 8, y: height, width: width - 16, height: h });
-        best = { x: 8, y: height, width: w, height: h };
-        height += h;
-      }
-      const split = [];
-      for (const r of free) {
-        if (!overlaps(r, best, 0)) { split.push(r); continue; }
-        if (best.x > r.x) split.push({ ...r, width: best.x - r.x });
-        if (best.x + w < r.x + r.width) split.push({ ...r, x: best.x + w, width: r.x + r.width - best.x - w });
-        if (best.y > r.y) split.push({ ...r, height: best.y - r.y });
-        if (best.y + h < r.y + r.height) split.push({ ...r, y: best.y + h, height: r.y + r.height - best.y - h });
-      }
-      free = split.filter((a, i) => !split.some((b, j) => i !== j && a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height && (j < i || a.width !== b.width || a.height !== b.height)));
-      placed.push({ ...item, x: best.x, y: best.y });
+      // A non-overlapping fallback keeps unusually long labels; nothing is dropped.
+      if (!box) { box = { ...item, x: Math.max(8, (width - item.width) / 2), y: bottom + 8 }; bottom += item.height + 8; }
+      placed.push(box);
     }
-    return { items: placed, height: Math.max(...placed.map(item => item.y + item.height)) + 12 };
+    const top = Math.min(...placed.map(item => item.y));
+    const end = Math.max(...placed.map(item => item.y + item.height));
+    const actualHeight = Math.max(220, end - top + 24);
+    return { items: placed.map(item => ({ ...item, y: item.y - top + (actualHeight - (end - top)) / 2 })), height: actualHeight };
   }
-  const api = { yearSeries, axis, fontSize, scoreFontSize, isTemporalTag, featuredTags, circularItems, overlaps, packCloud, episodeDistribution, pieSlices };
+  const api = { yearSeries, axis, fontSize, overlaps, packCloud };
   global.BangumiStatsViz = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
@@ -1744,9 +1410,9 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.3";
+  const APP_VERSION = "0.9.1";
   const RANK_PAGE_SIZE = 12;
-  const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
+  const TABS = Object.freeze({ overview: "年代", tags: "标签", longest: "作品", staff: "创作", cast: "声优" });
 
   function text(value) { return String(value ?? ""); }
   function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
@@ -1880,9 +1546,9 @@
         cancel: false,
         activeTab: "overview",
         activeStaffGroup: "directors",
-        tagMetric: "count",
         search: { staff: "", cast: "" },
-        pages: { staff: 1, cast: 1 },
+        pages: { staff: 1, cast: 1, tags: 1, longest: 1 },
+        yearPage: 0,
         sort: { staff: "works", cast: "works" },
         collections: [],
         people: {},
@@ -1919,6 +1585,7 @@
       this.cloudObserver = new ResizeObserver(() => this.scheduleCloud());
       this.cloudObserver.observe(this.host);
       document.fonts?.ready.then(() => { const cloud = this.$('.tag-cloud'); if (cloud) delete cloud.dataset.width; this.scheduleCloud(); });
+      this.shadow.addEventListener('error', event => { if (event.target.matches('.work-cover img')) event.target.hidden = true; }, true);
       const updateTheme = () => { this.host.dataset.theme = this.detectTheme(); };
       updateTheme();
       new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
@@ -2066,11 +1733,8 @@
       if (action === "sync") this.sync(true);
       if (action === "all") this.enrichAll();
       if (action === "cancel") this.pauseEnrichment();
+      if (action === "year-page") { this.state.yearPage = Math.max(0, number(event.target.closest('[data-year-page]').dataset.yearPage)); this.render(); }
       if (action === "tab") { this.state.activeTab = event.target.closest("[data-tab]")?.dataset.tab || "overview"; this.render(); }
-      if (action === "tag-metric") {
-        const metric = event.target.closest("[data-metric]")?.dataset.metric;
-        if (["count", "average"].includes(metric)) { this.state.tagMetric = metric; this.render(); }
-      }
       if (action === "staff-group") { this.state.activeStaffGroup = event.target.closest("[data-group]")?.dataset.group || "directors"; this.state.search.staff = ""; this.state.pages.staff = 1; this.render(); }
       if (action === "sort") {
         const button = event.target.closest("[data-sort-kind]");
@@ -2122,8 +1786,7 @@
     }
     sortControls(kind) {
       const active = this.state.sort[kind];
-      const eligibility = kind === 'staff' && this.state.activeStaffGroup === 'studios' ? '仅作品数大于 10 部者入榜' : '仅作品数位于前 10% 者入榜';
-      return `<div class="sort-row"><span>排序</span><div class="sort-switch" role="group" aria-label="排名排序方式"><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="works" aria-pressed="${active === "works"}">作品数</button><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="average" aria-pressed="${active === "average"}">均分</button></div>${active === "average" ? `<small>${eligibility}</small>` : ""}</div>`;
+      return `<div class="sort-row"><span>排序</span><div class="sort-switch" role="group" aria-label="排名排序方式"><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="works" aria-pressed="${active === "works"}">作品数</button><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="average" aria-pressed="${active === "average"}">均分</button></div>${active === "average" ? '<small>仅作品数位于前 10% 者入榜</small>' : ""}</div>`;
     }
     pager(kind, page, pages) {
       if (pages <= 1) return "";
@@ -2147,52 +1810,47 @@
     overview(stats) {
       if (!stats.overview.works) return `<p class="empty">${!this.state.lastSync ? (/失败|异常/.test(this.state.progress.label) ? '可通过“更新”重试。' : '正在读取动画收藏…') : '还没有可回顾的动画。'}</p>`;
       if (this.state.activeTab === 'tags') return this.tags(stats.distributions.tags);
+      if (this.state.activeTab === 'longest') return this.works(stats.distributions.longest);
       return this.years(stats.distributions.years);
     }
     years(rows) {
       const series = Viz.yearSeries(rows);
       if (!series.length) return '<p class="empty">暂无年代资料。</p>';
+      const pages = Math.ceil(series.length / 12);
+      const page = this.state.yearPage = Math.min(pages - 1, this.state.yearPage);
+      const end = series.length - page * 12;
+      const shown = series.slice(Math.max(0, end - 12), end);
       const axis = Viz.axis(Math.max(...series.map(row => row.count)));
-      const first = series[0].year, last = series.at(-1).year;
-      const caption = `首播年份 · ${first}—${last}`;
-      return `<section class="year-chart" aria-label="看过动画的全部首播年份分布">
-        <div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span></div>
+      const caption = `首播年份 · ${shown[0].year}—${shown.at(-1).year}`;
+      return `<section class="year-chart" aria-label="看过动画的首播年份分布">
+        <div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span><div class="year-navigation"><button data-action="year-page" data-year-page="${page + 1}" ${page >= pages - 1 ? 'disabled' : ''} aria-label="更早的年份">←</button><button data-action="year-page" data-year-page="${page - 1}" ${page === 0 ? 'disabled' : ''} aria-label="更近的年份">→</button></div></div>
         <div class="year-plot"><div class="year-grid" aria-hidden="true">${axis.ticks.map(tick => `<span style="bottom:${tick / axis.max * 100}%"><b>${tick}</b></span>`).join('')}</div>
-        <div class="year-columns" style="--columns:${series.length}">${series.map(row => {
+        <div class="year-columns" style="--columns:${shown.length}">${shown.map(row => {
           const label = `${row.year} 年 · ${row.count} 部`;
-          const boundary = row.year === first || row.year === last;
-          const five = boundary || (row.year % 5 === 0 && first - row.year >= 3 && row.year - last >= 3);
-          const ten = boundary || (row.year % 10 === 0 && first - row.year >= 5 && row.year - last >= 5);
-          return `<button class="year-column" aria-label="${label}" title="${label}" data-viz-label="${label}" data-label-five="${five}" data-label-ten="${ten}" style="--height:${row.count / axis.max * 100}%"><span class="column-fill"><span class="column-value">${row.count || ''}</span></span><span class="column-year">${row.year}</span></button>`;
+          return `<button class="year-column" aria-label="${label}" title="${label}" data-viz-label="${label}" style="--height:${row.count / axis.max * 100}%"><span class="column-fill"><span class="column-value">${row.count || ''}</span></span><span class="column-year">${row.year}</span></button>`;
         }).join('')}</div></div></section>`;
     }
     tags(rows) {
-      rows = Viz.featuredTags(rows);
-      if (!rows.length) return '<p class="empty">还没有数量大于 10 部的标签。</p>';
-      const metric = this.state.tagMetric === 'average' ? 'average' : 'count';
-      const ranked = [...rows]
-        .filter(row => metric === 'count' || row.ratedCount > 0)
-        .sort((a, b) => metric === 'average'
-          ? b.averageRate - a.averageRate || b.ratedCount - a.ratedCount || b.count - a.count || a.name.localeCompare(b.name, 'zh-CN')
-          : b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
-      const values = ranked.map(row => metric === 'average' ? row.averageRate : row.count);
-      const min = Math.min(...values), max = Math.max(...values);
-      const caption = metric === 'average' ? '标签作品个人均分' : '标签出现次数';
-      const controls = `<div class="cloud-metric" role="group" aria-label="词云数值"><button type="button" data-action="tag-metric" data-metric="count" aria-pressed="${metric === 'count'}">出现次数</button><button type="button" data-action="tag-metric" data-metric="average" aria-pressed="${metric === 'average'}">个人均分</button></div>`;
-      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span>${controls}</div><div class="tag-cloud">${ranked.map((row, index) => {
-        const value = metric === 'average' ? row.averageRate : row.count;
-        const ratio = max === min ? 0.5 : (value - min) / (max - min);
-        const tone = ratio >= 0.72 ? 'hero' : ratio >= 0.42 ? 'strong' : ratio >= 0.18 ? 'medium' : 'quiet';
-        const size = metric === 'average' ? Viz.scoreFontSize(value, values) : Viz.fontSize(value, min, max);
-        const seed = Array.from(String(row.name)).reduce((hash, character) => Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0, 2166136261);
-        const angles = [0, -8, 5, -4, 8, 0, -6, 4, 0, 7, -5, 3];
-        const angle = ratio >= 0.72 ? 0 : angles[seed % angles.length];
-        const color = seed % 8;
-        const detail = metric === 'average'
-          ? `${row.name} · 个人均分 ${formatRate(row.averageRate)} · ${row.ratedCount}/${row.count} 部已评分`
-          : `${row.name} · ${row.count} 部`;
-        return `<button class="cloud-word" data-tone="${tone}" data-color="${color}" data-count="${row.count}" data-value="${value}" data-viz-label="${escapeHtml(detail)}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(detail)}" data-size="${size}" data-angle="${angle}" data-seed="${seed}" style="font-size:${size}px;--angle:${angle}deg;--delay:${Math.min(360, index * 12)}ms"><span class="cloud-label">${escapeHtml(row.name)}</span></button>`;
-      }).join('')}</div></section>`;
+      if (!rows.length) return '<p class="empty">暂无个人标签。</p>';
+      const pages = Math.ceil(rows.length / 32);
+      const page = this.state.pages.tags = Math.min(pages, this.state.pages.tags);
+      const shown = rows.slice((page - 1) * 32, page * 32);
+      const min = rows.at(-1).count, max = rows[0].count;
+      const caption = page === 1 ? '常用的标签' : '更多标签';
+      return `<section aria-label="个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span></div><div class="tag-cloud">${shown.map((row, index) => `<button class="cloud-word" data-viz-label="${escapeHtml(row.name)} · ${row.count} 部" title="${escapeHtml(row.name)} · ${row.count} 部" aria-label="${escapeHtml(row.name)}，${row.count} 部" data-size="${Viz.fontSize(row.count, min, max)}" style="font-size:${Viz.fontSize(row.count, min, max)}px;--word-color:var(${index % 5 === 0 ? '--ink' : index % 5 === 3 ? '--muted' : '--link'})">${escapeHtml(row.name)}</button>`).join('')}</div>${this.pager('tags', page, pages)}</section>`;
+    }
+    works(rows) {
+      if (!rows.length) return '<p class="empty">暂无集数资料。</p>';
+      const pages = Math.ceil(rows.length / 12);
+      const page = this.state.pages.longest = Math.min(pages, this.state.pages.longest);
+      const images = new Map(this.state.collections.map(row => [row.subjectId, row.subject.image]));
+      const maximum = Math.max(1, rows[0].eps);
+      return `<section aria-label="按话数排序的看过作品"><div class="viz-heading">长篇片架</div><ol class="longest-list" start="${(page - 1) * 12 + 1}">${rows.slice((page - 1) * 12, page * 12).map(row => {
+        const name = escapeHtml(row.nameCn || row.name);
+        const image = images.get(row.id);
+        const safeImage = /^https:\/\//i.test(image || '') ? image : '';
+        return `<li><a href="/subject/${row.id}" target="_blank" rel="noopener" title="${name} · ${row.eps} 话"><span class="work-cover">${safeImage ? `<img src="${escapeHtml(safeImage)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}<span class="cover-fallback" aria-hidden="true">${name}</span><strong>${formatNumber(row.eps)} 话</strong></span><span class="work-length" aria-hidden="true"><i style="width:${row.eps / maximum * 100}%"></i></span><span class="work-title">${name}</span></a></li>`;
+      }).join('')}</ol>${this.pager('longest', page, pages)}</section>`;
     }
     scheduleCloud() {
       cancelAnimationFrame(this.cloudFrame);
@@ -2205,56 +1863,29 @@
       if (width < 40 || cloud.dataset.width === String(width)) return;
       const words = Array.from(cloud.querySelectorAll('.cloud-word'));
       // Measure real browser text, including CJK/fallback fonts and browser text scaling.
-      words.forEach(word => {
-        word.hidden = false;
-        word.style.width = 'auto';
-        word.style.height = 'auto';
-        word.style.maxWidth = 'none';
-        word.style.removeProperty('--fit-scale');
-        const scale = Math.min(1, Math.pow(width / 680, width < 460 ? 0.58 : 0.35));
-        word.style.fontSize = Math.max(12, Number(word.dataset.size) * scale) + 'px';
-      });
-      words.forEach(word => {
-        const naturalWidth = word.querySelector('.cloud-label').offsetWidth;
-        if (naturalWidth > width - 32) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 32) / naturalWidth) + 'px';
-        word.style.maxWidth = (width - 20) + 'px';
-      });
       const boxes = words.map((word, index) => {
-        const label = word.querySelector('.cloud-label');
-        const angle = Math.abs(Number(word.dataset.angle) || 0) * Math.PI / 180;
-        let naturalWidth = label.offsetWidth;
-        let naturalHeight = label.offsetHeight;
-        let rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
-        if (rotatedWidth > width - 28) {
-          word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 28) / rotatedWidth) + 'px';
-          naturalWidth = label.offsetWidth;
-          naturalHeight = label.offsetHeight;
-          rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
-        }
-        const rotatedHeight = Math.abs(Math.sin(angle)) * naturalWidth + Math.abs(Math.cos(angle)) * naturalHeight;
-        return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 8, height: Math.ceil(rotatedHeight) + 6 };
+        word.style.maxWidth = 'none';
+        const scale = Math.min(1, Math.pow(width / 600, 0.35));
+        word.style.fontSize = Math.max(12, Number(word.dataset.size) * scale) + 'px';
+        const natural = word.getBoundingClientRect();
+        if (natural.width > width - 20) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 20) / natural.width) + 'px';
+        word.style.maxWidth = (width - 20) + 'px';
+        const rect = word.getBoundingClientRect();
+        return { index, width: rect.width, height: rect.height };
       });
-      const visibleBoxes = Viz.circularItems(boxes, width, this.state.tagMetric === 'average');
-      const layout = Viz.packCloud(visibleBoxes, width);
-      const visible = new Set(layout.items.map(box => box.index));
-      words.forEach((word, index) => { word.hidden = !visible.has(index); });
+      const layout = Viz.packCloud(boxes, width);
       for (const box of layout.items) {
         const word = words[box.index];
-        word.style.setProperty('--fit-scale', String(box.fitScale || 1));
-        word.style.width = box.width + 'px'; word.style.height = box.height + 'px';
         word.style.left = box.x + 'px'; word.style.top = box.y + 'px';
       }
       cloud.style.height = layout.height + 'px';
-      cloud.dataset.shape = layout.shape || 'dense';
-      cloud.dataset.visibleCount = String(layout.items.length);
-      cloud.dataset.fitScale = String(layout.scale || 1);
       cloud.dataset.width = width;
       cloud.classList.add('is-ready');
     }
     staff(stats) {
       const groups = [{ id: "directors", label: "导演" }, { id: "series", label: "系列构成" }, { id: "studios", label: "动画制作" }, { id: "originals", label: "原作 / 原案" }, { id: "scripts", label: "脚本" }, { id: "music", label: "音乐" }, { id: "characterDesign", label: "角色设计" }];
       const active = groups.find(group => group.id === this.state.activeStaffGroup) || groups[0];
-      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, 0.1, active.id === 'studios' ? 10 : null);
+      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, 0.1);
       const rows = this.filterRows(ranking.rows, this.state.search.staff);
       return `<div class="role-switch" aria-label="创作职位">${groups.map(group => `<button type="button" data-action="staff-group" data-group="${group.id}" aria-pressed="${group.id === active.id}">${group.label}</button>`).join("")}</div>${this.rankingTools("staff", active.label)}${this.listRows(rows, "staff", "staff")}`;
     }
@@ -2269,7 +1900,7 @@
     render() {
       const active = this.shadow.activeElement;
       const action = active?.getAttribute("data-action");
-      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-metric') || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
+      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
       const name = active?.getAttribute('aria-label');
       const settingsOpen = this.$(".data-settings")?.open;
       const stats = this.stats();
@@ -2279,7 +1910,7 @@
       const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
       this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><details class="data-settings" ${settingsOpen ? "open" : ""}><summary>更新</summary><div><button data-action="sync" ${this.state.busy ? "disabled" : ""}>更新收藏</button><button data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>补全人物资料</button>${this.state.busy ? '<button data-action="cancel">暂停补全</button>' : ""}</div></details></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
       if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
-        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-metric') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
+        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
         if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
       });
       this.scheduleCloud();
@@ -2287,17 +1918,16 @@
     styles() { return `<style>${globalThis.BangumiProfileUI.css}
       .content{padding:18px 0 0;min-height:230px}.content header{display:none}
       .data-settings{position:relative;font-size:12px;color:var(--muted)}.data-settings summary{padding:4px 9px;border-radius:6px}.data-settings>div{position:absolute;right:0;top:32px;z-index:2;display:grid;min-width:150px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 3px 12px #0000000a}
-      .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
-      .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
-      .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
-      .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
-      .tag-cloud{--cloud-c0:#a52f5b;--cloud-c1:#6546b8;--cloud-c2:#08758c;--cloud-c3:#25734f;--cloud-c4:#a7520b;--cloud-c5:#8b3979;--cloud-c6:#315d9b;--cloud-c7:#7b5427;position:relative;isolation:isolate;min-height:280px;visibility:hidden;overflow:hidden;border-radius:18px;background:radial-gradient(circle at 14% 20%,#ffb86b20 0,transparent 27%),radial-gradient(circle at 85% 16%,#7b61ff1a 0,transparent 30%),radial-gradient(circle at 68% 86%,#00a6a61a 0,transparent 31%),linear-gradient(145deg,#fffaf8 0%,#faf8ff 48%,#f5fcfb 100%);box-shadow:inset 0 0 0 1px #65556b0d}.tag-cloud::before{content:"";position:absolute;z-index:-1;inset:12% 18%;border-radius:50%;background:#ffffff8c;filter:blur(32px)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#ff8cad;--cloud-c1:#bca6ff;--cloud-c2:#66d2e4;--cloud-c3:#79d39f;--cloud-c4:#ffb864;--cloud-c5:#eda1da;--cloud-c6:#91b8ff;--cloud-c7:#e7bd7c;background:radial-gradient(circle at 14% 20%,#ff9b4a22 0,transparent 30%),radial-gradient(circle at 85% 16%,#886dff26 0,transparent 32%),radial-gradient(circle at 68% 86%,#1fc9b822 0,transparent 34%),linear-gradient(145deg,#18141d 0%,#171827 52%,#101f20 100%);box-shadow:inset 0 0 0 1px #ffffff12}:host([data-theme="dark"]) .tag-cloud::before{background:#15131a70}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1.05;min-height:0!important;font-weight:450;border-radius:12px;color:var(--word-color);overflow:visible;letter-spacing:-.035em;opacity:.78;transition:opacity .2s ease,filter .2s ease;animation:cloud-in .34s cubic-bezier(.22,.8,.32,1) both;animation-delay:var(--delay)}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:3px 5px;transform:rotate(var(--angle)) scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease,text-shadow .2s ease,background .2s ease;filter:saturate(.9)}.cloud-word[data-tone="hero"]{font-weight:850;opacity:1}.cloud-word[data-tone="hero"] .cloud-label{padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--word-color) 9%,transparent);text-shadow:0 8px 24px color-mix(in srgb,var(--word-color) 26%,transparent)}.cloud-word[data-tone="strong"]{font-weight:720;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:580;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:transparent;filter:saturate(1.22)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:rotate(var(--angle)) scale(var(--fit-scale,1)) scale(1.055);background:color-mix(in srgb,var(--word-color) 12%,transparent);text-shadow:0 6px 20px color-mix(in srgb,var(--word-color) 24%,transparent)}@keyframes cloud-in{from{opacity:0;filter:blur(3px);transform:scale(.96)}to{filter:blur(0);transform:scale(1)}}
-      .tag-cloud{border-radius:50%}
+      .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}.year-navigation{display:flex;flex-shrink:0;gap:4px}.year-navigation button{min-width:36px;min-height:36px;font-size:17px}
+      .year-plot{position:relative;margin:20px 4px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
+      .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(5px,1.5cqw,18px)}.year-column{position:relative;padding:0;border-radius:4px 4px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:42px;height:var(--height);border-radius:5px 5px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted)}.column-year{position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:11px;color:var(--muted)}
+      .tag-cloud{position:relative;min-height:220px;visibility:hidden}.tag-cloud.is-ready{visibility:visible}.cloud-word{position:absolute;white-space:nowrap;padding:3px 4px;line-height:1.25;min-height:0!important;font-weight:400;border-radius:4px;color:var(--word-color);overflow:hidden;text-overflow:ellipsis}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{color:var(--link);background:var(--pink-soft)}
+      .longest-list{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:24px 18px;margin:0;padding:0;list-style:none}.longest-list li{min-width:0}.longest-list a{display:block}.work-cover{position:relative;display:block;aspect-ratio:2/3;border-radius:6px;overflow:hidden;background:var(--pink-soft)}.work-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}.cover-fallback{position:absolute;inset:0;display:grid;place-content:center;padding:10px;color:var(--link);font-size:12px;overflow:hidden}.work-cover strong{position:absolute;right:5px;bottom:5px;z-index:2;background:var(--surface);color:var(--ink);padding:1px 6px;border-radius:4px;font-size:11px;font-weight:400}.work-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.6;margin-top:7px;font-size:12px}.work-length{display:block;background:var(--line);height:2px;margin-top:7px;border-radius:2px}.work-length i{display:block;min-width:1px;height:100%;background:var(--pink)}.work-cover:has(img:not([hidden])) .cover-fallback{display:none}
       .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
       .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
-      .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
+      .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
       .pager{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:20px;font-size:12px;color:var(--muted)}
-      @container(max-width:500px){.people-list{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:20px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:1px}.year-column[data-label-five="true"] .column-year{display:none}.year-column[data-label-ten="true"] .column-year{display:block}}
+      @container(max-width:500px){.people-list{grid-template-columns:1fr;gap:20px}.longest-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:22px 14px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:7px}.column-value{display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{font-size:10px}.year-column:nth-child(even):not(:last-child) .column-year,.year-column:nth-last-child(2) .column-year{visibility:hidden}.year-navigation button{min-height:44px;min-width:44px}}
     </style>`; }
   }
 
@@ -2312,14 +1942,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.10.3";
+  const APP_VERSION = "0.9.1";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "30";
+  const RECOMMENDATION_MODEL_VERSION = "27";
   const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
@@ -3161,9 +2791,7 @@
 
         const candidates = await this.client.getCandidates(type, this.state.profile, force, selectedType);
         const marked = new Set(allCollections.map((item) => Number(item.subjectId)));
-        this.state.candidates = candidates
-          .filter((subject) => !marked.has(Number(subject.id)))
-          .filter((subject) => selectedType.id !== "2" || !Core.candidateExclusion(subject));
+        this.state.candidates = candidates.filter((subject) => !marked.has(Number(subject.id)));
         if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
 
         this.recompute({ enforceJapanese: false, render: false });
@@ -3229,9 +2857,6 @@
           };
         });
       }
-      if (recommendationType(this.config.subjectType).id === "2") {
-        this.state.candidates = this.state.candidates.filter((subject) => !Core.candidateExclusion(subject));
-      }
 
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);
       allSubjects = [
@@ -3254,7 +2879,7 @@
           const scoredSubject = this.state.baseProfile !== this.state.profile
             ? Core.blendSupplementalScore(
                 Core.scoreSubject(
-                  Core.withoutCreativeContributors(subject),
+                  { ...subject, persons: [], characters: [] },
                   this.state.baseProfile,
                   RECOMMENDATION_MODE,
                 ),
@@ -3481,4 +3106,3 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
   else start();
 })();
-

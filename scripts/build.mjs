@@ -8,8 +8,8 @@ const publishOutput = resolve(root, "dist/bangumi-personal-recommender.bgm.txt")
 const header = `// ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.9.4
-// @description  个人主页的动画回顾与个性推荐：年代柱图、季度分布、偏好词云与人物排行。
+// @version      0.10.3
+// @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
 // @match        http://bgm.tv/*

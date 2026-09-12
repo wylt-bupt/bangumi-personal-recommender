@@ -1,0 +1,586 @@
+{
+  "B": {
+    "focus": {
+      "253": {
+        "raw": 48,
+        "legacyMmr": 19,
+        "normalizedMmr": 37
+      },
+      "799": {
+        "raw": 1,
+        "legacyMmr": 1,
+        "normalizedMmr": 1
+      },
+      "1029": {
+        "raw": 3,
+        "legacyMmr": 14,
+        "normalizedMmr": 4
+      },
+      "11577": {
+        "raw": 9,
+        "legacyMmr": 4,
+        "normalizedMmr": 7
+      }
+    },
+    "normalizedTop20": [
+      {
+        "rank": 1,
+        "id": 799,
+        "name": "悠久之翼",
+        "predicted": 7.471
+      },
+      {
+        "rank": 2,
+        "id": 207195,
+        "name": "摇曳露营△",
+        "predicted": 7.454
+      },
+      {
+        "rank": 3,
+        "id": 848,
+        "name": "蜂蜜与四叶草II",
+        "predicted": 7.459
+      },
+      {
+        "rank": 4,
+        "id": 1029,
+        "name": "悠久之翼2",
+        "predicted": 7.457
+      },
+      {
+        "rank": 5,
+        "id": 3478,
+        "name": "交响情人梦Finale",
+        "predicted": 7.425
+      },
+      {
+        "rank": 6,
+        "id": 14878,
+        "name": "小魔女DoReMi 大合奏",
+        "predicted": 7.36
+      },
+      {
+        "rank": 7,
+        "id": 11577,
+        "name": "偶像大师",
+        "predicted": 7.357
+      },
+      {
+        "rank": 8,
+        "id": 486,
+        "name": "娜娜",
+        "predicted": 7.387
+      },
+      {
+        "rank": 9,
+        "id": 330,
+        "name": "向阳素描×365",
+        "predicted": 7.372
+      },
+      {
+        "rank": 10,
+        "id": 10391,
+        "name": "城市猎人",
+        "predicted": 7.319
+      },
+      {
+        "rank": 11,
+        "id": 221726,
+        "name": "妖精森林的小不点",
+        "predicted": 7.346
+      },
+      {
+        "rank": 12,
+        "id": 5487,
+        "name": "阿尔卑斯山的少女海蒂",
+        "predicted": 7.282
+      },
+      {
+        "rank": 13,
+        "id": 340,
+        "name": "虫师",
+        "predicted": 7.301
+      },
+      {
+        "rank": 14,
+        "id": 37819,
+        "name": "向阳素描×蜂窝",
+        "predicted": 7.353
+      },
+      {
+        "rank": 15,
+        "id": 299,
+        "name": "再见绝望先生",
+        "predicted": 7.289
+      },
+      {
+        "rank": 16,
+        "id": 9565,
+        "name": "龙珠",
+        "predicted": 7.313
+      },
+      {
+        "rank": 17,
+        "id": 45213,
+        "name": "玉响～more aggressive～",
+        "predicted": 7.304
+      },
+      {
+        "rank": 18,
+        "id": 317680,
+        "name": "歌剧少女!!",
+        "predicted": 7.292
+      },
+      {
+        "rank": 19,
+        "id": 4124,
+        "name": "Heart Catch 光之美少女！",
+        "predicted": 7.3
+      },
+      {
+        "rank": 20,
+        "id": 3622,
+        "name": "向阳素描×☆☆☆",
+        "predicted": 7.335
+      }
+    ]
+  },
+  "Q": {
+    "focus": {
+      "253": {
+        "raw": 2,
+        "legacyMmr": 2,
+        "normalizedMmr": 2
+      },
+      "799": {
+        "raw": 5,
+        "legacyMmr": 25,
+        "normalizedMmr": 7
+      },
+      "1029": {
+        "raw": 7,
+        "legacyMmr": 7,
+        "normalizedMmr": 10
+      },
+      "11577": {
+        "raw": 6,
+        "legacyMmr": 4,
+        "normalizedMmr": 5
+      }
+    },
+    "normalizedTop20": [
+      {
+        "rank": 1,
+        "id": 848,
+        "name": "蜂蜜与四叶草II",
+        "predicted": 7.556
+      },
+      {
+        "rank": 2,
+        "id": 253,
+        "name": "星际牛仔",
+        "predicted": 7.474
+      },
+      {
+        "rank": 3,
+        "id": 1453,
+        "name": "少女革命",
+        "predicted": 7.45
+      },
+      {
+        "rank": 4,
+        "id": 340,
+        "name": "虫师",
+        "predicted": 7.428
+      },
+      {
+        "rank": 5,
+        "id": 11577,
+        "name": "偶像大师",
+        "predicted": 7.413
+      },
+      {
+        "rank": 6,
+        "id": 93739,
+        "name": "乒乓",
+        "predicted": 7.398
+      },
+      {
+        "rank": 7,
+        "id": 799,
+        "name": "悠久之翼",
+        "predicted": 7.422
+      },
+      {
+        "rank": 8,
+        "id": 207195,
+        "name": "摇曳露营△",
+        "predicted": 7.367
+      },
+      {
+        "rank": 9,
+        "id": 77480,
+        "name": "银之匙 Silver Spoon 第二季",
+        "predicted": 7.39
+      },
+      {
+        "rank": 10,
+        "id": 1029,
+        "name": "悠久之翼2",
+        "predicted": 7.401
+      },
+      {
+        "rank": 11,
+        "id": 45213,
+        "name": "玉响～more aggressive～",
+        "predicted": 7.368
+      },
+      {
+        "rank": 12,
+        "id": 486,
+        "name": "娜娜",
+        "predicted": 7.377
+      },
+      {
+        "rank": 13,
+        "id": 1608,
+        "name": "灌篮高手",
+        "predicted": 7.367
+      },
+      {
+        "rank": 14,
+        "id": 22588,
+        "name": "爆漫王。2",
+        "predicted": 7.339
+      },
+      {
+        "rank": 15,
+        "id": 847,
+        "name": "蜂蜜与四叶草",
+        "predicted": 7.385
+      },
+      {
+        "rank": 16,
+        "id": 14878,
+        "name": "小魔女DoReMi 大合奏",
+        "predicted": 7.322
+      },
+      {
+        "rank": 17,
+        "id": 3478,
+        "name": "交响情人梦Finale",
+        "predicted": 7.338
+      },
+      {
+        "rank": 18,
+        "id": 221726,
+        "name": "妖精森林的小不点",
+        "predicted": 7.326
+      },
+      {
+        "rank": 19,
+        "id": 236020,
+        "name": "来玩游戏吧",
+        "predicted": 7.331
+      },
+      {
+        "rank": 20,
+        "id": 59664,
+        "name": "银之匙 Silver Spoon",
+        "predicted": 7.38
+      }
+    ]
+  },
+  "R25": {
+    "focus": {
+      "253": {
+        "raw": 2,
+        "legacyMmr": 2,
+        "normalizedMmr": 2
+      },
+      "799": {
+        "raw": 29,
+        "legacyMmr": 61,
+        "normalizedMmr": 27
+      },
+      "1029": {
+        "raw": 12,
+        "legacyMmr": 9,
+        "normalizedMmr": 10
+      },
+      "11577": {
+        "raw": 11,
+        "legacyMmr": 4,
+        "normalizedMmr": 6
+      }
+    },
+    "normalizedTop20": [
+      {
+        "rank": 1,
+        "id": 848,
+        "name": "蜂蜜与四叶草II",
+        "predicted": 7.506
+      },
+      {
+        "rank": 2,
+        "id": 253,
+        "name": "星际牛仔",
+        "predicted": 7.451
+      },
+      {
+        "rank": 3,
+        "id": 340,
+        "name": "虫师",
+        "predicted": 7.398
+      },
+      {
+        "rank": 4,
+        "id": 1453,
+        "name": "少女革命",
+        "predicted": 7.378
+      },
+      {
+        "rank": 5,
+        "id": 77480,
+        "name": "银之匙 Silver Spoon 第二季",
+        "predicted": 7.394
+      },
+      {
+        "rank": 6,
+        "id": 11577,
+        "name": "偶像大师",
+        "predicted": 7.344
+      },
+      {
+        "rank": 7,
+        "id": 1608,
+        "name": "灌篮高手",
+        "predicted": 7.346
+      },
+      {
+        "rank": 8,
+        "id": 33352,
+        "name": "爆漫王。3",
+        "predicted": 7.351
+      },
+      {
+        "rank": 9,
+        "id": 847,
+        "name": "蜂蜜与四叶草",
+        "predicted": 7.404
+      },
+      {
+        "rank": 10,
+        "id": 1029,
+        "name": "悠久之翼2",
+        "predicted": 7.342
+      },
+      {
+        "rank": 11,
+        "id": 207195,
+        "name": "摇曳露营△",
+        "predicted": 7.35
+      },
+      {
+        "rank": 12,
+        "id": 300,
+        "name": "俗・再见绝望先生",
+        "predicted": 7.322
+      },
+      {
+        "rank": 13,
+        "id": 93739,
+        "name": "乒乓",
+        "predicted": 7.338
+      },
+      {
+        "rank": 14,
+        "id": 2734,
+        "name": "星空清理者",
+        "predicted": 7.306
+      },
+      {
+        "rank": 15,
+        "id": 4163,
+        "name": "百变之星",
+        "predicted": 7.308
+      },
+      {
+        "rank": 16,
+        "id": 5487,
+        "name": "阿尔卑斯山的少女海蒂",
+        "predicted": 7.288
+      },
+      {
+        "rank": 17,
+        "id": 14878,
+        "name": "小魔女DoReMi 大合奏",
+        "predicted": 7.297
+      },
+      {
+        "rank": 18,
+        "id": 486,
+        "name": "娜娜",
+        "predicted": 7.326
+      },
+      {
+        "rank": 19,
+        "id": 18692,
+        "name": "哆啦A梦",
+        "predicted": 7.29
+      },
+      {
+        "rank": 20,
+        "id": 22588,
+        "name": "爆漫王。2",
+        "predicted": 7.322
+      }
+    ]
+  },
+  "R35": {
+    "focus": {
+      "253": {
+        "raw": 2,
+        "legacyMmr": 2,
+        "normalizedMmr": 2
+      },
+      "799": {
+        "raw": 39,
+        "legacyMmr": 78,
+        "normalizedMmr": 45
+      },
+      "1029": {
+        "raw": 11,
+        "legacyMmr": 11,
+        "normalizedMmr": 10
+      },
+      "11577": {
+        "raw": 13,
+        "legacyMmr": 5,
+        "normalizedMmr": 9
+      }
+    },
+    "normalizedTop20": [
+      {
+        "rank": 1,
+        "id": 848,
+        "name": "蜂蜜与四叶草II",
+        "predicted": 7.492
+      },
+      {
+        "rank": 2,
+        "id": 253,
+        "name": "星际牛仔",
+        "predicted": 7.445
+      },
+      {
+        "rank": 3,
+        "id": 340,
+        "name": "虫师",
+        "predicted": 7.392
+      },
+      {
+        "rank": 4,
+        "id": 77480,
+        "name": "银之匙 Silver Spoon 第二季",
+        "predicted": 7.397
+      },
+      {
+        "rank": 5,
+        "id": 1453,
+        "name": "少女革命",
+        "predicted": 7.36
+      },
+      {
+        "rank": 6,
+        "id": 33352,
+        "name": "爆漫王。3",
+        "predicted": 7.358
+      },
+      {
+        "rank": 7,
+        "id": 847,
+        "name": "蜂蜜与四叶草",
+        "predicted": 7.41
+      },
+      {
+        "rank": 8,
+        "id": 1608,
+        "name": "灌篮高手",
+        "predicted": 7.343
+      },
+      {
+        "rank": 9,
+        "id": 11577,
+        "name": "偶像大师",
+        "predicted": 7.324
+      },
+      {
+        "rank": 10,
+        "id": 1029,
+        "name": "悠久之翼2",
+        "predicted": 7.327
+      },
+      {
+        "rank": 11,
+        "id": 2734,
+        "name": "星空清理者",
+        "predicted": 7.317
+      },
+      {
+        "rank": 12,
+        "id": 300,
+        "name": "俗・再见绝望先生",
+        "predicted": 7.327
+      },
+      {
+        "rank": 13,
+        "id": 207195,
+        "name": "摇曳露营△",
+        "predicted": 7.347
+      },
+      {
+        "rank": 14,
+        "id": 4163,
+        "name": "百变之星",
+        "predicted": 7.316
+      },
+      {
+        "rank": 15,
+        "id": 5487,
+        "name": "阿尔卑斯山的少女海蒂",
+        "predicted": 7.29
+      },
+      {
+        "rank": 16,
+        "id": 93739,
+        "name": "乒乓",
+        "predicted": 7.324
+      },
+      {
+        "rank": 17,
+        "id": 18692,
+        "name": "哆啦A梦",
+        "predicted": 7.304
+      },
+      {
+        "rank": 18,
+        "id": 12536,
+        "name": "夏目友人帐 叁",
+        "predicted": 7.311
+      },
+      {
+        "rank": 19,
+        "id": 14878,
+        "name": "小魔女DoReMi 大合奏",
+        "predicted": 7.289
+      },
+      {
+        "rank": 20,
+        "id": 486,
+        "name": "娜娜",
+        "predicted": 7.312
+      }
+    ]
+  }
+}

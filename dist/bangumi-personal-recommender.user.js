@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.9.4
-// @description  个人主页的动画回顾与个性推荐：年代柱图、季度分布、偏好词云与人物排行。
+// @version      0.10.3
+// @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
 // @match        http://bgm.tv/*
@@ -196,6 +196,21 @@
     return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
   }
 
+  function candidateExclusion(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const title = normalizeText(`${subject.name} ${subject.nameCn}`);
+    const tagText = normalizeText([...subject.metaTags, ...subject.tags].join(" "));
+    const formatText = `${normalizeText(subject.platform)} ${tagText}`;
+    if (/(?:剧场版|劇場版|映画|movie|film|ova|oad|special|特别篇|特別篇|sp\b)/i.test(`${title} ${formatText}`)) {
+      return "movie-or-special";
+    }
+    if (/(?:总集篇|總集篇|総集編|重制版|重製版|重置版|remake|リメイク|再编辑|再編輯|再編集|re-?edit|recap|digest|etv版)/i.test(`${title} ${tagText}`)) {
+      return "recut-or-remake";
+    }
+    if (subject.totalEpisodes > 0 && subject.totalEpisodes < 10) return "under-10-episodes";
+    return null;
+  }
+
   function isAdultRecommendationCandidate(subjectInput, allowDirectOnly = false) {
     const subject = normalizeSubject(subjectInput);
     const tags = new Set([...subject.tags, ...subject.metaTags]);
@@ -277,6 +292,8 @@
         : [],
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
+      platform: String(raw.platform || ""),
+      totalEpisodes: Number(raw.total_episodes || raw.eps || raw.totalEpisodes || 0),
       adultEvidenceVerified: raw.adultEvidenceVerified === undefined
         ? undefined
         : Boolean(raw.adultEvidenceVerified),
@@ -619,17 +636,21 @@
       const similarityVector = buildSimilarityVector(item.subject, item.tags);
       const familyKey = seriesFamilyKey(item.subject);
       ratedFamilies.add(familyKey);
-      const expected = expectedRating(item.subject, baseline);
-      const residual = clamp((item.rate - expected) / 2.5, -1.5, 1.5);
-      anchors.push({
-        subjectId: item.subjectId,
-        name: item.subject.nameCn || item.subject.name,
-        rate: item.rate,
-        residual,
-        features: vector.features,
-        similarityFeatures: similarityVector.features,
-        familyKey,
-      });
+      // Personal ratings are an absolute rubric: 7 is neutral, 8+ is liked,
+      // and 6- is disliked. Site score is handled separately by the quality
+      // term and must not turn a neutral 7 into positive preference evidence.
+      const residual = clamp((item.rate - 7) / 3, -1, 1);
+      if (residual !== 0) {
+        anchors.push({
+          subjectId: item.subjectId,
+          name: item.subject.nameCn || item.subject.name,
+          rate: item.rate,
+          residual,
+          features: vector.features,
+          similarityFeatures: similarityVector.features,
+          familyKey,
+        });
+      }
 
       for (const [token, magnitude] of Object.entries(vector.features)) {
         const current = stats.get(token) || {
@@ -971,11 +992,10 @@
 
     const bayes = bayesianScore(subject, profile.baseline.globalMean);
     const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
-    const weights = {
-      stable: { content: 0.5, neighbor: 0.2, quality: 0.3 },
-      balanced: { content: 0.6, neighbor: 0.25, quality: 0.15 },
-      explore: { content: 0.67, neighbor: 0.25, quality: 0.08 },
-    }[mode] || { content: 0.6, neighbor: 0.25, quality: 0.15 };
+    // Nearest titles remain available as human-readable evidence, but no
+    // longer affect ranking. The global profile already aggregates the full
+    // collection and proved more robust than a second, six-title correction.
+    const weights = { content: 0.8, neighbor: 0, quality: 0.2 };
     const normalizedScore =
       weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
     const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
@@ -1009,7 +1029,7 @@
       normalizedScore,
       bayesianScore: bayes,
       contentScore: content,
-      neighborScore: neighbor,
+      neighborScore: 0,
       rawNeighborScore: rawNeighbor,
       neighborReliability,
       qualityScore: quality,
@@ -1059,6 +1079,10 @@
 
   function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
     const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
+    const scores = scoredInputs.map((item) => Number(item.normalizedScore || 0));
+    const highestScore = scores.length ? Math.max(...scores) : 0;
+    const lowestScore = scores.length ? Math.min(...scores) : 0;
+    const scoreRange = highestScore - lowestScore;
     const remaining = scoredInputs.map((item) => ({
       item,
       maxSimilarity: 0,
@@ -1073,10 +1097,13 @@
       for (let index = 0; index < remaining.length; index += 1) {
         const entry = remaining[index];
         const candidate = entry.item;
+        const relevance = scoreRange > 1e-9
+          ? (Number(candidate.normalizedScore || 0) - lowestScore) / scoreRange
+          : 1;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
         const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
-          candidate.normalizedScore -
+          relevance -
           penalty * entry.maxSimilarity -
           studioPenalty +
           explorationJitter;
@@ -1164,6 +1191,7 @@
     normalizeTagList,
     subjectHasTag,
     collectionHasTag,
+    candidateExclusion,
     isAdultRecommendationCandidate,
     normalizeInfoboxEntries,
     normalizeSubject,
@@ -1382,7 +1410,14 @@
       if (year) years[year] = (years[year] || 0) + 1;
       for (const tag of row.tags) {
         const normalized = text(tag);
-        if (normalized) tags[normalized] = (tags[normalized] || 0) + 1;
+        if (!normalized) continue;
+        const bucket = tags[normalized] || { count: 0, ratedCount: 0, scoreSum: 0 };
+        bucket.count += 1;
+        if (row.rate > 0) {
+          bucket.ratedCount += 1;
+          bucket.scoreSum += row.rate;
+        }
+        tags[normalized] = bucket;
       }
     }
 
@@ -1459,7 +1494,12 @@
       distributions: {
         ratings: Array.from({ length: 10 }, (_, index) => ({ score: index + 1, count: ratingDistribution[index + 1] || 0 })),
         years: Object.entries(years).map(([year, count]) => ({ year: number(year), count })).sort((a, b) => b.year - a.year),
-        tags: Object.entries(tags).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
+        tags: Object.entries(tags).map(([name, bucket]) => ({
+          name,
+          count: bucket.count,
+          ratedCount: bucket.ratedCount,
+          averageRate: bucket.ratedCount ? bucket.scoreSum / bucket.ratedCount : 0,
+        })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
         longest: [...knownEps].sort((a, b) => b.subject.eps - a.subject.eps || a.subject.name.localeCompare(b.subject.name, "zh-CN")).map((row) => ({
           id: row.subject.id, name: row.subject.name, nameCn: row.subject.nameCn, eps: row.subject.eps,
         })),
@@ -1497,25 +1537,49 @@
     return { max: step * 4, ticks: Array.from({ length: 5 }, (_, i) => step * i) };
   }
   function fontSize(count, min, max) {
-    return max === min ? 32 : 14 + 58 * Math.pow(Math.max(0, Math.min(1, (count - min) / (max - min))), 0.85);
+    return max === min ? 30 : 12 + 38 * Math.pow(Math.max(0, Math.min(1, (count - min) / (max - min))), 0.82);
+  }
+  function scoreFontSize(score, scores) {
+    const values = (Array.isArray(scores) ? scores : []).map(Number).filter(Number.isFinite);
+    if (values.length < 2) return 26;
+    // Average scores occupy a narrow numeric range. Use their empirical percentile
+    // for visual weight, while keeping the exact score in the label/tooltip.
+    const rounded = Math.round(Number(score) * 100) / 100;
+    const levels = [...new Set(values.map(value => Math.round(value * 100) / 100))].sort((a, b) => a - b);
+    if (levels.length < 2) return 26;
+    const percentile = Math.max(0, Math.min(1, levels.indexOf(rounded) / (levels.length - 1)));
+    return 13 + 35 * Math.pow(percentile, 1.65);
+  }
+  function isTemporalTag(value) {
+    const tag = String(value || '').trim().replace(/\s+/g, '');
+    return /^(?:19|20)\d{2}(?:年)?$/.test(tag)
+      || /^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$/.test(tag)
+      || /^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$/.test(tag)
+      || /^(?:1|4|7|10)月(?:番|新番)$/.test(tag);
   }
   function featuredTags(rows) {
-    return rows.filter(row => Number(row.count) > 10).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
+    return rows.filter(row => Number(row.count) > 10 && !isTemporalTag(row.name)).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
   }
-  function seasonDistribution(rows) {
-    const groups = [1,4,7,10].map((month, index) => ({ month, label: month + ' 月番', season: ['冬','春','夏','秋'][index], count: 0, rated: 0, scoreSum: 0 }));
-    let unknown = 0;
-    for (const row of rows) {
-      const match = String(row.subject?.date || '').match(/^\d{4}-(\d{2})(?:-|$)/);
-      const month = Number(match?.[1]);
-      if (!Number.isInteger(month) || month < 1 || month > 12) { unknown++; continue; }
-      const group = groups[Math.floor((month - 1) / 3)];
-      group.count++;
-      const rate = Number(row.rate);
-      if (rate > 0 && rate <= 10) { group.rated++; group.scoreSum += rate; }
+  function circularItems(items, width, spread = false) {
+    if (!items.length) return items;
+    if (width >= 460) return items;
+    const radius = Math.max(1, (width - 20) / 2);
+    const budget = Math.PI * radius * radius * (width < 460 ? 0.38 : 0.36);
+    const candidates = spread
+      ? items.flatMap((_, index) => index >= Math.ceil(items.length / 2) ? [] : [items[index], items[items.length - 1 - index]]).filter((item, index, rows) => rows.indexOf(item) === index)
+      : items;
+    const selected = [];
+    let area = 0;
+    for (const item of candidates) {
+      const next = (item.width + 5) * (item.height + 5);
+      if (selected.length >= 8 && area + next > budget) {
+        if (!spread) break;
+        continue;
+      }
+      area += next;
+      selected.push(item);
     }
-    const total = groups.reduce((sum, group) => sum + group.count, 0);
-    return { total, unknown, groups: groups.map(group => ({ ...group, share: total ? group.count / total : 0, average: group.rated ? group.scoreSum / group.rated : null })) };
+    return selected.sort((a, b) => a.index - b.index);
   }
   function overlaps(a, b, gap = 5) {
     return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
@@ -1551,40 +1615,71 @@
   }
   function packCloud(items, width) {
     if (!items.length) return { items: [], height: 0 };
-    if (items.length > 100) return packDenseCloud(items, width);
-    const area = items.reduce((sum, item) => sum + (item.width + 8) * (item.height + 8), 0);
-    const height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.58));
-    const placed = [];
-    const cells = new Map(), cellSize = 64;
-    const keys = (box, padding = 0) => {
-      const result = [];
-      for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
-        for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
-      return result;
+    const baseHeight = Math.max(width * 1.02, 260);
+    const maximumHeight = Math.max(width * 1.08, 260);
+    const tryEllipse = (candidates, currentHeight, scale) => {
+      candidates = candidates.map(item => ({
+        ...item,
+        width: Math.ceil(item.width * scale),
+        height: Math.ceil(item.height * scale),
+        fitScale: scale
+      }));
+      const placed = [];
+      const cells = new Map(), cellSize = 56;
+      const keys = (box, padding = 0) => {
+        const result = [];
+        for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
+          for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
+        return result;
+      };
+      const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
+      const insideEllipse = box => {
+        const radiusX = width / 2 - 8, radiusY = currentHeight / 2 - 8;
+        const distanceX = Math.abs(box.x + box.width / 2 - width / 2) + box.width / 2;
+        const distanceY = Math.abs(box.y + box.height / 2 - currentHeight / 2) + box.height / 2;
+        return (distanceX / radiusX) ** 2 + (distanceY / radiusY) ** 2 <= 1;
+      };
+      for (const item of candidates) {
+        let box;
+        const seed = Math.abs(Number(item.seed) || item.index + 1);
+        const phase = (seed % 6283) / 1000;
+        const direction = seed % 2 ? 1 : -1;
+        const angularStep = 0.31 + (seed % 11) / 100;
+        for (let step = 0; step < 5200; step++) {
+          const progress = step / 5200;
+          const angle = phase + direction * step * angularStep;
+          const radius = Math.pow(progress, 0.57);
+          const candidate = {
+            ...item,
+            x: (width - item.width) / 2 + Math.cos(angle) * radius * (width / 2 - 10 - item.width / 2),
+            y: (currentHeight - item.height) / 2 + Math.sin(angle) * radius * (currentHeight / 2 - 10 - item.height / 2)
+          };
+          if (insideEllipse(candidate) && !collides(candidate)) { box = candidate; break; }
+        }
+        if (!box) return null;
+        placed.push(box);
+        for (const key of keys(box, 5)) {
+          if (!cells.has(key)) cells.set(key, []);
+          cells.get(key).push(box);
+        }
+      }
+      return placed;
     };
-    const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
-    let bottom = height;
-    for (const item of items) {
-      let box;
-      // Deterministic elliptical spiral: the most frequent term stays central.
-      for (let step = 0; step < 2200; step++) {
-        const angle = step * 0.38, radius = Math.sqrt(step / 2200) * 0.75;
-        const candidate = { ...item, x: (width - item.width) / 2 + Math.cos(angle) * radius * width, y: (height - item.height) / 2 + Math.sin(angle) * radius * height };
-        if (candidate.x < 8 || candidate.x + item.width > width - 8 || candidate.y < 8 || candidate.y + item.height > height - 8) continue;
-        if (!collides(candidate)) { box = candidate; break; }
+    let candidates = items.slice(), reduced = false;
+    while (candidates.length) {
+      const scales = reduced ? [0.78, 0.72] : [1, 0.92, 0.85, 0.78, 0.72];
+      for (const scale of scales) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const height = Math.ceil(Math.min(maximumHeight, baseHeight + width * 0.02 * attempt));
+          const placed = tryEllipse(candidates, height, scale);
+          if (placed) return { items: placed, height, scale, shape: 'ellipse', omitted: items.length - candidates.length };
+        }
       }
-      // A non-overlapping fallback keeps unusually long labels; nothing is dropped.
-      if (!box) { box = { ...item, x: Math.max(8, (width - item.width) / 2), y: bottom + 8 }; bottom += item.height + 8; }
-      placed.push(box);
-      for (const key of keys(box, 5)) {
-        if (!cells.has(key)) cells.set(key, []);
-        cells.get(key).push(box);
-      }
+      if (candidates.length <= 8) break;
+      candidates = candidates.slice(0, Math.max(8, candidates.length - Math.max(1, Math.ceil(candidates.length * 0.1))));
+      reduced = true;
     }
-    const top = Math.min(...placed.map(item => item.y));
-    const end = Math.max(...placed.map(item => item.y + item.height));
-    const actualHeight = Math.max(220, end - top + 24);
-    return { items: placed.map(item => ({ ...item, y: item.y - top + (actualHeight - (end - top)) / 2 })), height: actualHeight };
+    return packDenseCloud(candidates, width);
   }
   function packDenseCloud(items, width) {
     // Complete clouds can contain hundreds of rare tags. Free-rectangle packing
@@ -1596,12 +1691,16 @@
     const placed = [];
     for (const item of items) {
       const w = Math.min(width - 16, item.width + 5), h = item.height + 5;
+      const seed = Math.abs(Number(item.seed) || item.index + 1);
+      const phase = (seed % 6283) / 1000;
+      const targetX = width / 2 + Math.cos(phase) * width * 0.17;
+      const targetY = focusY + Math.sin(phase) * Math.min(width, height) * 0.12;
       let best;
       for (const rect of free) {
         if (rect.width < w || rect.height < h) continue;
-        const x = Math.max(rect.x, Math.min((width - w) / 2, rect.x + rect.width - w));
-        const y = Math.max(rect.y, Math.min(focusY - h / 2, rect.y + rect.height - h));
-        const distance = ((x + w / 2 - width / 2) / width) ** 2 + ((y + h / 2 - focusY) / Math.min(height, width)) ** 2;
+        const x = Math.max(rect.x, Math.min(targetX - w / 2, rect.x + rect.width - w));
+        const y = Math.max(rect.y, Math.min(targetY - h / 2, rect.y + rect.height - h));
+        const distance = ((x + w / 2 - targetX) / width) ** 2 + ((y + h / 2 - targetY) / Math.min(height, width)) ** 2;
         if (!best || distance < best.distance) best = { x, y, width: w, height: h, distance };
       }
       if (!best) {
@@ -1622,7 +1721,7 @@
     }
     return { items: placed, height: Math.max(...placed.map(item => item.y + item.height)) + 12 };
   }
-  const api = { yearSeries, axis, fontSize, featuredTags, seasonDistribution, overlaps, packCloud, episodeDistribution, pieSlices };
+  const api = { yearSeries, axis, fontSize, scoreFontSize, isTemporalTag, featuredTags, circularItems, overlaps, packCloud, episodeDistribution, pieSlices };
   global.BangumiStatsViz = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
@@ -1645,9 +1744,9 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.9.4";
+  const APP_VERSION = "0.10.3";
   const RANK_PAGE_SIZE = 12;
-  const TABS = Object.freeze({ overview: "年代", seasons: "季度", tags: "标签", staff: "创作", cast: "声优" });
+  const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
   function text(value) { return String(value ?? ""); }
   function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
@@ -1781,6 +1880,7 @@
         cancel: false,
         activeTab: "overview",
         activeStaffGroup: "directors",
+        tagMetric: "count",
         search: { staff: "", cast: "" },
         pages: { staff: 1, cast: 1 },
         sort: { staff: "works", cast: "works" },
@@ -1967,6 +2067,10 @@
       if (action === "all") this.enrichAll();
       if (action === "cancel") this.pauseEnrichment();
       if (action === "tab") { this.state.activeTab = event.target.closest("[data-tab]")?.dataset.tab || "overview"; this.render(); }
+      if (action === "tag-metric") {
+        const metric = event.target.closest("[data-metric]")?.dataset.metric;
+        if (["count", "average"].includes(metric)) { this.state.tagMetric = metric; this.render(); }
+      }
       if (action === "staff-group") { this.state.activeStaffGroup = event.target.closest("[data-group]")?.dataset.group || "directors"; this.state.search.staff = ""; this.state.pages.staff = 1; this.render(); }
       if (action === "sort") {
         const button = event.target.closest("[data-sort-kind]");
@@ -2043,7 +2147,6 @@
     overview(stats) {
       if (!stats.overview.works) return `<p class="empty">${!this.state.lastSync ? (/失败|异常/.test(this.state.progress.label) ? '可通过“更新”重试。' : '正在读取动画收藏…') : '还没有可回顾的动画。'}</p>`;
       if (this.state.activeTab === 'tags') return this.tags(stats.distributions.tags);
-      if (this.state.activeTab === 'seasons') return this.seasons();
       return this.years(stats.distributions.years);
     }
     years(rows) {
@@ -2066,20 +2169,30 @@
     tags(rows) {
       rows = Viz.featuredTags(rows);
       if (!rows.length) return '<p class="empty">还没有数量大于 10 部的标签。</p>';
-      const min = rows.at(-1).count, max = rows[0].count;
-      const caption = '常见的喜好';
-      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span></div><div class="tag-cloud">${rows.map(row => {
-        const ratio = row.count / max;
-        const tone = ratio >= 0.6 ? 'hero' : ratio >= 0.28 ? 'strong' : ratio >= 0.1 ? 'medium' : 'quiet';
-        const size = Viz.fontSize(row.count, min, max);
-        return `<button class="cloud-word" data-tone="${tone}" data-count="${row.count}" data-viz-label="${escapeHtml(row.name)} · ${row.count} 部" title="${escapeHtml(row.name)} · ${row.count} 部" aria-label="${escapeHtml(row.name)}，${row.count} 部" data-size="${size}" style="font-size:${size}px">${escapeHtml(row.name)}</button>`;
+      const metric = this.state.tagMetric === 'average' ? 'average' : 'count';
+      const ranked = [...rows]
+        .filter(row => metric === 'count' || row.ratedCount > 0)
+        .sort((a, b) => metric === 'average'
+          ? b.averageRate - a.averageRate || b.ratedCount - a.ratedCount || b.count - a.count || a.name.localeCompare(b.name, 'zh-CN')
+          : b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
+      const values = ranked.map(row => metric === 'average' ? row.averageRate : row.count);
+      const min = Math.min(...values), max = Math.max(...values);
+      const caption = metric === 'average' ? '标签作品个人均分' : '标签出现次数';
+      const controls = `<div class="cloud-metric" role="group" aria-label="词云数值"><button type="button" data-action="tag-metric" data-metric="count" aria-pressed="${metric === 'count'}">出现次数</button><button type="button" data-action="tag-metric" data-metric="average" aria-pressed="${metric === 'average'}">个人均分</button></div>`;
+      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span>${controls}</div><div class="tag-cloud">${ranked.map((row, index) => {
+        const value = metric === 'average' ? row.averageRate : row.count;
+        const ratio = max === min ? 0.5 : (value - min) / (max - min);
+        const tone = ratio >= 0.72 ? 'hero' : ratio >= 0.42 ? 'strong' : ratio >= 0.18 ? 'medium' : 'quiet';
+        const size = metric === 'average' ? Viz.scoreFontSize(value, values) : Viz.fontSize(value, min, max);
+        const seed = Array.from(String(row.name)).reduce((hash, character) => Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0, 2166136261);
+        const angles = [0, -8, 5, -4, 8, 0, -6, 4, 0, 7, -5, 3];
+        const angle = ratio >= 0.72 ? 0 : angles[seed % angles.length];
+        const color = seed % 8;
+        const detail = metric === 'average'
+          ? `${row.name} · 个人均分 ${formatRate(row.averageRate)} · ${row.ratedCount}/${row.count} 部已评分`
+          : `${row.name} · ${row.count} 部`;
+        return `<button class="cloud-word" data-tone="${tone}" data-color="${color}" data-count="${row.count}" data-value="${value}" data-viz-label="${escapeHtml(detail)}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(detail)}" data-size="${size}" data-angle="${angle}" data-seed="${seed}" style="font-size:${size}px;--angle:${angle}deg;--delay:${Math.min(360, index * 12)}ms"><span class="cloud-label">${escapeHtml(row.name)}</span></button>`;
       }).join('')}</div></section>`;
-    }
-    seasons() {
-      const distribution = Viz.seasonDistribution(this.state.collections);
-      if (!distribution.total) return '<p class="empty">暂无可归入季度的首播日期。</p>';
-      const slices = Viz.pieSlices(distribution.groups);
-      return `<section aria-label="四个新番季度的数量与个人均分"><div class="viz-heading" title="按首播月份归类：1—3月、4—6月、7—9月、10—12月；均分仅计算已评分作品。">四季新番</div><div class="season-distribution"><svg class="season-pie" viewBox="0 0 240 240" aria-hidden="true">${slices.map((slice, index) => slice.count ? `<path d="${slice.path}" style="fill:var(--season-${index})"><title>${slice.label}：${slice.count} 部，个人均分 ${slice.average === null ? '暂无' : slice.average.toFixed(2)}</title></path>${slice.share >= 0.08 ? `<text x="${slice.labelX}" y="${slice.labelY}" text-anchor="middle" dominant-baseline="middle">${Math.round(slice.share * 100)}%</text>` : ''}` : '').join('')}</svg><div class="season-summary"><div class="season-legend-head" aria-hidden="true"><span>季度</span><span>数量</span><span>个人均分</span></div><ul class="season-legend">${slices.map((slice,index) => `<li aria-label="${slice.label}，${slice.count} 部，占 ${(slice.share*100).toFixed(1)}%，个人均分 ${slice.average === null ? '暂无' : slice.average.toFixed(2)}，${slice.rated} 部已评分"><span class="season-name"><i style="background:var(--season-${index})" aria-hidden="true"></i>${slice.label}</span><span class="season-count">${slice.count} 部</span><b class="season-average" title="${slice.rated} 部已评分">${slice.average === null ? '—' : slice.average.toFixed(2)}</b></li>`).join('')}</ul></div></div>${distribution.unknown ? `<p class="distribution-note">${distribution.unknown} 部首播月份不明，未计入季度</p>` : ''}</section>`;
     }
     scheduleCloud() {
       cancelAnimationFrame(this.cloudFrame);
@@ -2093,25 +2206,48 @@
       const words = Array.from(cloud.querySelectorAll('.cloud-word'));
       // Measure real browser text, including CJK/fallback fonts and browser text scaling.
       words.forEach(word => {
+        word.hidden = false;
+        word.style.width = 'auto';
+        word.style.height = 'auto';
         word.style.maxWidth = 'none';
-        const scale = Math.min(1, Math.pow(width / 600, 0.35));
+        word.style.removeProperty('--fit-scale');
+        const scale = Math.min(1, Math.pow(width / 680, width < 460 ? 0.58 : 0.35));
         word.style.fontSize = Math.max(12, Number(word.dataset.size) * scale) + 'px';
       });
-      const naturalWidths = words.map(word => word.getBoundingClientRect().width);
-      words.forEach((word, index) => {
-        if (naturalWidths[index] > width - 20) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 20) / naturalWidths[index]) + 'px';
+      words.forEach(word => {
+        const naturalWidth = word.querySelector('.cloud-label').offsetWidth;
+        if (naturalWidth > width - 32) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 32) / naturalWidth) + 'px';
         word.style.maxWidth = (width - 20) + 'px';
       });
       const boxes = words.map((word, index) => {
-        const rect = word.getBoundingClientRect();
-        return { index, width: rect.width, height: rect.height };
+        const label = word.querySelector('.cloud-label');
+        const angle = Math.abs(Number(word.dataset.angle) || 0) * Math.PI / 180;
+        let naturalWidth = label.offsetWidth;
+        let naturalHeight = label.offsetHeight;
+        let rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
+        if (rotatedWidth > width - 28) {
+          word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 28) / rotatedWidth) + 'px';
+          naturalWidth = label.offsetWidth;
+          naturalHeight = label.offsetHeight;
+          rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
+        }
+        const rotatedHeight = Math.abs(Math.sin(angle)) * naturalWidth + Math.abs(Math.cos(angle)) * naturalHeight;
+        return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 8, height: Math.ceil(rotatedHeight) + 6 };
       });
-      const layout = Viz.packCloud(boxes, width);
+      const visibleBoxes = Viz.circularItems(boxes, width, this.state.tagMetric === 'average');
+      const layout = Viz.packCloud(visibleBoxes, width);
+      const visible = new Set(layout.items.map(box => box.index));
+      words.forEach((word, index) => { word.hidden = !visible.has(index); });
       for (const box of layout.items) {
         const word = words[box.index];
+        word.style.setProperty('--fit-scale', String(box.fitScale || 1));
+        word.style.width = box.width + 'px'; word.style.height = box.height + 'px';
         word.style.left = box.x + 'px'; word.style.top = box.y + 'px';
       }
       cloud.style.height = layout.height + 'px';
+      cloud.dataset.shape = layout.shape || 'dense';
+      cloud.dataset.visibleCount = String(layout.items.length);
+      cloud.dataset.fitScale = String(layout.scale || 1);
       cloud.dataset.width = width;
       cloud.classList.add('is-ready');
     }
@@ -2133,7 +2269,7 @@
     render() {
       const active = this.shadow.activeElement;
       const action = active?.getAttribute("data-action");
-      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
+      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-metric') || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
       const name = active?.getAttribute('aria-label');
       const settingsOpen = this.$(".data-settings")?.open;
       const stats = this.stats();
@@ -2143,7 +2279,7 @@
       const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
       this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><details class="data-settings" ${settingsOpen ? "open" : ""}><summary>更新</summary><div><button data-action="sync" ${this.state.busy ? "disabled" : ""}>更新收藏</button><button data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>补全人物资料</button>${this.state.busy ? '<button data-action="cancel">暂停补全</button>' : ""}</div></details></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
       if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
-        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
+        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-metric') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
         if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
       });
       this.scheduleCloud();
@@ -2152,15 +2288,16 @@
       .content{padding:18px 0 0;min-height:230px}.content header{display:none}
       .data-settings{position:relative;font-size:12px;color:var(--muted)}.data-settings summary{padding:4px 9px;border-radius:6px}.data-settings>div{position:absolute;right:0;top:32px;z-index:2;display:grid;min-width:150px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 3px 12px #0000000a}
       .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
+      .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
       .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
-      .tag-cloud{--cloud-hero:#cb4168;--cloud-strong:#a94868;--cloud-medium:#725669;--cloud-quiet:#77727a;position:relative;min-height:260px;visibility:hidden}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-hero:#ff8fb3;--cloud-strong:#e9a4bd;--cloud-medium:#ccb0c8;--cloud-quiet:#aaa0b0}.cloud-word{position:absolute;white-space:nowrap;padding:2px 3px;line-height:1.15;min-height:0!important;font-weight:400;border-radius:4px;color:var(--cloud-quiet);overflow:hidden;text-overflow:ellipsis;letter-spacing:-.025em}.cloud-word[data-tone="hero"]{color:var(--cloud-hero);font-weight:800}.cloud-word[data-tone="strong"]{color:var(--cloud-strong);font-weight:700}.cloud-word[data-tone="medium"]{color:var(--cloud-medium);font-weight:500}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{color:var(--cloud-hero);background:var(--pink-soft)}
-      .season-distribution{--season-0:#93bbcc;--season-1:#efa2b4;--season-2:#e8bd83;--season-3:#baa3ca;display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);align-items:center;gap:42px;max-width:680px;margin:0 auto}.season-pie{width:100%;height:auto}.season-pie path{stroke:var(--surface);stroke-width:2}.season-pie text{fill:#38292c;font:13px Arial,sans-serif;pointer-events:none}.season-legend{list-style:none;margin:0;padding:0;display:grid;gap:0}.season-legend-head,.season-legend li{display:grid;grid-template-columns:minmax(75px,1fr) 70px 70px;align-items:center;gap:10px}.season-legend-head{color:var(--muted);font-size:11px;padding:0 0 9px}.season-legend-head span:not(:first-child){text-align:right}.season-legend li{padding:14px 0;border-top:1px solid var(--line)}.season-name{display:flex;align-items:center;gap:9px}.season-name i{width:9px;height:9px;flex-shrink:0;border-radius:50%}.season-count{text-align:right;font-variant-numeric:tabular-nums}.season-average{font-size:18px;text-align:right;font-weight:500;color:var(--link);font-variant-numeric:tabular-nums}.distribution-note{text-align:center;color:var(--muted);font-size:11px;margin-top:16px}
+      .tag-cloud{--cloud-c0:#a52f5b;--cloud-c1:#6546b8;--cloud-c2:#08758c;--cloud-c3:#25734f;--cloud-c4:#a7520b;--cloud-c5:#8b3979;--cloud-c6:#315d9b;--cloud-c7:#7b5427;position:relative;isolation:isolate;min-height:280px;visibility:hidden;overflow:hidden;border-radius:18px;background:radial-gradient(circle at 14% 20%,#ffb86b20 0,transparent 27%),radial-gradient(circle at 85% 16%,#7b61ff1a 0,transparent 30%),radial-gradient(circle at 68% 86%,#00a6a61a 0,transparent 31%),linear-gradient(145deg,#fffaf8 0%,#faf8ff 48%,#f5fcfb 100%);box-shadow:inset 0 0 0 1px #65556b0d}.tag-cloud::before{content:"";position:absolute;z-index:-1;inset:12% 18%;border-radius:50%;background:#ffffff8c;filter:blur(32px)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#ff8cad;--cloud-c1:#bca6ff;--cloud-c2:#66d2e4;--cloud-c3:#79d39f;--cloud-c4:#ffb864;--cloud-c5:#eda1da;--cloud-c6:#91b8ff;--cloud-c7:#e7bd7c;background:radial-gradient(circle at 14% 20%,#ff9b4a22 0,transparent 30%),radial-gradient(circle at 85% 16%,#886dff26 0,transparent 32%),radial-gradient(circle at 68% 86%,#1fc9b822 0,transparent 34%),linear-gradient(145deg,#18141d 0%,#171827 52%,#101f20 100%);box-shadow:inset 0 0 0 1px #ffffff12}:host([data-theme="dark"]) .tag-cloud::before{background:#15131a70}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1.05;min-height:0!important;font-weight:450;border-radius:12px;color:var(--word-color);overflow:visible;letter-spacing:-.035em;opacity:.78;transition:opacity .2s ease,filter .2s ease;animation:cloud-in .34s cubic-bezier(.22,.8,.32,1) both;animation-delay:var(--delay)}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:3px 5px;transform:rotate(var(--angle)) scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease,text-shadow .2s ease,background .2s ease;filter:saturate(.9)}.cloud-word[data-tone="hero"]{font-weight:850;opacity:1}.cloud-word[data-tone="hero"] .cloud-label{padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--word-color) 9%,transparent);text-shadow:0 8px 24px color-mix(in srgb,var(--word-color) 26%,transparent)}.cloud-word[data-tone="strong"]{font-weight:720;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:580;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:transparent;filter:saturate(1.22)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:rotate(var(--angle)) scale(var(--fit-scale,1)) scale(1.055);background:color-mix(in srgb,var(--word-color) 12%,transparent);text-shadow:0 6px 20px color-mix(in srgb,var(--word-color) 24%,transparent)}@keyframes cloud-in{from{opacity:0;filter:blur(3px);transform:scale(.96)}to{filter:blur(0);transform:scale(1)}}
+      .tag-cloud{border-radius:50%}
       .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
       .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
       .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
       .pager{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:20px;font-size:12px;color:var(--muted)}
-      @container(max-width:500px){.people-list{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:20px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:1px}.year-column[data-label-five="true"] .column-year{display:none}.year-column[data-label-ten="true"] .column-year{display:block}.season-distribution{grid-template-columns:1fr;gap:22px}.season-pie{max-width:250px;justify-self:center}.season-summary{width:100%}}
+      @container(max-width:500px){.people-list{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:20px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:1px}.year-column[data-label-five="true"] .column-year{display:none}.year-column[data-label-ten="true"] .column-year{display:block}}
     </style>`; }
   }
 
@@ -2175,14 +2312,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.9.4";
+  const APP_VERSION = "0.10.3";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "28";
+  const RECOMMENDATION_MODEL_VERSION = "30";
   const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
@@ -3024,7 +3161,9 @@
 
         const candidates = await this.client.getCandidates(type, this.state.profile, force, selectedType);
         const marked = new Set(allCollections.map((item) => Number(item.subjectId)));
-        this.state.candidates = candidates.filter((subject) => !marked.has(Number(subject.id)));
+        this.state.candidates = candidates
+          .filter((subject) => !marked.has(Number(subject.id)))
+          .filter((subject) => selectedType.id !== "2" || !Core.candidateExclusion(subject));
         if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
 
         this.recompute({ enforceJapanese: false, render: false });
@@ -3089,6 +3228,9 @@
             originMetadata: details,
           };
         });
+      }
+      if (recommendationType(this.config.subjectType).id === "2") {
+        this.state.candidates = this.state.candidates.filter((subject) => !Core.candidateExclusion(subject));
       }
 
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);

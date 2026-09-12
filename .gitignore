@@ -1,0 +1,12 @@
+# internal caches and session data
+.cache/
+.workbuddy/
+
+# browser-test screenshots
+artifacts/
+
+# offline experiment bulk payloads (kept local; REPORT.md carries the summaries)
+experiments/*/data/
+experiments/*/results.json
+experiments/*/snapshot.json
+experiments/*/*-details.json
