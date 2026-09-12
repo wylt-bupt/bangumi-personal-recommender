@@ -9,6 +9,9 @@
 
   let db, host, shadow, state = C.freshState(USER), busy = false, channel, timer;
   let aborted = false, storageBlocked = false, message = '', drawnSignature = '';
+  // Idle streams only need attention every 15 minutes. Remembering the next
+  // due time lets the 30-second poll skip the full IndexedDB read meanwhile.
+  let idleUntil = 0;
 
   function openDB() {
     return new Promise((resolve, reject) => {
@@ -65,9 +68,21 @@
       if (!col) return false;
       col.prepend(host);
     } else {
-      const blog = document.querySelector('#user_home #blog');
-      if (!blog) return false;
-      blog.after(host); host.style.marginTop = '28px';
+      // Share the recommender gadget's sections area so section order is
+      // deterministic regardless of which gadget executes first: flex order
+      // 5 keeps the heatmap above the stats (10) and recommender (20) hosts.
+      const column = document.querySelector('#user_home');
+      if (!column) return false;
+      let area = document.getElementById('bgmpr-profile-sections');
+      if (!area) {
+        area = document.createElement('div');
+        area.id = 'bgmpr-profile-sections';
+        area.style.cssText = 'display:flex;flex-direction:column;gap:32px;clear:both;width:100%;min-width:0;margin:28px 0 36px';
+        const blog = column.querySelector('#blog');
+        if (blog) blog.after(area); else column.append(area);
+      }
+      host.style.cssText = 'display:block;min-width:0;width:100%;order:5';
+      area.append(host);
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
@@ -234,9 +249,9 @@
         };
       }
       run(); timer = setInterval(() => run(), 30000);
-      window.addEventListener('online', () => run());
+      window.addEventListener('online', () => { idleUntil = 0; run(); });
       window.addEventListener('pagehide', () => { aborted = true; clearInterval(timer); });
-      window.addEventListener('pageshow', event => { if (event.persisted) { clearInterval(timer); timer = setInterval(() => run(), 30000); run(); } });
+      window.addEventListener('pageshow', event => { if (event.persisted) { clearInterval(timer); idleUntil = 0; timer = setInterval(() => run(), 30000); run(); } });
     } catch (error) { message = error.message; render(); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
