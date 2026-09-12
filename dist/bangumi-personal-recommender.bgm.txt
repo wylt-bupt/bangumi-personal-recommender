@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.10.3
+// @version      0.10.5
 // @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -132,7 +132,9 @@
     format: 3,
   });
 
-  const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年(?:[147]|10)月)?$|^(?:19|20)\d0s$/i;
+  // Matches the same calendar-like forms as stats-viz isTemporalTag so time
+  // index tags never leak into profile features or recommendation cards.
+  const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年)?$|^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$|^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$|^(?:1|4|7|10)月(?:番|新番)$|^(?:19|20)\d0s$/i;
   const FORMAT_TAGS = new Set(["tv", "剧场版", "劇場版", "ova", "oad", "web", "泡面番"]);
   const ADULT_RECOMMENDATION_TAGS = Object.freeze({
     profile: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画", "r18", "18x", "18禁"]),
@@ -201,7 +203,9 @@
     const title = normalizeText(`${subject.name} ${subject.nameCn}`);
     const tagText = normalizeText([...subject.metaTags, ...subject.tags].join(" "));
     const formatText = `${normalizeText(subject.platform)} ${tagText}`;
-    if (/(?:剧场版|劇場版|映画|movie|film|ova|oad|special|特别篇|特別篇|sp\b)/i.test(`${title} ${formatText}`)) {
+    // Latin form tokens need word boundaries: plain substring matching would
+    // flag titles like "NOVA" (contains "ova") as specials.
+    if (/(?:剧场版|劇場版|映画|特别篇|特別篇|\b(?:movie|film|ova|oad|special|sp)\b)/i.test(`${title} ${formatText}`)) {
       return "movie-or-special";
     }
     if (/(?:总集篇|總集篇|総集編|重制版|重製版|重置版|remake|リメイク|再编辑|再編輯|再編集|re-?edit|recap|digest|etv版)/i.test(`${title} ${tagText}`)) {
@@ -315,12 +319,16 @@
     let explicitForeign = false;
 
     const countryKey = /(?:国家|國家|地区|地區|原产|原產|制作国|製作国|製作國|country|region)/i;
-    const japaneseCountry = /(?:^|\s)(?:日本|japan|japanese)(?:\s|$)/i;
-    const foreignCountry = /(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)/i;
+    // Compare whole country tokens on both sides. Substring matching treated
+    // "日本／美国" as foreign-only ("日本" needed whitespace around it, "美国"
+    // did not), so co-productions were misclassified as non-Japanese.
+    const japaneseCountry = /^(?:日本|japan|japanese)$/i;
+    const foreignCountry = /^(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|中国大陆|中國大陸|大陆|大陸|香港|台湾|台灣|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)$/i;
     for (const entry of entries) {
       if (!countryKey.test(entry.key)) continue;
-      if (japaneseCountry.test(` ${entry.value} `)) explicitJapanese = true;
-      if (foreignCountry.test(entry.value)) explicitForeign = true;
+      const tokens = entry.value.split(/[\s/／、，,;；|·]+/).filter(Boolean);
+      if (tokens.some((token) => japaneseCountry.test(token))) explicitJapanese = true;
+      if (tokens.some((token) => foreignCountry.test(token))) explicitForeign = true;
     }
 
     if (/(?:日本|日漫|日本动画|日本動畫|日剧|日劇|日影|日本电影|日本電影|j-?pop|アニソン|同人音楽|同人音乐|東方|东方project|vocaloid|特撮|特摄|轻小说|輕小說|ライトノベル|galgame|eroge|jrpg)/i.test(tagText)) {
@@ -583,8 +591,7 @@
     return { features, labels };
   }
 
-  function buildSimilarityVector(subjectInput, collectionTags = []) {
-    const vector = buildFeatureVector(subjectInput, collectionTags);
+  function similarityFromVector(vector) {
     const features = {};
     for (const [token, magnitude] of Object.entries(vector.features)) {
       const role = tokenPrefix(token);
@@ -597,28 +604,16 @@
     return { features, labels: vector.labels };
   }
 
+  function buildSimilarityVector(subjectInput, collectionTags = []) {
+    return similarityFromVector(buildFeatureVector(subjectInput, collectionTags));
+  }
+
   function calculateRatingBaseline(collections) {
     const rated = collections.filter((item) => item.rate > 0);
     const userMean = mean(rated.map((item) => item.rate)) || 7;
     const paired = rated.filter((item) => item.subject.rating.score > 0);
     const globalMean = mean(paired.map((item) => item.subject.rating.score)) || 6.8;
-    if (paired.length < 5) return { userMean, globalMean, beta: 0.35 };
-
-    let covariance = 0;
-    let variance = 0;
-    for (const item of paired) {
-      const gx = item.subject.rating.score - globalMean;
-      covariance += gx * (item.rate - userMean);
-      variance += gx * gx;
-    }
-    const beta = variance > 0 ? clamp(covariance / variance, 0, 1) : 0.35;
-    return { userMean, globalMean, beta };
-  }
-
-  function expectedRating(subject, baseline) {
-    const globalScore = Number(subject.rating?.score || 0);
-    if (!globalScore) return baseline.userMean;
-    return baseline.userMean + baseline.beta * (globalScore - baseline.globalMean);
+    return { userMean, globalMean };
   }
 
   function trainProfile(collectionInputs) {
@@ -938,7 +933,7 @@
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
-    const similarityVector = buildSimilarityVector(subject);
+    const similarityVector = similarityFromVector(vector);
     const contributions = Object.entries(vector.features)
       .map(([token, magnitude]) => ({
         token,
@@ -1207,7 +1202,6 @@
     buildFeatureVector,
     buildSimilarityVector,
     calculateRatingBaseline,
-    expectedRating,
     trainProfile,
     weightedJaccard,
     bayesianScore,
@@ -1329,17 +1323,6 @@
 
   function average(scores) {
     return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
-  }
-
-  function yearOfTimestamp(value) {
-    const raw = text(value);
-    const leadingYear = raw.match(/^(?:19|20)\d{2}/)?.[0];
-    if (leadingYear) return number(leadingYear);
-    const numeric = Number(raw);
-    const date = Number.isFinite(numeric) && numeric > 0
-      ? new Date(numeric < 1e12 ? numeric * 1000 : numeric)
-      : new Date(raw);
-    return Number.isNaN(date.getTime()) ? 0 : date.getFullYear();
   }
 
   function createBucket(row) {
@@ -1481,8 +1464,6 @@
         knownEpisodeWorks: knownEps.length,
         averageEpisodes: knownEps.length ? knownEps.reduce((sum, row) => sum + row.subject.eps, 0) / knownEps.length : 0,
         watchedEpisodes: collections.reduce((sum, row) => sum + row.epStatus, 0),
-        watchedThisYear: collections.filter((row) => yearOfTimestamp(row.updatedAt) === currentYear).length,
-        currentYear,
         status: Object.entries(status).map(([id, count]) => ({ id: number(id), label: STATUS_LABELS[id] || "未分类", count })).sort((a, b) => a.id - b.id),
       },
       coverage: {
@@ -1500,9 +1481,6 @@
           ratedCount: bucket.ratedCount,
           averageRate: bucket.ratedCount ? bucket.scoreSum / bucket.ratedCount : 0,
         })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
-        longest: [...knownEps].sort((a, b) => b.subject.eps - a.subject.eps || a.subject.name.localeCompare(b.subject.name, "zh-CN")).map((row) => ({
-          id: row.subject.id, name: row.subject.name, nameCn: row.subject.nameCn, eps: row.subject.eps,
-        })),
       },
     };
   }
@@ -1542,186 +1520,111 @@
   function scoreFontSize(score, scores) {
     const values = (Array.isArray(scores) ? scores : []).map(Number).filter(Number.isFinite);
     if (values.length < 2) return 26;
-    // Average scores occupy a narrow numeric range. Use their empirical percentile
-    // for visual weight, while keeping the exact score in the label/tooltip.
+    // Average scores occupy a narrow numeric range, so raw min-max mapping
+    // makes everything big and indistinguishable. Rank each score among the
+    // observed levels, then apply a steep power curve (like the count cloud's
+    // power-law shape): only the top few percent of tags become large while
+    // the long tail stays small, which keeps differences readable and the
+    // cloud compact. Tied scores share a level and thus the same size.
     const rounded = Math.round(Number(score) * 100) / 100;
     const levels = [...new Set(values.map(value => Math.round(value * 100) / 100))].sort((a, b) => a - b);
     if (levels.length < 2) return 26;
     const percentile = Math.max(0, Math.min(1, levels.indexOf(rounded) / (levels.length - 1)));
-    return 13 + 35 * Math.pow(percentile, 1.65);
+    return 12 + 38 * Math.pow(percentile, 4);
   }
   function isTemporalTag(value) {
     const tag = String(value || '').trim().replace(/\s+/g, '');
     return /^(?:19|20)\d{2}(?:年)?$/.test(tag)
       || /^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$/.test(tag)
       || /^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$/.test(tag)
-      || /^(?:1|4|7|10)月(?:番|新番)$/.test(tag);
+      || /^(?:1|4|7|10)月(?:番|新番)$/.test(tag)
+      || /^(?:19|20)\d0s$/i.test(tag);
   }
   function featuredTags(rows) {
     return rows.filter(row => Number(row.count) > 10 && !isTemporalTag(row.name)).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
   }
-  function circularItems(items, width, spread = false) {
-    if (!items.length) return items;
-    if (width >= 460) return items;
-    const radius = Math.max(1, (width - 20) / 2);
-    const budget = Math.PI * radius * radius * (width < 460 ? 0.38 : 0.36);
-    const candidates = spread
-      ? items.flatMap((_, index) => index >= Math.ceil(items.length / 2) ? [] : [items[index], items[items.length - 1 - index]]).filter((item, index, rows) => rows.indexOf(item) === index)
-      : items;
-    const selected = [];
-    let area = 0;
-    for (const item of candidates) {
-      const next = (item.width + 5) * (item.height + 5);
-      if (selected.length >= 8 && area + next > budget) {
-        if (!spread) break;
-        continue;
-      }
-      area += next;
-      selected.push(item);
-    }
-    return selected.sort((a, b) => a.index - b.index);
-  }
   function overlaps(a, b, gap = 5) {
     return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
   }
-  function episodeDistribution(rows) {
-    const counts = new Map();
-    for (const row of rows) {
-      const eps = Number(row.eps);
-      if (Number.isInteger(eps) && eps > 0) counts.set(eps, (counts.get(eps) || 0) + 1);
-    }
-    const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
-    const ranked = [...counts].map(([eps, count]) => ({ eps, count })).sort((a, b) => b.count - a.count || a.eps - b.eps);
-    // At most five common episode counts plus one combined low-frequency slice.
-    const common = ranked.filter(row => row.count / total >= 0.03).slice(0, 5);
-    const kept = new Set(common.map(row => row.eps));
-    const rest = ranked.filter(row => !kept.has(row.eps));
-    const groups = common.map(row => ({ ...row, label: row.eps + ' 话' }));
-    if (rest.length) groups.push({ label: '其他', count: rest.reduce((sum, row) => sum + row.count, 0), members: rest.sort((a,b) => a.eps-b.eps) });
-    return { total, groups: groups.map(row => ({ ...row, share: row.count / total })) };
-  }
-  function pieSlices(groups) {
-    let position = -Math.PI / 2;
-    return groups.map(group => {
-      const angle = group.share * 2 * Math.PI, end = position + angle;
-      const startPoint = [120 + 110 * Math.cos(position), 120 + 110 * Math.sin(position)];
-      const endPoint = [120 + 110 * Math.cos(end), 120 + 110 * Math.sin(end)];
-      const path = group.share >= 1 - 1e-10 ? 'M120 10 A110 110 0 1 1 120 230 A110 110 0 1 1 120 10 Z'
-        : 'M120 120 L' + startPoint.join(' ') + ' A110 110 0 ' + (angle > Math.PI ? 1 : 0) + ' 1 ' + endPoint.join(' ') + ' Z';
-      const middle = position + angle / 2;
-      position = end;
-      return { ...group, path, labelX: 120 + 73 * Math.cos(middle), labelY: 120 + 73 * Math.sin(middle) };
-    });
-  }
+  // Commercial-style organic cloud: every qualified tag is placed and none is
+  // dropped. The largest words claim the center and the rest spiral outward,
+  // like the layouts produced by dedicated word-cloud libraries. One bounded
+  // pass per global scale factor replaces the old trim-and-retry loop, which
+  // could spin through tens of millions of candidate positions and still end
+  // up showing only eight words.
   function packCloud(items, width) {
     if (!items.length) return { items: [], height: 0 };
-    const baseHeight = Math.max(width * 1.02, 260);
-    const maximumHeight = Math.max(width * 1.08, 260);
-    const tryEllipse = (candidates, currentHeight, scale) => {
-      candidates = candidates.map(item => ({
-        ...item,
-        width: Math.ceil(item.width * scale),
-        height: Math.ceil(item.height * scale),
-        fitScale: scale
-      }));
-      const placed = [];
-      const cells = new Map(), cellSize = 56;
-      const keys = (box, padding = 0) => {
-        const result = [];
-        for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
-          for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
-        return result;
-      };
-      const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
-      const insideEllipse = box => {
-        const radiusX = width / 2 - 8, radiusY = currentHeight / 2 - 8;
-        const distanceX = Math.abs(box.x + box.width / 2 - width / 2) + box.width / 2;
-        const distanceY = Math.abs(box.y + box.height / 2 - currentHeight / 2) + box.height / 2;
-        return (distanceX / radiusX) ** 2 + (distanceY / radiusY) ** 2 <= 1;
-      };
-      for (const item of candidates) {
-        let box;
-        const seed = Math.abs(Number(item.seed) || item.index + 1);
-        const phase = (seed % 6283) / 1000;
-        const direction = seed % 2 ? 1 : -1;
-        const angularStep = 0.31 + (seed % 11) / 100;
-        for (let step = 0; step < 5200; step++) {
-          const progress = step / 5200;
-          const angle = phase + direction * step * angularStep;
-          const radius = Math.pow(progress, 0.57);
-          const candidate = {
-            ...item,
-            x: (width - item.width) / 2 + Math.cos(angle) * radius * (width / 2 - 10 - item.width / 2),
-            y: (currentHeight - item.height) / 2 + Math.sin(angle) * radius * (currentHeight / 2 - 10 - item.height / 2)
-          };
-          if (insideEllipse(candidate) && !collides(candidate)) { box = candidate; break; }
-        }
-        if (!box) return null;
-        placed.push(box);
-        for (const key of keys(box, 5)) {
-          if (!cells.has(key)) cells.set(key, []);
-          cells.get(key).push(box);
-        }
-      }
-      return placed;
-    };
-    let candidates = items.slice(), reduced = false;
-    while (candidates.length) {
-      const scales = reduced ? [0.78, 0.72] : [1, 0.92, 0.85, 0.78, 0.72];
-      for (const scale of scales) {
-        for (let attempt = 0; attempt < 4; attempt++) {
-          const height = Math.ceil(Math.min(maximumHeight, baseHeight + width * 0.02 * attempt));
-          const placed = tryEllipse(candidates, height, scale);
-          if (placed) return { items: placed, height, scale, shape: 'ellipse', omitted: items.length - candidates.length };
-        }
-      }
-      if (candidates.length <= 8) break;
-      candidates = candidates.slice(0, Math.max(8, candidates.length - Math.max(1, Math.ceil(candidates.length * 0.1))));
-      reduced = true;
+    const order = [...items].sort((a, b) => (b.width * b.height) - (a.width * a.height) || a.index - b.index);
+    // Huge sets are inherently tall; forcing them into a square would shrink
+    // text beyond readability, so the aspect target adapts to the word count.
+    const generous = order.length > 250 ? 2.3 : order.length > 80 ? 1.7 : 1.05;
+    const aspectCap = width >= 460 ? generous : Math.max(1.6, generous);
+    let best = null;
+    for (const scale of [1, 0.94, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58]) {
+      const attempt = placeOrganic(order, width, scale);
+      if (!best || attempt.height < best.height) best = attempt;
+      if (attempt.height <= width * aspectCap + 1) break;
     }
-    return packDenseCloud(candidates, width);
+    return { items: best.items, height: best.height, scale: best.scale, shape: 'organic', omitted: 0 };
   }
-  function packDenseCloud(items, width) {
-    // Complete clouds can contain hundreds of rare tags. Free-rectangle packing
-    // avoids the long fallback tail of a bounded spiral without dropping tags.
-    const area = items.reduce((sum, item) => sum + (item.width + 5) * (item.height + 5), 0);
-    let height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.72));
-    const focusY = Math.min(180, height / 2);
-    let free = [{ x: 8, y: 8, width: width - 16, height: height - 16 }];
+  function placeOrganic(order, width, scale) {
+    const sized = order.map(item => ({
+      ...item,
+      width: Math.max(8, Math.ceil(item.width * scale)),
+      height: Math.max(6, Math.ceil(item.height * scale)),
+      fitScale: scale
+    }));
+    const totalArea = sized.reduce((sum, item) => sum + (item.width + 4) * (item.height + 4), 0);
+    const centerX = width / 2;
+    const centerY = Math.max(120, Math.ceil(totalArea / Math.max(1, width - 8) / 0.62) / 2);
+    const cells = new Map(), cellSize = 48;
+    const keys = (box, padding = 0) => {
+      const result = [];
+      for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
+        for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
+      return result;
+    };
+    const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
     const placed = [];
-    for (const item of items) {
-      const w = Math.min(width - 16, item.width + 5), h = item.height + 5;
+    let fallbackY = 12;
+    for (const item of sized) {
       const seed = Math.abs(Number(item.seed) || item.index + 1);
       const phase = (seed % 6283) / 1000;
-      const targetX = width / 2 + Math.cos(phase) * width * 0.17;
-      const targetY = focusY + Math.sin(phase) * Math.min(width, height) * 0.12;
-      let best;
-      for (const rect of free) {
-        if (rect.width < w || rect.height < h) continue;
-        const x = Math.max(rect.x, Math.min(targetX - w / 2, rect.x + rect.width - w));
-        const y = Math.max(rect.y, Math.min(targetY - h / 2, rect.y + rect.height - h));
-        const distance = ((x + w / 2 - targetX) / width) ** 2 + ((y + h / 2 - targetY) / Math.min(height, width)) ** 2;
-        if (!best || distance < best.distance) best = { x, y, width: w, height: h, distance };
+      const direction = seed % 2 ? 1 : -1;
+      const angularStep = 0.31 + (seed % 11) / 100;
+      let box;
+      // Words stay 12px inside the frame so the rounded container corners
+      // and hover glow never clip a glyph.
+      for (let step = 0; step < 6000; step++) {
+        const angle = phase + direction * step * angularStep;
+        const radius = step * 0.9;
+        const x = centerX + Math.cos(angle) * radius - item.width / 2;
+        const y = centerY + Math.sin(angle) * radius * 0.72 - item.height / 2;
+        if (x < 12 || x + item.width > width - 12 || y < 12) continue;
+        const candidate = { ...item, x, y };
+        if (!collides(candidate)) { box = candidate; break; }
       }
-      if (!best) {
-        free.push({ x: 8, y: height, width: width - 16, height: h });
-        best = { x: 8, y: height, width: w, height: h };
-        height += h;
+      if (!box) {
+        // Guaranteed lane below the cloud: a qualified word is never dropped.
+        box = { ...item, x: 4, y: fallbackY };
       }
-      const split = [];
-      for (const r of free) {
-        if (!overlaps(r, best, 0)) { split.push(r); continue; }
-        if (best.x > r.x) split.push({ ...r, width: best.x - r.x });
-        if (best.x + w < r.x + r.width) split.push({ ...r, x: best.x + w, width: r.x + r.width - best.x - w });
-        if (best.y > r.y) split.push({ ...r, height: best.y - r.y });
-        if (best.y + h < r.y + r.height) split.push({ ...r, y: best.y + h, height: r.y + r.height - best.y - h });
+      fallbackY = Math.max(fallbackY, box.y + box.height + 6);
+      placed.push(box);
+      // Registration padding must exceed the collision gap (5): a pair sitting
+      // 4.x px apart could otherwise land in adjacent grid cells and slip
+      // through the collision check.
+      for (const key of keys(box, 6)) {
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push(box);
       }
-      free = split.filter((a, i) => !split.some((b, j) => i !== j && a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height && (j < i || a.width !== b.width || a.height !== b.height)));
-      placed.push({ ...item, x: best.x, y: best.y });
     }
-    return { items: placed, height: Math.max(...placed.map(item => item.y + item.height)) + 12 };
+    // Re-center vertically so the cloud fills its frame instead of drifting.
+    const minY = Math.min(...placed.map(box => box.y));
+    if (minY > 12) for (const box of placed) box.y -= minY - 12;
+    const height = Math.ceil(Math.max(...placed.map(box => box.y + box.height))) + 12;
+    return { items: placed, height, scale };
   }
-  const api = { yearSeries, axis, fontSize, scoreFontSize, isTemporalTag, featuredTags, circularItems, overlaps, packCloud, episodeDistribution, pieSlices };
+  const api = { yearSeries, axis, fontSize, scoreFontSize, isTemporalTag, featuredTags, overlaps, packCloud };
   global.BangumiStatsViz = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);
@@ -1744,7 +1647,7 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.3";
+  const APP_VERSION = "0.10.5";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -1927,7 +1830,18 @@
     }
     detectTheme() { return globalThis.BangumiProfileUI.theme(); }
     $(selector) { return this.shadow.querySelector(selector); }
-    stats() { return Core.aggregate(this.state.collections, this.state.people, this.state.cast); }
+    stats() {
+      // Aggregate is expensive (full collection × people × cast). Memoize on
+      // data shape so re-renders (search typing, tab switches) do not
+      // recompute it; enrichment growth invalidates the cache naturally.
+      const { collections, people, cast } = this.state;
+      const signature = `${collections.length}:${Object.keys(people).length}:${Object.keys(cast).length}`;
+      if (this.statsSignature !== signature) {
+        this.statsCache = Core.aggregate(collections, people, cast);
+        this.statsSignature = signature;
+      }
+      return this.statsCache;
+    }
     isBusy() {
       this.state.busy = this.state.syncing || Object.values(this.state.jobs).some(Boolean);
       return this.state.busy;
@@ -2234,8 +2148,8 @@
         const rotatedHeight = Math.abs(Math.sin(angle)) * naturalWidth + Math.abs(Math.cos(angle)) * naturalHeight;
         return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 8, height: Math.ceil(rotatedHeight) + 6 };
       });
-      const visibleBoxes = Viz.circularItems(boxes, width, this.state.tagMetric === 'average');
-      const layout = Viz.packCloud(visibleBoxes, width);
+      // Every qualified tag is laid out; the packer never drops words.
+      const layout = Viz.packCloud(boxes, width);
       const visible = new Set(layout.items.map(box => box.index));
       words.forEach((word, index) => { word.hidden = !visible.has(index); });
       for (const box of layout.items) {
@@ -2292,7 +2206,6 @@
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
       .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
       .tag-cloud{--cloud-c0:#a52f5b;--cloud-c1:#6546b8;--cloud-c2:#08758c;--cloud-c3:#25734f;--cloud-c4:#a7520b;--cloud-c5:#8b3979;--cloud-c6:#315d9b;--cloud-c7:#7b5427;position:relative;isolation:isolate;min-height:280px;visibility:hidden;overflow:hidden;border-radius:18px;background:radial-gradient(circle at 14% 20%,#ffb86b20 0,transparent 27%),radial-gradient(circle at 85% 16%,#7b61ff1a 0,transparent 30%),radial-gradient(circle at 68% 86%,#00a6a61a 0,transparent 31%),linear-gradient(145deg,#fffaf8 0%,#faf8ff 48%,#f5fcfb 100%);box-shadow:inset 0 0 0 1px #65556b0d}.tag-cloud::before{content:"";position:absolute;z-index:-1;inset:12% 18%;border-radius:50%;background:#ffffff8c;filter:blur(32px)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#ff8cad;--cloud-c1:#bca6ff;--cloud-c2:#66d2e4;--cloud-c3:#79d39f;--cloud-c4:#ffb864;--cloud-c5:#eda1da;--cloud-c6:#91b8ff;--cloud-c7:#e7bd7c;background:radial-gradient(circle at 14% 20%,#ff9b4a22 0,transparent 30%),radial-gradient(circle at 85% 16%,#886dff26 0,transparent 32%),radial-gradient(circle at 68% 86%,#1fc9b822 0,transparent 34%),linear-gradient(145deg,#18141d 0%,#171827 52%,#101f20 100%);box-shadow:inset 0 0 0 1px #ffffff12}:host([data-theme="dark"]) .tag-cloud::before{background:#15131a70}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1.05;min-height:0!important;font-weight:450;border-radius:12px;color:var(--word-color);overflow:visible;letter-spacing:-.035em;opacity:.78;transition:opacity .2s ease,filter .2s ease;animation:cloud-in .34s cubic-bezier(.22,.8,.32,1) both;animation-delay:var(--delay)}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:3px 5px;transform:rotate(var(--angle)) scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease,text-shadow .2s ease,background .2s ease;filter:saturate(.9)}.cloud-word[data-tone="hero"]{font-weight:850;opacity:1}.cloud-word[data-tone="hero"] .cloud-label{padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--word-color) 9%,transparent);text-shadow:0 8px 24px color-mix(in srgb,var(--word-color) 26%,transparent)}.cloud-word[data-tone="strong"]{font-weight:720;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:580;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:transparent;filter:saturate(1.22)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:rotate(var(--angle)) scale(var(--fit-scale,1)) scale(1.055);background:color-mix(in srgb,var(--word-color) 12%,transparent);text-shadow:0 6px 20px color-mix(in srgb,var(--word-color) 24%,transparent)}@keyframes cloud-in{from{opacity:0;filter:blur(3px);transform:scale(.96)}to{filter:blur(0);transform:scale(1)}}
-      .tag-cloud{border-radius:50%}
       .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
       .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
       .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
@@ -2312,7 +2225,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.10.3";
+  const APP_VERSION = "0.10.5";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -2470,6 +2383,8 @@
       this.username = username;
       this.onProgress = onProgress;
       this.apiAvailable = true;
+      this.apiFailures = 0;
+      this.apiRetryAfter = 0;
     }
 
     progress(message, current = 0, total = 0) {
@@ -2514,13 +2429,23 @@
     }
 
     async requestJson(path, options = {}) {
-      if (!this.apiAvailable) throw new Error("API unavailable");
+      // Network blips no longer condemn the API for the whole session: only
+      // consecutive transport failures trip the breaker, and it retries after
+      // a five-minute cooldown instead of staying off until reload.
+      if (!this.apiAvailable && Date.now() < this.apiRetryAfter) throw new Error("API unavailable");
       try {
         const response = await this.request(`${API_BASE}${path}`, options);
-        return await response.json();
+        const data = await response.json();
+        this.apiFailures = 0;
+        this.apiAvailable = true;
+        return data;
       } catch (error) {
         if (error?.name === "TypeError" || error?.name === "AbortError" || /blocked|failed|network/i.test(error?.message || "")) {
-          this.apiAvailable = false;
+          this.apiFailures += 1;
+          if (this.apiFailures >= 2) {
+            this.apiAvailable = false;
+            this.apiRetryAfter = Date.now() + 5 * 60 * 1000;
+          }
         }
         throw error;
       }
@@ -3103,7 +3028,7 @@
       this.renderFromPool();
       this.updateSyncLabel();
       if (Date.now() - cached.storedAt > COLLECTION_TTL) {
-        this.setProgress("本地结果已显示；打开“刷新画像”可同步最新收藏。", 0, 0);
+        this.setProgress("本地结果已显示；点“更新”可同步最新收藏。", 0, 0);
       }
       return true;
     }

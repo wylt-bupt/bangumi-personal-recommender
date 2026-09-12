@@ -83,15 +83,6 @@ test("keeps additional creative roles and overview distributions", () => {
   assert.deepEqual(result.distributions.years, [{ year: 2020, count: 2 }]);
   assert.equal(result.distributions.tags[0].name, "科幻");
   assert.deepEqual(result.distributions.tags[0], { name: "科幻", count: 2, ratedCount: 2, averageRate: 9 });
-  assert.equal(result.distributions.longest[0].id, 9);
-});
-
-test("keeps the complete episode ranking instead of truncating overview data", () => {
-  const rows = Array.from({ length: 20 }, (_, index) => collection(index + 1, 8, 20 - index, 0));
-  const result = Stats.aggregate(rows, {}, {});
-  assert.equal(result.distributions.longest.length, 20);
-  assert.equal(result.distributions.longest[0].eps, 20);
-  assert.equal(result.distributions.longest.at(-1).eps, 1);
 });
 
 test("average ranking only includes the top decile by work count and keeps cutoff ties", () => {

@@ -420,3 +420,35 @@ test("origin metadata filters eligibility without changing recommendation score"
   assert.equal(Core.scoreSubject(base, profile).normalizedScore, Core.scoreSubject(enriched, profile).normalizedScore);
   assert.equal(Core.classifyJapaneseOrigin(enriched).status, "japanese");
 });
+
+test("calendar-like tags never enter profile features", () => {
+  const vector = Core.buildFeatureVector(
+    subject(301, 8, ["2024-07", "2025夏", "2024年7月番", "7月番", "2020s", "科幻"]),
+  );
+  const tokens = Object.keys(vector.features).filter((token) => token.startsWith("tag:") || token.startsWith("meta:"));
+  assert.ok(tokens.includes("tag:科幻"));
+  assert.ok(!tokens.some((token) => /2024|2025|2020s|月番/.test(token)));
+});
+
+test("form exclusion respects word boundaries and does not flag NOVA-like titles", () => {
+  assert.equal(Core.candidateExclusion({ name: "NOVA Science Now", type: 2, eps: 24 }), null);
+  assert.equal(Core.candidateExclusion({ name: "Superpowers!", type: 2, eps: 13 }), null);
+  assert.equal(Core.candidateExclusion({ name: "Example OVA", type: 2 }), "movie-or-special");
+  assert.equal(Core.candidateExclusion({ name: "Example SP", type: 2 }), "movie-or-special");
+});
+
+test("co-productions count both country tokens instead of defaulting to foreign", () => {
+  const coProduction = Core.classifyJapaneseOrigin({
+    id: 302,
+    type: 2,
+    name: "Cross Border",
+    infobox: [{ key: "国家", value: "日本／美国" }],
+  });
+  assert.notEqual(coProduction.status, "non_japanese");
+  assert.equal(Core.classifyJapaneseOrigin({
+    id: 303, type: 2, name: "Pure Import", infobox: [{ key: "国家", value: "美国" }],
+  }).status, "non_japanese");
+  assert.equal(Core.classifyJapaneseOrigin({
+    id: 304, type: 2, name: "Pure Domestic", infobox: [{ key: "国家", value: "日本" }],
+  }).status, "japanese");
+});

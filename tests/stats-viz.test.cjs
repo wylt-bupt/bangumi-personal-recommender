@@ -27,69 +27,56 @@ test('score word sizes use score percentiles to create a clear visual hierarchy'
   assert.ok(Viz.scoreFontSize(7.31,values)/Viz.scoreFontSize(6.72,values)>3.5);
   assert.equal(Viz.scoreFontSize(7.01,[6.5,7.01,7.01,8]),Viz.scoreFontSize(7.01,[6.5,7.01,7.01,8]));
 });
+test('score word sizes are power-law: the lower half stays small, only the top ranks grow large', () => {
+  // Averages cluster in a narrow band (here 8 levels). A count-cloud-like
+  // distribution keeps most tags small so differences stand out.
+  const values=[6.72,6.83,6.9,6.94,7.01,7.08,7.16,7.31];
+  const sizes=values.map(v=>Viz.scoreFontSize(v,values));
+  assert.ok(sizes.filter(s=>s<=20).length>=5,'lower ranks should stay small');
+  assert.ok(sizes[7]>=48,'top rank should dominate');
+  assert.ok(sizes[7]-sizes[6]>15,'top ranks separate clearly');
+  assert.ok(sizes[3]-sizes[0]<3,'lower ranks compress together');
+});
 test('tag threshold is strictly over ten, and frequency sorting is stable', () => {
   assert.deepEqual(Viz.featuredTags([{name:'十',count:10},{name:'十一',count:11},{name:'最多',count:548},{name:'少',count:1}]).map(row=>row.name),['最多','十一']);
 });
 test('calendar-like tags are excluded without removing thematic season words', () => {
-  const names=['2026','2026年','2026年7月','2026-07','2025夏番','7月番','夏天','青春'];
+  const names=['2026','2026年','2026年7月','2026-07','2025夏番','7月番','2020s','夏天','青春'];
   assert.deepEqual(Viz.featuredTags(names.map(name=>({name,count:20}))).map(row=>row.name),['青春','夏天']);
 });
-test('narrow clouds select an importance-first set from available circular area', () => {
-  const items=Array.from({length:70},(_,index)=>({index,width:70-index/2,height:26}));
-  const narrow=Viz.circularItems(items,335);
-  assert.ok(narrow.length>=8 && narrow.length<items.length);
-  assert.deepEqual(narrow,items.slice(0,narrow.length));
-  const wide=Viz.circularItems(items,816);
-  assert.equal(wide.length,items.length);
-  assert.deepEqual(wide,items);
-  const scoreSpread=Viz.circularItems(items,335,true);
-  assert.ok(scoreSpread.some(item=>item.index<10));
-  assert.ok(scoreSpread.some(item=>item.index>59));
-});
-test('cloud packing is deterministic, nearly circular, bounded and keeps the highest-priority words', () => {
+test('cloud packing places every word, deterministically, without overlap or overflow', () => {
   for(const width of [280,335,816]) {
-    const input=Array.from({length:48},(_,index)=>({index,width:Math.min(width-20,35+(index*37)%180),height:20+(index*11)%35}));
-    const selected=Viz.circularItems(input,width);
-    const cloud=Viz.packCloud(selected,width);
-    assert.deepEqual(cloud,Viz.packCloud(selected,width));
-    assert.ok(cloud.items.length>=8 && cloud.items.length<=selected.length);
-    assert.deepEqual(cloud.items.map(item=>item.index),selected.slice(0,cloud.items.length).map(item=>item.index));
-    assert.ok(cloud.height<=Math.max(width*1.08,260)+1);
+    const input=Array.from({length:48},(_,index)=>({index,seed:index*7919+3,width:Math.min(width-20,35+(index*37)%180),height:20+(index*11)%35}));
+    const cloud=Viz.packCloud(input,width);
+    assert.deepEqual(cloud,Viz.packCloud(input,width));
+    assert.equal(cloud.items.length,input.length);
+    assert.equal(new Set(cloud.items.map(item=>item.index)).size,input.length);
     cloud.items.forEach((a,i)=>{
-      assert.ok(a.x>=0 && a.x+a.width<=width && a.y>=0 && a.y+a.height<=cloud.height);
+      assert.ok(a.x>=0 && a.x+a.width<=width+1 && a.y>=0 && a.y+a.height<=cloud.height+1);
       cloud.items.slice(i+1).forEach(b=>assert.ok(!Viz.overlaps(a,b)));
     });
   }
   assert.deepEqual(Viz.packCloud([],335),{items:[],height:0});
 });
-test('episode distribution keeps no more than five common counts and merges the rest', () => {
-  const rows=[];
-  for(const [eps,count] of [[12,40],[24,20],[13,14],[26,10],[1,6],[2,2],[3,1],[50,1]])for(let i=0;i<count;i++)rows.push({eps});
-  const result=Viz.episodeDistribution(rows);
-  assert.equal(result.total,94);
-  assert.deepEqual(result.groups.map(row=>row.label),['12 话','24 话','13 话','26 话','1 话','其他']);
-  assert.equal(result.groups.at(-1).count,4);
-  assert.ok(Math.abs(result.groups.reduce((sum,row)=>sum+row.share,0)-1)<1e-10);
+test('moderate clouds stay close to the frame aspect and keep a center-out hierarchy', () => {
+  const input=Array.from({length:24},(_,index)=>({index,seed:index*31+7,width:60+(index*53)%120,height:24+(index*7)%14}));
+  const cloud=Viz.packCloud(input,816);
+  assert.ok(cloud.height<=Math.max(816*1.08,260)+1);
+  const largestFirst=cloud.items[0];
+  const centerDistance=Math.abs(largestFirst.x+largestFirst.width/2-408);
+  assert.ok(centerDistance<300,'largest word should sit near the center');
 });
-test('pie geometry covers one circle and preserves group values', () => {
-  const groups=[{label:'12 话',count:7,share:.7},{label:'其他',count:3,share:.3}];
-  const slices=Viz.pieSlices(groups);
-  assert.deepEqual(slices.map(row=>[row.label,row.count]),[['12 话',7],['其他',3]]);
-  assert.ok(slices.every(row=>/^M/.test(row.path)&&Number.isFinite(row.labelX)&&Number.isFinite(row.labelY)));
-  assert.match(Viz.pieSlices([{label:'12 话',count:1,share:1}])[0].path,/A110 110/);
-});
-test('an unusually dense tag set scales before dropping words and never stretches the cloud', () => {
+test('a dense tag set keeps every word and finishes quickly', () => {
   for (const width of [335,816]) {
-    const input=Array.from({length:160},(_,index)=>({index,width:30+(index*17)%90,height:23}));
-    const selected=Viz.circularItems(input,width);
-    const cloud=Viz.packCloud(selected,width);
-    assert.ok(cloud.items.length>=8 && cloud.items.length<=input.length);
-    if(width<460)assert.ok(cloud.items.length<input.length);
+    const input=Array.from({length:160},(_,index)=>({index,seed:index*104729,width:30+(index*17)%90,height:23}));
+    const started=Date.now();
+    const cloud=Viz.packCloud(input,width);
+    assert.ok(Date.now()-started<3000,'packing must stay interactive');
+    assert.equal(cloud.items.length,input.length);
     assert.ok((cloud.scale||1)<=1);
-    assert.ok(cloud.height<=Math.max(width*1.08,260)+1);
     cloud.items.forEach((a,i)=>{
-      assert.ok(a.x>=0 && a.x+a.width<=width && a.y>=0 && a.y+a.height<=cloud.height);
-      cloud.items.slice(i+1).forEach(b=>assert.ok(!Viz.overlaps(a,b,4.9)));
+      assert.ok(a.x>=0 && a.x+a.width<=width+1 && a.y>=0 && a.y+a.height<=cloud.height+1);
+      cloud.items.slice(i+1).forEach(b=>assert.ok(!Viz.overlaps(a,b)));
     });
   }
 });

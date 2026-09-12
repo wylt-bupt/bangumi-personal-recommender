@@ -101,17 +101,6 @@
     return scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
   }
 
-  function yearOfTimestamp(value) {
-    const raw = text(value);
-    const leadingYear = raw.match(/^(?:19|20)\d{2}/)?.[0];
-    if (leadingYear) return number(leadingYear);
-    const numeric = Number(raw);
-    const date = Number.isFinite(numeric) && numeric > 0
-      ? new Date(numeric < 1e12 ? numeric * 1000 : numeric)
-      : new Date(raw);
-    return Number.isNaN(date.getTime()) ? 0 : date.getFullYear();
-  }
-
   function createBucket(row) {
     return {
       id: row.id,
@@ -251,8 +240,6 @@
         knownEpisodeWorks: knownEps.length,
         averageEpisodes: knownEps.length ? knownEps.reduce((sum, row) => sum + row.subject.eps, 0) / knownEps.length : 0,
         watchedEpisodes: collections.reduce((sum, row) => sum + row.epStatus, 0),
-        watchedThisYear: collections.filter((row) => yearOfTimestamp(row.updatedAt) === currentYear).length,
-        currentYear,
         status: Object.entries(status).map(([id, count]) => ({ id: number(id), label: STATUS_LABELS[id] || "未分类", count })).sort((a, b) => a.id - b.id),
       },
       coverage: {
@@ -270,9 +257,6 @@
           ratedCount: bucket.ratedCount,
           averageRate: bucket.ratedCount ? bucket.scoreSum / bucket.ratedCount : 0,
         })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
-        longest: [...knownEps].sort((a, b) => b.subject.eps - a.subject.eps || a.subject.name.localeCompare(b.subject.name, "zh-CN")).map((row) => ({
-          id: row.subject.id, name: row.subject.name, nameCn: row.subject.nameCn, eps: row.subject.eps,
-        })),
       },
     };
   }

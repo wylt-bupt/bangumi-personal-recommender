@@ -59,7 +59,9 @@
     format: 3,
   });
 
-  const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年(?:[147]|10)月)?$|^(?:19|20)\d0s$/i;
+  // Matches the same calendar-like forms as stats-viz isTemporalTag so time
+  // index tags never leak into profile features or recommendation cards.
+  const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年)?$|^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$|^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$|^(?:1|4|7|10)月(?:番|新番)$|^(?:19|20)\d0s$/i;
   const FORMAT_TAGS = new Set(["tv", "剧场版", "劇場版", "ova", "oad", "web", "泡面番"]);
   const ADULT_RECOMMENDATION_TAGS = Object.freeze({
     profile: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画", "r18", "18x", "18禁"]),
@@ -128,7 +130,9 @@
     const title = normalizeText(`${subject.name} ${subject.nameCn}`);
     const tagText = normalizeText([...subject.metaTags, ...subject.tags].join(" "));
     const formatText = `${normalizeText(subject.platform)} ${tagText}`;
-    if (/(?:剧场版|劇場版|映画|movie|film|ova|oad|special|特别篇|特別篇|sp\b)/i.test(`${title} ${formatText}`)) {
+    // Latin form tokens need word boundaries: plain substring matching would
+    // flag titles like "NOVA" (contains "ova") as specials.
+    if (/(?:剧场版|劇場版|映画|特别篇|特別篇|\b(?:movie|film|ova|oad|special|sp)\b)/i.test(`${title} ${formatText}`)) {
       return "movie-or-special";
     }
     if (/(?:总集篇|總集篇|総集編|重制版|重製版|重置版|remake|リメイク|再编辑|再編輯|再編集|re-?edit|recap|digest|etv版)/i.test(`${title} ${tagText}`)) {
@@ -242,12 +246,16 @@
     let explicitForeign = false;
 
     const countryKey = /(?:国家|國家|地区|地區|原产|原產|制作国|製作国|製作國|country|region)/i;
-    const japaneseCountry = /(?:^|\s)(?:日本|japan|japanese)(?:\s|$)/i;
-    const foreignCountry = /(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)/i;
+    // Compare whole country tokens on both sides. Substring matching treated
+    // "日本／美国" as foreign-only ("日本" needed whitespace around it, "美国"
+    // did not), so co-productions were misclassified as non-Japanese.
+    const japaneseCountry = /^(?:日本|japan|japanese)$/i;
+    const foreignCountry = /^(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|中国大陆|中國大陸|大陆|大陸|香港|台湾|台灣|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)$/i;
     for (const entry of entries) {
       if (!countryKey.test(entry.key)) continue;
-      if (japaneseCountry.test(` ${entry.value} `)) explicitJapanese = true;
-      if (foreignCountry.test(entry.value)) explicitForeign = true;
+      const tokens = entry.value.split(/[\s/／、，,;；|·]+/).filter(Boolean);
+      if (tokens.some((token) => japaneseCountry.test(token))) explicitJapanese = true;
+      if (tokens.some((token) => foreignCountry.test(token))) explicitForeign = true;
     }
 
     if (/(?:日本|日漫|日本动画|日本動畫|日剧|日劇|日影|日本电影|日本電影|j-?pop|アニソン|同人音楽|同人音乐|東方|东方project|vocaloid|特撮|特摄|轻小说|輕小說|ライトノベル|galgame|eroge|jrpg)/i.test(tagText)) {
@@ -510,8 +518,7 @@
     return { features, labels };
   }
 
-  function buildSimilarityVector(subjectInput, collectionTags = []) {
-    const vector = buildFeatureVector(subjectInput, collectionTags);
+  function similarityFromVector(vector) {
     const features = {};
     for (const [token, magnitude] of Object.entries(vector.features)) {
       const role = tokenPrefix(token);
@@ -524,28 +531,16 @@
     return { features, labels: vector.labels };
   }
 
+  function buildSimilarityVector(subjectInput, collectionTags = []) {
+    return similarityFromVector(buildFeatureVector(subjectInput, collectionTags));
+  }
+
   function calculateRatingBaseline(collections) {
     const rated = collections.filter((item) => item.rate > 0);
     const userMean = mean(rated.map((item) => item.rate)) || 7;
     const paired = rated.filter((item) => item.subject.rating.score > 0);
     const globalMean = mean(paired.map((item) => item.subject.rating.score)) || 6.8;
-    if (paired.length < 5) return { userMean, globalMean, beta: 0.35 };
-
-    let covariance = 0;
-    let variance = 0;
-    for (const item of paired) {
-      const gx = item.subject.rating.score - globalMean;
-      covariance += gx * (item.rate - userMean);
-      variance += gx * gx;
-    }
-    const beta = variance > 0 ? clamp(covariance / variance, 0, 1) : 0.35;
-    return { userMean, globalMean, beta };
-  }
-
-  function expectedRating(subject, baseline) {
-    const globalScore = Number(subject.rating?.score || 0);
-    if (!globalScore) return baseline.userMean;
-    return baseline.userMean + baseline.beta * (globalScore - baseline.globalMean);
+    return { userMean, globalMean };
   }
 
   function trainProfile(collectionInputs) {
@@ -865,7 +860,7 @@
   function scoreSubject(subjectInput, profile, mode = "balanced") {
     const subject = normalizeSubject(subjectInput);
     const vector = buildFeatureVector(subject);
-    const similarityVector = buildSimilarityVector(subject);
+    const similarityVector = similarityFromVector(vector);
     const contributions = Object.entries(vector.features)
       .map(([token, magnitude]) => ({
         token,
@@ -1134,7 +1129,6 @@
     buildFeatureVector,
     buildSimilarityVector,
     calculateRatingBaseline,
-    expectedRating,
     trainProfile,
     weightedJaccard,
     bayesianScore,

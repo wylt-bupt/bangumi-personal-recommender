@@ -162,6 +162,8 @@
       this.username = username;
       this.onProgress = onProgress;
       this.apiAvailable = true;
+      this.apiFailures = 0;
+      this.apiRetryAfter = 0;
     }
 
     progress(message, current = 0, total = 0) {
@@ -206,13 +208,23 @@
     }
 
     async requestJson(path, options = {}) {
-      if (!this.apiAvailable) throw new Error("API unavailable");
+      // Network blips no longer condemn the API for the whole session: only
+      // consecutive transport failures trip the breaker, and it retries after
+      // a five-minute cooldown instead of staying off until reload.
+      if (!this.apiAvailable && Date.now() < this.apiRetryAfter) throw new Error("API unavailable");
       try {
         const response = await this.request(`${API_BASE}${path}`, options);
-        return await response.json();
+        const data = await response.json();
+        this.apiFailures = 0;
+        this.apiAvailable = true;
+        return data;
       } catch (error) {
         if (error?.name === "TypeError" || error?.name === "AbortError" || /blocked|failed|network/i.test(error?.message || "")) {
-          this.apiAvailable = false;
+          this.apiFailures += 1;
+          if (this.apiFailures >= 2) {
+            this.apiAvailable = false;
+            this.apiRetryAfter = Date.now() + 5 * 60 * 1000;
+          }
         }
         throw error;
       }
@@ -795,7 +807,7 @@
       this.renderFromPool();
       this.updateSyncLabel();
       if (Date.now() - cached.storedAt > COLLECTION_TTL) {
-        this.setProgress("本地结果已显示；打开“刷新画像”可同步最新收藏。", 0, 0);
+        this.setProgress("本地结果已显示；点“更新”可同步最新收藏。", 0, 0);
       }
       return true;
     }
