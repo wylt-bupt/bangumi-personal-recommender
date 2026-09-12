@@ -7,6 +7,27 @@ const stamp = ms => new Date(ms + 8 * 3600000).toISOString().slice(0, 16).replac
 const codePath = path.resolve('dist/bangumi-personal-timeline.user.js');
 const now = Date.now();
 
+// Batch progress is a checkpoint, so only its delta from the previous known
+// checkpoint/episode belongs to that day. Every old activity remains worth at
+// least one, keeping the revised heatmap monotonic against the original count.
+const core = require('../src/timeline-core.cjs');
+const episodeState = core.freshState('wylt');
+const episodeDayA = core.dayStart(now) - 2 * core.DAY + 12 * 3600000;
+const episodeDayB = core.dayStart(now) - core.DAY + 12 * 3600000;
+episodeState.events = [
+  { id: '5', type: 'progress', time: episodeDayB + 2000, source: 'web', subjects: ['248154'], text: '完成了 风が強く吹いている 12 of 23 话' },
+  { id: '1', type: 'progress', time: episodeDayA, source: 'web', subjects: ['248154'], text: '完成了 风が強く吹いている 4 of 23 话' },
+  { id: '6', type: 'subject', time: episodeDayB + 3000, source: 'web', subjects: ['248154'], text: '将 风が強く吹いている 标记为看过' },
+  { id: '3', type: 'progress', time: episodeDayA + 2000, source: 'web', subjects: ['248154'], text: '看过 ep.6 裸の王様' },
+  { id: '2', type: 'progress', time: episodeDayA + 1000, source: 'web', subjects: ['248154'], text: '看过 ep.5 灰かぶり' },
+  { id: '4', type: 'progress', time: episodeDayB + 1000, source: 'web', subjects: ['248154'], text: '完成了 风が強く吹いている 9 of 23 话' }
+];
+episodeState.streams.subject.complete = episodeState.streams.progress.complete = true;
+const episodeAggregate = core.aggregate(episodeState, now);
+assert.equal(episodeAggregate.days.find(day => day.key === core.dayKey(episodeDayA)).count, 6);
+assert.equal(episodeAggregate.days.find(day => day.key === core.dayKey(episodeDayB)).count, 7);
+assert.equal(episodeAggregate.total, 13);
+
 function fixture(type, page, extra = false) {
   const base = type === 'subject' ? 100 : 200;
   const rows = page === 1 ? [0, 1, 2].map(i => ({ id: base + i, time: now - (i + 1) * 86400000 })) : [{ id: base + 4, time: now - 400 * 86400000 }];
@@ -75,6 +96,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(await page.locator('h2').textContent(), '时光机统计');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
     assert.equal(await page.locator('.hm-chart-area i').count(), 4);
+    assert.match(await page.locator('.hm-cell').last().locator('title').textContent(), /\d{4}-\d{2}-\d{2}: \d+ 集/);
     assert.match(await page.locator('.hm-chart-area').textContent(), /近1年活跃率:\s*0\.8%\s*·\s*近30天活跃:\s*3\s*天少多/);
     assert.equal(await page.locator('img').count(), 0, 'remote covers never enter live DOM');
     const style = await page.locator('#hm-dashboard').evaluate(element => {

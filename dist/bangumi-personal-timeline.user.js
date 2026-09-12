@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.4
-// @description  原版风格的年度时光机热力图，数据由浏览器直接从 Bangumi 同步并保存在本地。
+// @version      1.0.6
+// @description  原版风格的年度标记热力图；保留每条活动，并按实际新增集数计算批量进度。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
 // @match        https://bangumi.tv/*
@@ -79,22 +79,49 @@
     // Import records, never trust imported cursors or claims of complete coverage.
     return { ...state, events: mergeEvents(state.events, events) };
   }
+  function progressSubjectKey(event) {
+    if (event.subjects[0]) return `subject:${event.subjects[0]}`;
+    return `text:${event.text.replace(/\bep\.\s*\d+\b/ig, '').replace(/\d+\s+of\s+\d+\s*话/ig, '').replace(/\s+/g, ' ').trim()}`;
+  }
+  function progressUnits(event, progress) {
+    const key = progressSubjectKey(event);
+    const previous = progress.get(key) || 0;
+    const checkpoint = event.text.match(/(?:^|\s)(\d+)\s+of\s+\d+\s*话(?:\s|$)/i);
+    if (checkpoint) {
+      const current = Number(checkpoint[1]);
+      progress.set(key, Math.max(previous, current));
+      return Math.max(0, current - previous);
+    }
+    const episode = event.text.match(/\bep\.\s*(\d+)\b/i);
+    if (episode) progress.set(key, Math.max(previous, Number(episode[1])));
+    // Specials and older timeline formats may not expose an episode number,
+    // but each progress entry still represents at least one marked episode.
+    return 1;
+  }
   function aggregate(state, now = Date.now()) {
     const start = dayStart(now) - 364 * DAY;
     const end = dayStart(now) + DAY;
-    const events = state.events.filter(e => e.time >= start && e.time <= now);
     const daily = Object.create(null), hourly = Array(24).fill(0), weekly = Array(7).fill(0), sources = Object.create(null);
+    const progress = new Map();
+    let total = 0;
+    const events = state.events.filter(e => e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
     for (const e of events) {
+      // Preserve the original heatmap contract: every timeline activity counts
+      // at least once. Progress checkpoints only increase that weight when one
+      // action represents multiple newly marked episodes.
+      const amount = e.type === 'progress' ? Math.max(1, progressUnits(e, progress)) : 1;
+      if (e.time < start) continue;
       const key = dayKey(e.time), d = new Date(e.time + 8 * 3600000);
-      daily[key] = (daily[key] || 0) + 1;
-      hourly[d.getUTCHours()]++;
-      weekly[(d.getUTCDay() + 6) % 7]++;
+      daily[key] = (daily[key] || 0) + amount;
+      hourly[d.getUTCHours()] += amount;
+      weekly[(d.getUTCDay() + 6) % 7] += amount;
       const name = e.source === 'web' ? '网页端' : e.source === 'mobile' ? '移动端' : e.source;
-      sources[name] = (sources[name] || 0) + 1;
+      sources[name] = (sources[name] || 0) + amount;
+      total += amount;
     }
     const coverage = Math.max(...TYPES.map(type => {
-      const s = state.streams[type];
-      return s.complete ? start : s.oldest === null ? end : dayStart(s.oldest) + DAY;
+      const stream = state.streams[type];
+      return stream.complete ? start : stream.oldest === null ? end : dayStart(stream.oldest) + DAY;
     }));
     const days = Array.from({ length: 365 }, (_, i) => {
       const time = start + i * DAY, key = dayKey(time);
@@ -102,9 +129,9 @@
     });
     const ranked = Object.entries(sources).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
-    return { days, hourly, weekly, platform, total: events.length, complete: TYPES.every(t => state.streams[t].complete), start, end };
+    return { days, hourly, weekly, platform, total, complete: TYPES.every(t => state.streams[t].complete), start, end };
   }
-  return { DAY, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, aggregate, importBackup, normalizeEvent };
+  return { DAY, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, aggregate, importBackup, normalizeEvent, progressUnits };
 });
 
 
@@ -203,7 +230,7 @@
     const height = padT + rows * (cell + gap) + 4;
     const labels = ['一', '', '三', '', '五', '', '日'];
     const monthDrawn = Object.create(null);
-    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年时光机活动热力图"><g transform="translate(${padL} ${padT})">`;
+    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日标记集数热力图"><g transform="translate(${padL} ${padT})">`;
     labels.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
@@ -220,7 +247,7 @@
         }
       }
       const fill = count === 0 ? 'var(--hm-cell-empty)' : count <= 3 ? 'var(--hm-cell-l1)' : count <= 9 ? 'var(--hm-cell-l2)' : 'var(--hm-cell-l3)';
-      svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 次</title></rect>`;
+      svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 集</title></rect>`;
     }
     svg += '</g></svg>';
     const active = data.days.filter(day => day.count > 0).length;

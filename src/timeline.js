@@ -93,7 +93,7 @@
     const height = padT + rows * (cell + gap) + 4;
     const labels = ['一', '', '三', '', '五', '', '日'];
     const monthDrawn = Object.create(null);
-    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年时光机活动热力图"><g transform="translate(${padL} ${padT})">`;
+    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日标记集数热力图"><g transform="translate(${padL} ${padT})">`;
     labels.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
@@ -110,7 +110,7 @@
         }
       }
       const fill = count === 0 ? 'var(--hm-cell-empty)' : count <= 3 ? 'var(--hm-cell-l1)' : count <= 9 ? 'var(--hm-cell-l2)' : 'var(--hm-cell-l3)';
-      svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 次</title></rect>`;
+      svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 集</title></rect>`;
     }
     svg += '</g></svg>';
     const active = data.days.filter(day => day.count > 0).length;

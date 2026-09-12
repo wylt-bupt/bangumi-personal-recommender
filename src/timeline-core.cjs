@@ -68,22 +68,49 @@
     // Import records, never trust imported cursors or claims of complete coverage.
     return { ...state, events: mergeEvents(state.events, events) };
   }
+  function progressSubjectKey(event) {
+    if (event.subjects[0]) return `subject:${event.subjects[0]}`;
+    return `text:${event.text.replace(/\bep\.\s*\d+\b/ig, '').replace(/\d+\s+of\s+\d+\s*话/ig, '').replace(/\s+/g, ' ').trim()}`;
+  }
+  function progressUnits(event, progress) {
+    const key = progressSubjectKey(event);
+    const previous = progress.get(key) || 0;
+    const checkpoint = event.text.match(/(?:^|\s)(\d+)\s+of\s+\d+\s*话(?:\s|$)/i);
+    if (checkpoint) {
+      const current = Number(checkpoint[1]);
+      progress.set(key, Math.max(previous, current));
+      return Math.max(0, current - previous);
+    }
+    const episode = event.text.match(/\bep\.\s*(\d+)\b/i);
+    if (episode) progress.set(key, Math.max(previous, Number(episode[1])));
+    // Specials and older timeline formats may not expose an episode number,
+    // but each progress entry still represents at least one marked episode.
+    return 1;
+  }
   function aggregate(state, now = Date.now()) {
     const start = dayStart(now) - 364 * DAY;
     const end = dayStart(now) + DAY;
-    const events = state.events.filter(e => e.time >= start && e.time <= now);
     const daily = Object.create(null), hourly = Array(24).fill(0), weekly = Array(7).fill(0), sources = Object.create(null);
+    const progress = new Map();
+    let total = 0;
+    const events = state.events.filter(e => e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
     for (const e of events) {
+      // Preserve the original heatmap contract: every timeline activity counts
+      // at least once. Progress checkpoints only increase that weight when one
+      // action represents multiple newly marked episodes.
+      const amount = e.type === 'progress' ? Math.max(1, progressUnits(e, progress)) : 1;
+      if (e.time < start) continue;
       const key = dayKey(e.time), d = new Date(e.time + 8 * 3600000);
-      daily[key] = (daily[key] || 0) + 1;
-      hourly[d.getUTCHours()]++;
-      weekly[(d.getUTCDay() + 6) % 7]++;
+      daily[key] = (daily[key] || 0) + amount;
+      hourly[d.getUTCHours()] += amount;
+      weekly[(d.getUTCDay() + 6) % 7] += amount;
       const name = e.source === 'web' ? '网页端' : e.source === 'mobile' ? '移动端' : e.source;
-      sources[name] = (sources[name] || 0) + 1;
+      sources[name] = (sources[name] || 0) + amount;
+      total += amount;
     }
     const coverage = Math.max(...TYPES.map(type => {
-      const s = state.streams[type];
-      return s.complete ? start : s.oldest === null ? end : dayStart(s.oldest) + DAY;
+      const stream = state.streams[type];
+      return stream.complete ? start : stream.oldest === null ? end : dayStart(stream.oldest) + DAY;
     }));
     const days = Array.from({ length: 365 }, (_, i) => {
       const time = start + i * DAY, key = dayKey(time);
@@ -91,7 +118,7 @@
     });
     const ranked = Object.entries(sources).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
-    return { days, hourly, weekly, platform, total: events.length, complete: TYPES.every(t => state.streams[t].complete), start, end };
+    return { days, hourly, weekly, platform, total, complete: TYPES.every(t => state.streams[t].complete), start, end };
   }
-  return { DAY, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, aggregate, importBackup, normalizeEvent };
+  return { DAY, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, aggregate, importBackup, normalizeEvent, progressUnits };
 });
