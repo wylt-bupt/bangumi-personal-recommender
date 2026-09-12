@@ -82,6 +82,7 @@ test("keeps additional creative roles and overview distributions", () => {
   assert.deepEqual(result.distributions.ratings.filter((row) => row.count), [{ score: 8, count: 1 }, { score: 10, count: 1 }]);
   assert.deepEqual(result.distributions.years, [{ year: 2020, count: 2 }]);
   assert.equal(result.distributions.tags[0].name, "科幻");
+  assert.deepEqual(result.distributions.tags[0], { name: "科幻", count: 2, ratedCount: 2, averageRate: 9 });
   assert.equal(result.distributions.longest[0].id, 9);
 });
 

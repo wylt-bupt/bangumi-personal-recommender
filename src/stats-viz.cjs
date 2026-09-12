@@ -14,25 +14,49 @@
     return { max: step * 4, ticks: Array.from({ length: 5 }, (_, i) => step * i) };
   }
   function fontSize(count, min, max) {
-    return max === min ? 32 : 14 + 58 * Math.pow(Math.max(0, Math.min(1, (count - min) / (max - min))), 0.85);
+    return max === min ? 30 : 12 + 38 * Math.pow(Math.max(0, Math.min(1, (count - min) / (max - min))), 0.82);
+  }
+  function scoreFontSize(score, scores) {
+    const values = (Array.isArray(scores) ? scores : []).map(Number).filter(Number.isFinite);
+    if (values.length < 2) return 26;
+    // Average scores occupy a narrow numeric range. Use their empirical percentile
+    // for visual weight, while keeping the exact score in the label/tooltip.
+    const rounded = Math.round(Number(score) * 100) / 100;
+    const levels = [...new Set(values.map(value => Math.round(value * 100) / 100))].sort((a, b) => a - b);
+    if (levels.length < 2) return 26;
+    const percentile = Math.max(0, Math.min(1, levels.indexOf(rounded) / (levels.length - 1)));
+    return 13 + 35 * Math.pow(percentile, 1.65);
+  }
+  function isTemporalTag(value) {
+    const tag = String(value || '').trim().replace(/\s+/g, '');
+    return /^(?:19|20)\d{2}(?:年)?$/.test(tag)
+      || /^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$/.test(tag)
+      || /^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$/.test(tag)
+      || /^(?:1|4|7|10)月(?:番|新番)$/.test(tag);
   }
   function featuredTags(rows) {
-    return rows.filter(row => Number(row.count) > 10).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
+    return rows.filter(row => Number(row.count) > 10 && !isTemporalTag(row.name)).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
   }
-  function seasonDistribution(rows) {
-    const groups = [1,4,7,10].map((month, index) => ({ month, label: month + ' 月番', season: ['冬','春','夏','秋'][index], count: 0, rated: 0, scoreSum: 0 }));
-    let unknown = 0;
-    for (const row of rows) {
-      const match = String(row.subject?.date || '').match(/^\d{4}-(\d{2})(?:-|$)/);
-      const month = Number(match?.[1]);
-      if (!Number.isInteger(month) || month < 1 || month > 12) { unknown++; continue; }
-      const group = groups[Math.floor((month - 1) / 3)];
-      group.count++;
-      const rate = Number(row.rate);
-      if (rate > 0 && rate <= 10) { group.rated++; group.scoreSum += rate; }
+  function circularItems(items, width, spread = false) {
+    if (!items.length) return items;
+    if (width >= 460) return items;
+    const radius = Math.max(1, (width - 20) / 2);
+    const budget = Math.PI * radius * radius * (width < 460 ? 0.38 : 0.36);
+    const candidates = spread
+      ? items.flatMap((_, index) => index >= Math.ceil(items.length / 2) ? [] : [items[index], items[items.length - 1 - index]]).filter((item, index, rows) => rows.indexOf(item) === index)
+      : items;
+    const selected = [];
+    let area = 0;
+    for (const item of candidates) {
+      const next = (item.width + 5) * (item.height + 5);
+      if (selected.length >= 8 && area + next > budget) {
+        if (!spread) break;
+        continue;
+      }
+      area += next;
+      selected.push(item);
     }
-    const total = groups.reduce((sum, group) => sum + group.count, 0);
-    return { total, unknown, groups: groups.map(group => ({ ...group, share: total ? group.count / total : 0, average: group.rated ? group.scoreSum / group.rated : null })) };
+    return selected.sort((a, b) => a.index - b.index);
   }
   function overlaps(a, b, gap = 5) {
     return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
@@ -68,40 +92,71 @@
   }
   function packCloud(items, width) {
     if (!items.length) return { items: [], height: 0 };
-    if (items.length > 100) return packDenseCloud(items, width);
-    const area = items.reduce((sum, item) => sum + (item.width + 8) * (item.height + 8), 0);
-    const height = Math.max(220, Math.ceil(area / Math.max(1, width - 16) / 0.58));
-    const placed = [];
-    const cells = new Map(), cellSize = 64;
-    const keys = (box, padding = 0) => {
-      const result = [];
-      for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
-        for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
-      return result;
+    const baseHeight = Math.max(width * 1.02, 260);
+    const maximumHeight = Math.max(width * 1.08, 260);
+    const tryEllipse = (candidates, currentHeight, scale) => {
+      candidates = candidates.map(item => ({
+        ...item,
+        width: Math.ceil(item.width * scale),
+        height: Math.ceil(item.height * scale),
+        fitScale: scale
+      }));
+      const placed = [];
+      const cells = new Map(), cellSize = 56;
+      const keys = (box, padding = 0) => {
+        const result = [];
+        for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
+          for (let y = Math.floor((box.y - padding) / cellSize); y <= Math.floor((box.y + box.height + padding) / cellSize); y++) result.push(x + ':' + y);
+        return result;
+      };
+      const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
+      const insideEllipse = box => {
+        const radiusX = width / 2 - 8, radiusY = currentHeight / 2 - 8;
+        const distanceX = Math.abs(box.x + box.width / 2 - width / 2) + box.width / 2;
+        const distanceY = Math.abs(box.y + box.height / 2 - currentHeight / 2) + box.height / 2;
+        return (distanceX / radiusX) ** 2 + (distanceY / radiusY) ** 2 <= 1;
+      };
+      for (const item of candidates) {
+        let box;
+        const seed = Math.abs(Number(item.seed) || item.index + 1);
+        const phase = (seed % 6283) / 1000;
+        const direction = seed % 2 ? 1 : -1;
+        const angularStep = 0.31 + (seed % 11) / 100;
+        for (let step = 0; step < 5200; step++) {
+          const progress = step / 5200;
+          const angle = phase + direction * step * angularStep;
+          const radius = Math.pow(progress, 0.57);
+          const candidate = {
+            ...item,
+            x: (width - item.width) / 2 + Math.cos(angle) * radius * (width / 2 - 10 - item.width / 2),
+            y: (currentHeight - item.height) / 2 + Math.sin(angle) * radius * (currentHeight / 2 - 10 - item.height / 2)
+          };
+          if (insideEllipse(candidate) && !collides(candidate)) { box = candidate; break; }
+        }
+        if (!box) return null;
+        placed.push(box);
+        for (const key of keys(box, 5)) {
+          if (!cells.has(key)) cells.set(key, []);
+          cells.get(key).push(box);
+        }
+      }
+      return placed;
     };
-    const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
-    let bottom = height;
-    for (const item of items) {
-      let box;
-      // Deterministic elliptical spiral: the most frequent term stays central.
-      for (let step = 0; step < 2200; step++) {
-        const angle = step * 0.38, radius = Math.sqrt(step / 2200) * 0.75;
-        const candidate = { ...item, x: (width - item.width) / 2 + Math.cos(angle) * radius * width, y: (height - item.height) / 2 + Math.sin(angle) * radius * height };
-        if (candidate.x < 8 || candidate.x + item.width > width - 8 || candidate.y < 8 || candidate.y + item.height > height - 8) continue;
-        if (!collides(candidate)) { box = candidate; break; }
+    let candidates = items.slice(), reduced = false;
+    while (candidates.length) {
+      const scales = reduced ? [0.78, 0.72] : [1, 0.92, 0.85, 0.78, 0.72];
+      for (const scale of scales) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const height = Math.ceil(Math.min(maximumHeight, baseHeight + width * 0.02 * attempt));
+          const placed = tryEllipse(candidates, height, scale);
+          if (placed) return { items: placed, height, scale, shape: 'ellipse', omitted: items.length - candidates.length };
+        }
       }
-      // A non-overlapping fallback keeps unusually long labels; nothing is dropped.
-      if (!box) { box = { ...item, x: Math.max(8, (width - item.width) / 2), y: bottom + 8 }; bottom += item.height + 8; }
-      placed.push(box);
-      for (const key of keys(box, 5)) {
-        if (!cells.has(key)) cells.set(key, []);
-        cells.get(key).push(box);
-      }
+      if (candidates.length <= 8) break;
+      candidates = candidates.slice(0, Math.max(8, candidates.length - Math.max(1, Math.ceil(candidates.length * 0.1))));
+      reduced = true;
     }
-    const top = Math.min(...placed.map(item => item.y));
-    const end = Math.max(...placed.map(item => item.y + item.height));
-    const actualHeight = Math.max(220, end - top + 24);
-    return { items: placed.map(item => ({ ...item, y: item.y - top + (actualHeight - (end - top)) / 2 })), height: actualHeight };
+    return packDenseCloud(candidates, width);
   }
   function packDenseCloud(items, width) {
     // Complete clouds can contain hundreds of rare tags. Free-rectangle packing
@@ -113,12 +168,16 @@
     const placed = [];
     for (const item of items) {
       const w = Math.min(width - 16, item.width + 5), h = item.height + 5;
+      const seed = Math.abs(Number(item.seed) || item.index + 1);
+      const phase = (seed % 6283) / 1000;
+      const targetX = width / 2 + Math.cos(phase) * width * 0.17;
+      const targetY = focusY + Math.sin(phase) * Math.min(width, height) * 0.12;
       let best;
       for (const rect of free) {
         if (rect.width < w || rect.height < h) continue;
-        const x = Math.max(rect.x, Math.min((width - w) / 2, rect.x + rect.width - w));
-        const y = Math.max(rect.y, Math.min(focusY - h / 2, rect.y + rect.height - h));
-        const distance = ((x + w / 2 - width / 2) / width) ** 2 + ((y + h / 2 - focusY) / Math.min(height, width)) ** 2;
+        const x = Math.max(rect.x, Math.min(targetX - w / 2, rect.x + rect.width - w));
+        const y = Math.max(rect.y, Math.min(targetY - h / 2, rect.y + rect.height - h));
+        const distance = ((x + w / 2 - targetX) / width) ** 2 + ((y + h / 2 - targetY) / Math.min(height, width)) ** 2;
         if (!best || distance < best.distance) best = { x, y, width: w, height: h, distance };
       }
       if (!best) {
@@ -139,7 +198,7 @@
     }
     return { items: placed, height: Math.max(...placed.map(item => item.y + item.height)) + 12 };
   }
-  const api = { yearSeries, axis, fontSize, featuredTags, seasonDistribution, overlaps, packCloud, episodeDistribution, pieSlices };
+  const api = { yearSeries, axis, fontSize, scoreFontSize, isTemporalTag, featuredTags, circularItems, overlaps, packCloud, episodeDistribution, pieSlices };
   global.BangumiStatsViz = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

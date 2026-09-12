@@ -24,7 +24,7 @@ const assert = require('node:assert/strict');
       await page.locator('.tag-cloud.is-ready').waitFor();
       const cloud = await page.locator('.tag-cloud').evaluate(el => {
         const root = el.getBoundingClientRect();
-        return {width:root.width,height:root.height,words:Array.from(el.children).map(word => {
+        return {width:root.width,height:root.height,words:Array.from(el.children).filter(word => !word.hidden).map(word => {
           const r=word.getBoundingClientRect();
           return {x:r.x-root.x,y:r.y-root.y,width:r.width,height:r.height,size:parseFloat(getComputedStyle(word).fontSize)};
         })};
@@ -33,7 +33,9 @@ const assert = require('node:assert/strict');
         assert.ok(a.x>=0 && a.x+a.width<=cloud.width+1 && a.y>=0 && a.y+a.height<=cloud.height+1);
         cloud.words.slice(i+1).forEach(b => assert.ok(a.x+a.width<=b.x || b.x+b.width<=a.x || a.y+a.height<=b.y || b.y+b.height<=a.y,'cloud overlap'));
       });
+      assert.ok(cloud.height<=Math.max(cloud.width*1.08,260)+1,'cloud aspect ratio stretched too far');
       assert.ok(cloud.words[0].size>cloud.words.at(-1).size);
+      return cloud;
     }
     for(const [width,height,theme] of [[1440,1000,'light'],[375,812,'light'],[667,375,'light'],[1440,1000,'dark']]) {
       await page.setViewportSize({width,height});
@@ -41,27 +43,31 @@ const assert = require('node:assert/strict');
       await page.locator('.year-chart').waitFor();
       const labels=await page.locator('.year-column').evaluateAll(nodes=>nodes.map(el=>el.getAttribute('aria-label')));
       assert.equal(labels.length,47);assert.ok(labels[0].startsWith('2026'));assert.ok(labels.at(-1).startsWith('1980'));
-      assert.deepEqual(await page.locator('[data-action="tab"]').allTextContents(),['年代','季度','标签','创作','声优']);
+      assert.deepEqual(await page.locator('[data-action="tab"]').allTextContents(),['年代','标签','创作','声优']);
       assert.equal(await page.locator('[data-action="year-page"]').count(),0);
       await page.locator('.year-column').first().focus();await page.keyboard.press('ArrowRight');
       assert.ok(await page.locator('.year-column').nth(1).evaluate(el=>el===el.getRootNode().activeElement));
       await page.locator('#bgmstats-host').screenshot({path:'artifacts/years-'+width+'-'+theme+'.png'});
       await page.getByRole('button',{name:'标签',exact:true}).click();
-      await checkCloud();
+      const countCloud=await checkCloud();
       const expectedTags=await page.evaluate(()=>BangumiPersonalStatsCore.aggregate(fixtureCollections).distributions.tags.filter(row=>row.count>10).length);
       assert.equal(await page.locator('.cloud-word').count(),expectedTags);
+      if(width>500)assert.equal(countCloud.words.length,expectedTags);
       assert.ok(await page.locator('.cloud-word').evaluateAll(nodes=>nodes.every(el=>Number(el.dataset.count)>10)));
       await page.locator('.cloud-word').first().click();assert.match(await page.locator('.viz-caption').innerText(),/日常 · \d+ 部/);
       await page.locator('#bgmstats-host').screenshot({path:'artifacts/cloud-'+width+'-'+theme+'.png'});
+      await page.getByRole('button',{name:'个人均分',exact:true}).click();
+      await page.locator('.tag-cloud.is-ready').waitFor();
+      const averageCloud=await checkCloud();
+      if(width>500)assert.equal(averageCloud.words.length,expectedTags);
+      const averageSizeRatio=averageCloud.words[0].size/averageCloud.words.at(-1).size;
+      assert.ok(averageSizeRatio>2.5,'average cloud hierarchy is too flat: '+averageSizeRatio);
+      const averages=await page.locator('.cloud-word').evaluateAll(nodes=>nodes.map(el=>Number(el.dataset.value)));
+      assert.ok(averages.every((value,index)=>index===0||averages[index-1]>=value));
+      assert.match(await page.locator('.viz-caption').innerText(),/标签作品个人均分/);
+      await page.locator('.cloud-word').first().click();assert.match(await page.locator('.viz-caption').innerText(),/个人均分 \d+\.\d{2}/);
+      await page.getByRole('button',{name:'出现次数',exact:true}).click();
       assert.equal(await page.locator('[data-page-kind="tags"]').count(),0);
-      await page.getByRole('button',{name:'季度',exact:true}).click();
-      assert.equal(await page.locator('.season-legend li').count(),4);
-      assert.equal(await page.locator('.work-cover,.longest-list').count(),0);
-      const pieTotal=await page.locator('.season-count').evaluateAll(nodes=>nodes.reduce((sum,node)=>sum+Number(node.textContent.replace(/\D/g,'')),0));
-      assert.equal(pieTotal,80);
-      const expectedSeasons=await page.evaluate(()=>[0,1,2,3].map(index=>{const rows=fixtureCollections.filter(row=>Math.floor((Number(row.subject.date.slice(5,7))-1)/3)===index);const rated=rows.filter(row=>row.rate>0);return {count:rows.length,average:(rated.reduce((sum,row)=>sum+row.rate,0)/rated.length).toFixed(2)};}));
-      assert.deepEqual(await page.locator('.season-average').allTextContents(),expectedSeasons.map(row=>row.average));
-      await page.locator('#bgmstats-host').screenshot({path:'artifacts/seasons-'+width+'-'+theme+'.png'});
       await page.getByRole('button',{name:'创作',exact:true}).click();assert.equal(await page.locator('.person-bar').count(),12);
       const rankOrder=await page.locator('.rank').evaluateAll(nodes=>nodes.map(node=>node.textContent));
       const leftColumn=await page.locator('.people-list li').evaluateAll(nodes=>nodes.slice(0,6).map(node=>node.getBoundingClientRect().left));
@@ -76,7 +82,7 @@ const assert = require('node:assert/strict');
       await page.getByRole('button',{name:'声优',exact:true}).click();assert.equal(await page.locator('.person-bar').count(),12);
       await page.locator('[data-search="cast"]').fill('没有这个声优');await page.locator('.content .empty').waitFor();
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-      console.log(width+'×'+height+' '+theme+': descending years, tag threshold/cloud, season counts/means, column order passed');
+      console.log(width+'×'+height+' '+theme+': descending years, tag threshold/cloud, column order passed');
     }
     // Resize while the cloud stays open, not just on a fresh render.
     await page.getByRole('button',{name:'标签',exact:true}).click();await checkCloud();

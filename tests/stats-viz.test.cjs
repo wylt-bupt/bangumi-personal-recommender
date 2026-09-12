@@ -16,31 +16,45 @@ test('count axes start at zero, have integer ticks and cover every value', () =>
 test('cloud font size is monotonic in frequency; ties have equal size', () => {
   assert.ok(Viz.fontSize(100,1,100)>Viz.fontSize(25,1,100));
   assert.ok(Viz.fontSize(25,1,100)>Viz.fontSize(1,1,100));
-  assert.equal(Viz.fontSize(10,10,10),32);
+  assert.equal(Viz.fontSize(10,10,10),30);
   assert.ok(Viz.fontSize(548,11,548)/Viz.fontSize(11,11,548)>4);
+});
+test('score word sizes use score percentiles to create a clear visual hierarchy', () => {
+  assert.equal(Viz.scoreFontSize(7,[7]),26);
+  const values=[6.72,6.83,6.9,6.94,7.01,7.08,7.16,7.31];
+  assert.ok(Viz.scoreFontSize(7.31,values)>Viz.scoreFontSize(7.01,values));
+  assert.ok(Viz.scoreFontSize(7.01,values)>Viz.scoreFontSize(6.72,values));
+  assert.ok(Viz.scoreFontSize(7.31,values)/Viz.scoreFontSize(6.72,values)>3.5);
+  assert.equal(Viz.scoreFontSize(7.01,[6.5,7.01,7.01,8]),Viz.scoreFontSize(7.01,[6.5,7.01,7.01,8]));
 });
 test('tag threshold is strictly over ten, and frequency sorting is stable', () => {
   assert.deepEqual(Viz.featuredTags([{name:'十',count:10},{name:'十一',count:11},{name:'最多',count:548},{name:'少',count:1}]).map(row=>row.name),['最多','十一']);
 });
-test('seasons include all twelve months; means exclude unrated works', () => {
-  const rows=Array.from({length:12},(_,i)=>({subject:{date:'2025-'+String(i+1).padStart(2,'0')+'-15'},rate:i===0?0:8}));
-  rows.push({subject:{date:'2024-01-01'},rate:10},{subject:{date:'2024'},rate:9},{subject:{date:'2025-13-01'},rate:8});
-  const result=Viz.seasonDistribution(rows);
-  assert.equal(result.total,13);assert.equal(result.unknown,2);
-  assert.deepEqual(result.groups.map(row=>row.month),[1,4,7,10]);
-  assert.deepEqual(result.groups.map(row=>row.count),[4,3,3,3]);
-  assert.equal(result.groups[0].rated,3);assert.equal(result.groups[0].average,26/3);
-  assert.ok(Math.abs(result.groups.reduce((sum,row)=>sum+row.share,0)-1)<1e-10);
-  const empty=Viz.seasonDistribution([{subject:{date:'2024-07'},rate:0}]);
-  assert.equal(empty.groups[2].count,1);assert.equal(empty.groups[2].average,null);
-  assert.equal(empty.groups[0].count,0);assert.equal(empty.groups[0].average,null);
+test('calendar-like tags are excluded without removing thematic season words', () => {
+  const names=['2026','2026年','2026年7月','2026-07','2025夏番','7月番','夏天','青春'];
+  assert.deepEqual(Viz.featuredTags(names.map(name=>({name,count:20}))).map(row=>row.name),['青春','夏天']);
 });
-test('cloud packing is deterministic, bounded and never overlaps or drops a word', () => {
+test('narrow clouds select an importance-first set from available circular area', () => {
+  const items=Array.from({length:70},(_,index)=>({index,width:70-index/2,height:26}));
+  const narrow=Viz.circularItems(items,335);
+  assert.ok(narrow.length>=8 && narrow.length<items.length);
+  assert.deepEqual(narrow,items.slice(0,narrow.length));
+  const wide=Viz.circularItems(items,816);
+  assert.equal(wide.length,items.length);
+  assert.deepEqual(wide,items);
+  const scoreSpread=Viz.circularItems(items,335,true);
+  assert.ok(scoreSpread.some(item=>item.index<10));
+  assert.ok(scoreSpread.some(item=>item.index>59));
+});
+test('cloud packing is deterministic, nearly circular, bounded and keeps the highest-priority words', () => {
   for(const width of [280,335,816]) {
     const input=Array.from({length:48},(_,index)=>({index,width:Math.min(width-20,35+(index*37)%180),height:20+(index*11)%35}));
-    const cloud=Viz.packCloud(input,width);
-    assert.deepEqual(cloud,Viz.packCloud(input,width));
-    assert.equal(cloud.items.length,input.length);
+    const selected=Viz.circularItems(input,width);
+    const cloud=Viz.packCloud(selected,width);
+    assert.deepEqual(cloud,Viz.packCloud(selected,width));
+    assert.ok(cloud.items.length>=8 && cloud.items.length<=selected.length);
+    assert.deepEqual(cloud.items.map(item=>item.index),selected.slice(0,cloud.items.length).map(item=>item.index));
+    assert.ok(cloud.height<=Math.max(width*1.08,260)+1);
     cloud.items.forEach((a,i)=>{
       assert.ok(a.x>=0 && a.x+a.width<=width && a.y>=0 && a.y+a.height<=cloud.height);
       cloud.items.slice(i+1).forEach(b=>assert.ok(!Viz.overlaps(a,b)));
@@ -64,16 +78,18 @@ test('pie geometry covers one circle and preserves group values', () => {
   assert.ok(slices.every(row=>/^M/.test(row.path)&&Number.isFinite(row.labelX)&&Number.isFinite(row.labelY)));
   assert.match(Viz.pieSlices([{label:'12 话',count:1,share:1}])[0].path,/A110 110/);
 });
-test('all 700 tags fit without overlap or a sparse fallback tail', () => {
+test('an unusually dense tag set scales before dropping words and never stretches the cloud', () => {
   for (const width of [335,816]) {
-    const input=Array.from({length:700},(_,index)=>({index,width:30+(index*17)%90,height:23}));
-    const cloud=Viz.packCloud(input,width);
-    assert.equal(cloud.items.length,700);
+    const input=Array.from({length:160},(_,index)=>({index,width:30+(index*17)%90,height:23}));
+    const selected=Viz.circularItems(input,width);
+    const cloud=Viz.packCloud(selected,width);
+    assert.ok(cloud.items.length>=8 && cloud.items.length<=input.length);
+    if(width<460)assert.ok(cloud.items.length<input.length);
+    assert.ok((cloud.scale||1)<=1);
+    assert.ok(cloud.height<=Math.max(width*1.08,260)+1);
     cloud.items.forEach((a,i)=>{
       assert.ok(a.x>=0 && a.x+a.width<=width && a.y>=0 && a.y+a.height<=cloud.height);
       cloud.items.slice(i+1).forEach(b=>assert.ok(!Viz.overlaps(a,b,4.9)));
     });
-    const packedArea=input.reduce((sum,item)=>sum+(item.width+5)*(item.height+5),0);
-    assert.ok(cloud.height<packedArea/(width-16)/.6);
   }
 });

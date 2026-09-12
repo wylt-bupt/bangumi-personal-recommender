@@ -15,9 +15,9 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.9.4";
+  const APP_VERSION = "0.10.3";
   const RANK_PAGE_SIZE = 12;
-  const TABS = Object.freeze({ overview: "年代", seasons: "季度", tags: "标签", staff: "创作", cast: "声优" });
+  const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
   function text(value) { return String(value ?? ""); }
   function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
@@ -151,6 +151,7 @@
         cancel: false,
         activeTab: "overview",
         activeStaffGroup: "directors",
+        tagMetric: "count",
         search: { staff: "", cast: "" },
         pages: { staff: 1, cast: 1 },
         sort: { staff: "works", cast: "works" },
@@ -337,6 +338,10 @@
       if (action === "all") this.enrichAll();
       if (action === "cancel") this.pauseEnrichment();
       if (action === "tab") { this.state.activeTab = event.target.closest("[data-tab]")?.dataset.tab || "overview"; this.render(); }
+      if (action === "tag-metric") {
+        const metric = event.target.closest("[data-metric]")?.dataset.metric;
+        if (["count", "average"].includes(metric)) { this.state.tagMetric = metric; this.render(); }
+      }
       if (action === "staff-group") { this.state.activeStaffGroup = event.target.closest("[data-group]")?.dataset.group || "directors"; this.state.search.staff = ""; this.state.pages.staff = 1; this.render(); }
       if (action === "sort") {
         const button = event.target.closest("[data-sort-kind]");
@@ -413,7 +418,6 @@
     overview(stats) {
       if (!stats.overview.works) return `<p class="empty">${!this.state.lastSync ? (/失败|异常/.test(this.state.progress.label) ? '可通过“更新”重试。' : '正在读取动画收藏…') : '还没有可回顾的动画。'}</p>`;
       if (this.state.activeTab === 'tags') return this.tags(stats.distributions.tags);
-      if (this.state.activeTab === 'seasons') return this.seasons();
       return this.years(stats.distributions.years);
     }
     years(rows) {
@@ -436,20 +440,30 @@
     tags(rows) {
       rows = Viz.featuredTags(rows);
       if (!rows.length) return '<p class="empty">还没有数量大于 10 部的标签。</p>';
-      const min = rows.at(-1).count, max = rows[0].count;
-      const caption = '常见的喜好';
-      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span></div><div class="tag-cloud">${rows.map(row => {
-        const ratio = row.count / max;
-        const tone = ratio >= 0.6 ? 'hero' : ratio >= 0.28 ? 'strong' : ratio >= 0.1 ? 'medium' : 'quiet';
-        const size = Viz.fontSize(row.count, min, max);
-        return `<button class="cloud-word" data-tone="${tone}" data-count="${row.count}" data-viz-label="${escapeHtml(row.name)} · ${row.count} 部" title="${escapeHtml(row.name)} · ${row.count} 部" aria-label="${escapeHtml(row.name)}，${row.count} 部" data-size="${size}" style="font-size:${size}px">${escapeHtml(row.name)}</button>`;
+      const metric = this.state.tagMetric === 'average' ? 'average' : 'count';
+      const ranked = [...rows]
+        .filter(row => metric === 'count' || row.ratedCount > 0)
+        .sort((a, b) => metric === 'average'
+          ? b.averageRate - a.averageRate || b.ratedCount - a.ratedCount || b.count - a.count || a.name.localeCompare(b.name, 'zh-CN')
+          : b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
+      const values = ranked.map(row => metric === 'average' ? row.averageRate : row.count);
+      const min = Math.min(...values), max = Math.max(...values);
+      const caption = metric === 'average' ? '标签作品个人均分' : '标签出现次数';
+      const controls = `<div class="cloud-metric" role="group" aria-label="词云数值"><button type="button" data-action="tag-metric" data-metric="count" aria-pressed="${metric === 'count'}">出现次数</button><button type="button" data-action="tag-metric" data-metric="average" aria-pressed="${metric === 'average'}">个人均分</button></div>`;
+      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span>${controls}</div><div class="tag-cloud">${ranked.map((row, index) => {
+        const value = metric === 'average' ? row.averageRate : row.count;
+        const ratio = max === min ? 0.5 : (value - min) / (max - min);
+        const tone = ratio >= 0.72 ? 'hero' : ratio >= 0.42 ? 'strong' : ratio >= 0.18 ? 'medium' : 'quiet';
+        const size = metric === 'average' ? Viz.scoreFontSize(value, values) : Viz.fontSize(value, min, max);
+        const seed = Array.from(String(row.name)).reduce((hash, character) => Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0, 2166136261);
+        const angles = [0, -8, 5, -4, 8, 0, -6, 4, 0, 7, -5, 3];
+        const angle = ratio >= 0.72 ? 0 : angles[seed % angles.length];
+        const color = seed % 8;
+        const detail = metric === 'average'
+          ? `${row.name} · 个人均分 ${formatRate(row.averageRate)} · ${row.ratedCount}/${row.count} 部已评分`
+          : `${row.name} · ${row.count} 部`;
+        return `<button class="cloud-word" data-tone="${tone}" data-color="${color}" data-count="${row.count}" data-value="${value}" data-viz-label="${escapeHtml(detail)}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(detail)}" data-size="${size}" data-angle="${angle}" data-seed="${seed}" style="font-size:${size}px;--angle:${angle}deg;--delay:${Math.min(360, index * 12)}ms"><span class="cloud-label">${escapeHtml(row.name)}</span></button>`;
       }).join('')}</div></section>`;
-    }
-    seasons() {
-      const distribution = Viz.seasonDistribution(this.state.collections);
-      if (!distribution.total) return '<p class="empty">暂无可归入季度的首播日期。</p>';
-      const slices = Viz.pieSlices(distribution.groups);
-      return `<section aria-label="四个新番季度的数量与个人均分"><div class="viz-heading" title="按首播月份归类：1—3月、4—6月、7—9月、10—12月；均分仅计算已评分作品。">四季新番</div><div class="season-distribution"><svg class="season-pie" viewBox="0 0 240 240" aria-hidden="true">${slices.map((slice, index) => slice.count ? `<path d="${slice.path}" style="fill:var(--season-${index})"><title>${slice.label}：${slice.count} 部，个人均分 ${slice.average === null ? '暂无' : slice.average.toFixed(2)}</title></path>${slice.share >= 0.08 ? `<text x="${slice.labelX}" y="${slice.labelY}" text-anchor="middle" dominant-baseline="middle">${Math.round(slice.share * 100)}%</text>` : ''}` : '').join('')}</svg><div class="season-summary"><div class="season-legend-head" aria-hidden="true"><span>季度</span><span>数量</span><span>个人均分</span></div><ul class="season-legend">${slices.map((slice,index) => `<li aria-label="${slice.label}，${slice.count} 部，占 ${(slice.share*100).toFixed(1)}%，个人均分 ${slice.average === null ? '暂无' : slice.average.toFixed(2)}，${slice.rated} 部已评分"><span class="season-name"><i style="background:var(--season-${index})" aria-hidden="true"></i>${slice.label}</span><span class="season-count">${slice.count} 部</span><b class="season-average" title="${slice.rated} 部已评分">${slice.average === null ? '—' : slice.average.toFixed(2)}</b></li>`).join('')}</ul></div></div>${distribution.unknown ? `<p class="distribution-note">${distribution.unknown} 部首播月份不明，未计入季度</p>` : ''}</section>`;
     }
     scheduleCloud() {
       cancelAnimationFrame(this.cloudFrame);
@@ -463,25 +477,48 @@
       const words = Array.from(cloud.querySelectorAll('.cloud-word'));
       // Measure real browser text, including CJK/fallback fonts and browser text scaling.
       words.forEach(word => {
+        word.hidden = false;
+        word.style.width = 'auto';
+        word.style.height = 'auto';
         word.style.maxWidth = 'none';
-        const scale = Math.min(1, Math.pow(width / 600, 0.35));
+        word.style.removeProperty('--fit-scale');
+        const scale = Math.min(1, Math.pow(width / 680, width < 460 ? 0.58 : 0.35));
         word.style.fontSize = Math.max(12, Number(word.dataset.size) * scale) + 'px';
       });
-      const naturalWidths = words.map(word => word.getBoundingClientRect().width);
-      words.forEach((word, index) => {
-        if (naturalWidths[index] > width - 20) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 20) / naturalWidths[index]) + 'px';
+      words.forEach(word => {
+        const naturalWidth = word.querySelector('.cloud-label').offsetWidth;
+        if (naturalWidth > width - 32) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 32) / naturalWidth) + 'px';
         word.style.maxWidth = (width - 20) + 'px';
       });
       const boxes = words.map((word, index) => {
-        const rect = word.getBoundingClientRect();
-        return { index, width: rect.width, height: rect.height };
+        const label = word.querySelector('.cloud-label');
+        const angle = Math.abs(Number(word.dataset.angle) || 0) * Math.PI / 180;
+        let naturalWidth = label.offsetWidth;
+        let naturalHeight = label.offsetHeight;
+        let rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
+        if (rotatedWidth > width - 28) {
+          word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 28) / rotatedWidth) + 'px';
+          naturalWidth = label.offsetWidth;
+          naturalHeight = label.offsetHeight;
+          rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
+        }
+        const rotatedHeight = Math.abs(Math.sin(angle)) * naturalWidth + Math.abs(Math.cos(angle)) * naturalHeight;
+        return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 8, height: Math.ceil(rotatedHeight) + 6 };
       });
-      const layout = Viz.packCloud(boxes, width);
+      const visibleBoxes = Viz.circularItems(boxes, width, this.state.tagMetric === 'average');
+      const layout = Viz.packCloud(visibleBoxes, width);
+      const visible = new Set(layout.items.map(box => box.index));
+      words.forEach((word, index) => { word.hidden = !visible.has(index); });
       for (const box of layout.items) {
         const word = words[box.index];
+        word.style.setProperty('--fit-scale', String(box.fitScale || 1));
+        word.style.width = box.width + 'px'; word.style.height = box.height + 'px';
         word.style.left = box.x + 'px'; word.style.top = box.y + 'px';
       }
       cloud.style.height = layout.height + 'px';
+      cloud.dataset.shape = layout.shape || 'dense';
+      cloud.dataset.visibleCount = String(layout.items.length);
+      cloud.dataset.fitScale = String(layout.scale || 1);
       cloud.dataset.width = width;
       cloud.classList.add('is-ready');
     }
@@ -503,7 +540,7 @@
     render() {
       const active = this.shadow.activeElement;
       const action = active?.getAttribute("data-action");
-      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
+      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-metric') || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
       const name = active?.getAttribute('aria-label');
       const settingsOpen = this.$(".data-settings")?.open;
       const stats = this.stats();
@@ -513,7 +550,7 @@
       const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
       this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><details class="data-settings" ${settingsOpen ? "open" : ""}><summary>更新</summary><div><button data-action="sync" ${this.state.busy ? "disabled" : ""}>更新收藏</button><button data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>补全人物资料</button>${this.state.busy ? '<button data-action="cancel">暂停补全</button>' : ""}</div></details></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
       if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
-        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
+        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-metric') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
         if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
       });
       this.scheduleCloud();
@@ -522,15 +559,16 @@
       .content{padding:18px 0 0;min-height:230px}.content header{display:none}
       .data-settings{position:relative;font-size:12px;color:var(--muted)}.data-settings summary{padding:4px 9px;border-radius:6px}.data-settings>div{position:absolute;right:0;top:32px;z-index:2;display:grid;min-width:150px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 3px 12px #0000000a}
       .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
+      .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
       .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
-      .tag-cloud{--cloud-hero:#cb4168;--cloud-strong:#a94868;--cloud-medium:#725669;--cloud-quiet:#77727a;position:relative;min-height:260px;visibility:hidden}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-hero:#ff8fb3;--cloud-strong:#e9a4bd;--cloud-medium:#ccb0c8;--cloud-quiet:#aaa0b0}.cloud-word{position:absolute;white-space:nowrap;padding:2px 3px;line-height:1.15;min-height:0!important;font-weight:400;border-radius:4px;color:var(--cloud-quiet);overflow:hidden;text-overflow:ellipsis;letter-spacing:-.025em}.cloud-word[data-tone="hero"]{color:var(--cloud-hero);font-weight:800}.cloud-word[data-tone="strong"]{color:var(--cloud-strong);font-weight:700}.cloud-word[data-tone="medium"]{color:var(--cloud-medium);font-weight:500}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{color:var(--cloud-hero);background:var(--pink-soft)}
-      .season-distribution{--season-0:#93bbcc;--season-1:#efa2b4;--season-2:#e8bd83;--season-3:#baa3ca;display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);align-items:center;gap:42px;max-width:680px;margin:0 auto}.season-pie{width:100%;height:auto}.season-pie path{stroke:var(--surface);stroke-width:2}.season-pie text{fill:#38292c;font:13px Arial,sans-serif;pointer-events:none}.season-legend{list-style:none;margin:0;padding:0;display:grid;gap:0}.season-legend-head,.season-legend li{display:grid;grid-template-columns:minmax(75px,1fr) 70px 70px;align-items:center;gap:10px}.season-legend-head{color:var(--muted);font-size:11px;padding:0 0 9px}.season-legend-head span:not(:first-child){text-align:right}.season-legend li{padding:14px 0;border-top:1px solid var(--line)}.season-name{display:flex;align-items:center;gap:9px}.season-name i{width:9px;height:9px;flex-shrink:0;border-radius:50%}.season-count{text-align:right;font-variant-numeric:tabular-nums}.season-average{font-size:18px;text-align:right;font-weight:500;color:var(--link);font-variant-numeric:tabular-nums}.distribution-note{text-align:center;color:var(--muted);font-size:11px;margin-top:16px}
+      .tag-cloud{--cloud-c0:#a52f5b;--cloud-c1:#6546b8;--cloud-c2:#08758c;--cloud-c3:#25734f;--cloud-c4:#a7520b;--cloud-c5:#8b3979;--cloud-c6:#315d9b;--cloud-c7:#7b5427;position:relative;isolation:isolate;min-height:280px;visibility:hidden;overflow:hidden;border-radius:18px;background:radial-gradient(circle at 14% 20%,#ffb86b20 0,transparent 27%),radial-gradient(circle at 85% 16%,#7b61ff1a 0,transparent 30%),radial-gradient(circle at 68% 86%,#00a6a61a 0,transparent 31%),linear-gradient(145deg,#fffaf8 0%,#faf8ff 48%,#f5fcfb 100%);box-shadow:inset 0 0 0 1px #65556b0d}.tag-cloud::before{content:"";position:absolute;z-index:-1;inset:12% 18%;border-radius:50%;background:#ffffff8c;filter:blur(32px)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#ff8cad;--cloud-c1:#bca6ff;--cloud-c2:#66d2e4;--cloud-c3:#79d39f;--cloud-c4:#ffb864;--cloud-c5:#eda1da;--cloud-c6:#91b8ff;--cloud-c7:#e7bd7c;background:radial-gradient(circle at 14% 20%,#ff9b4a22 0,transparent 30%),radial-gradient(circle at 85% 16%,#886dff26 0,transparent 32%),radial-gradient(circle at 68% 86%,#1fc9b822 0,transparent 34%),linear-gradient(145deg,#18141d 0%,#171827 52%,#101f20 100%);box-shadow:inset 0 0 0 1px #ffffff12}:host([data-theme="dark"]) .tag-cloud::before{background:#15131a70}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1.05;min-height:0!important;font-weight:450;border-radius:12px;color:var(--word-color);overflow:visible;letter-spacing:-.035em;opacity:.78;transition:opacity .2s ease,filter .2s ease;animation:cloud-in .34s cubic-bezier(.22,.8,.32,1) both;animation-delay:var(--delay)}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:3px 5px;transform:rotate(var(--angle)) scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease,text-shadow .2s ease,background .2s ease;filter:saturate(.9)}.cloud-word[data-tone="hero"]{font-weight:850;opacity:1}.cloud-word[data-tone="hero"] .cloud-label{padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--word-color) 9%,transparent);text-shadow:0 8px 24px color-mix(in srgb,var(--word-color) 26%,transparent)}.cloud-word[data-tone="strong"]{font-weight:720;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:580;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:transparent;filter:saturate(1.22)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:rotate(var(--angle)) scale(var(--fit-scale,1)) scale(1.055);background:color-mix(in srgb,var(--word-color) 12%,transparent);text-shadow:0 6px 20px color-mix(in srgb,var(--word-color) 24%,transparent)}@keyframes cloud-in{from{opacity:0;filter:blur(3px);transform:scale(.96)}to{filter:blur(0);transform:scale(1)}}
+      .tag-cloud{border-radius:50%}
       .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
       .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
       .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
       .pager{display:flex;justify-content:center;align-items:center;gap:16px;margin-top:20px;font-size:12px;color:var(--muted)}
-      @container(max-width:500px){.people-list{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:20px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:1px}.year-column[data-label-five="true"] .column-year{display:none}.year-column[data-label-ten="true"] .column-year{display:block}.season-distribution{grid-template-columns:1fr;gap:22px}.season-pie{max-width:250px;justify-self:center}.season-summary{width:100%}}
+      @container(max-width:500px){.people-list{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:20px}.sort-row{flex-wrap:wrap}.year-plot{height:190px;margin-left:30px}.year-columns{gap:1px}.year-column[data-label-five="true"] .column-year{display:none}.year-column[data-label-ten="true"] .column-year{display:block}}
     </style>`; }
   }
 

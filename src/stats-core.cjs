@@ -180,7 +180,14 @@
       if (year) years[year] = (years[year] || 0) + 1;
       for (const tag of row.tags) {
         const normalized = text(tag);
-        if (normalized) tags[normalized] = (tags[normalized] || 0) + 1;
+        if (!normalized) continue;
+        const bucket = tags[normalized] || { count: 0, ratedCount: 0, scoreSum: 0 };
+        bucket.count += 1;
+        if (row.rate > 0) {
+          bucket.ratedCount += 1;
+          bucket.scoreSum += row.rate;
+        }
+        tags[normalized] = bucket;
       }
     }
 
@@ -257,7 +264,12 @@
       distributions: {
         ratings: Array.from({ length: 10 }, (_, index) => ({ score: index + 1, count: ratingDistribution[index + 1] || 0 })),
         years: Object.entries(years).map(([year, count]) => ({ year: number(year), count })).sort((a, b) => b.year - a.year),
-        tags: Object.entries(tags).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
+        tags: Object.entries(tags).map(([name, bucket]) => ({
+          name,
+          count: bucket.count,
+          ratedCount: bucket.ratedCount,
+          averageRate: bucket.ratedCount ? bucket.scoreSum / bucket.ratedCount : 0,
+        })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")),
         longest: [...knownEps].sort((a, b) => b.subject.eps - a.subject.eps || a.subject.name.localeCompare(b.subject.name, "zh-CN")).map((row) => ({
           id: row.subject.id, name: row.subject.name, nameCn: row.subject.nameCn, eps: row.subject.eps,
         })),
