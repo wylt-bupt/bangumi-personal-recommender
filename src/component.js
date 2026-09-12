@@ -4,14 +4,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.9.4";
+  const APP_VERSION = "0.10.3";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "28";
+  const RECOMMENDATION_MODEL_VERSION = "30";
   const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
@@ -853,7 +853,9 @@
 
         const candidates = await this.client.getCandidates(type, this.state.profile, force, selectedType);
         const marked = new Set(allCollections.map((item) => Number(item.subjectId)));
-        this.state.candidates = candidates.filter((subject) => !marked.has(Number(subject.id)));
+        this.state.candidates = candidates
+          .filter((subject) => !marked.has(Number(subject.id)))
+          .filter((subject) => selectedType.id !== "2" || !Core.candidateExclusion(subject));
         if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
 
         this.recompute({ enforceJapanese: false, render: false });
@@ -918,6 +920,9 @@
             originMetadata: details,
           };
         });
+      }
+      if (recommendationType(this.config.subjectType).id === "2") {
+        this.state.candidates = this.state.candidates.filter((subject) => !Core.candidateExclusion(subject));
       }
 
       const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);

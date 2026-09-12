@@ -40,6 +40,14 @@ test("matches special recommendation tags across public and personal collection 
   assert.equal(Core.collectionHasTag(unrelated, "里番"), false);
 });
 
+test("excludes short-form and repackaged anime candidates", () => {
+  assert.equal(Core.candidateExclusion({ name: "日常 ETV版", type: 2 }), "recut-or-remake");
+  assert.equal(Core.candidateExclusion({ name: "银魂特别篇", type: 2 }), "movie-or-special");
+  assert.equal(Core.candidateExclusion({ name: "普通标题", type: 2, platform: "剧场版" }), "movie-or-special");
+  assert.equal(Core.candidateExclusion({ name: "短篇动画", type: 2, eps: 6 }), "under-10-episodes");
+  assert.equal(Core.candidateExclusion({ name: "普通季度动画", type: 2, eps: 12, platform: "TV" }), null);
+});
+
 test("keeps direct adult tags and requires corroboration for ambiguous rating tags", () => {
   assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"])), true);
   assert.equal(Core.isAdultRecommendationCandidate(subject(30, 7, ["里番", "OVA"]), true), true);
@@ -108,7 +116,7 @@ test("extracts infobox credits and removes verified creative names from content 
   }).map((entry) => entry.label), ["轻小说", "催泪", "gal改", "恋爱", "校园", "治愈"]);
 });
 
-test("learns positive and negative tag preference from rating residuals", () => {
+test("learns absolute positive, neutral and negative preference from personal ratings", () => {
   const rows = [
     collection(1, 10, ["科幻", "悬疑"], { globalScore: 7.2 }),
     collection(2, 9, ["科幻", "轮回"], { globalScore: 7.1 }),
@@ -123,6 +131,26 @@ test("learns positive and negative tag preference from rating residuals", () => 
   assert.ok(profile.featureWeights["tag:科幻"] > 0);
   assert.ok(profile.featureWeights["tag:后宫"] < 0);
   assert.equal(profile.ratedCount, 8);
+});
+
+test("treats 7 as neutral and keeps local neighbors out of the ranking score", () => {
+  const rows = [
+    collection(1, 7, ["中性标签", "科幻"]),
+    collection(2, 7, ["中性标签", "悬疑"]),
+    collection(3, 7, ["中性标签", "剧情"]),
+    collection(4, 7, ["中性标签", "轮回"]),
+    collection(5, 9, ["正向标签", "科幻", "悬疑"]),
+    collection(6, 9, ["正向标签", "科幻", "悬疑"]),
+    collection(7, 9, ["正向标签", "科幻", "剧情"]),
+    collection(8, 9, ["正向标签", "科幻", "轮回"]),
+  ];
+  const profile = Core.trainProfile(rows);
+  const scored = Core.scoreSubject(subject(101, 8, ["正向标签", "科幻", "悬疑"]), profile);
+  assert.equal(profile.featureWeights["tag:中性标签"], 0);
+  assert.ok(profile.featureWeights["tag:正向标签"] > 0);
+  assert.ok(scored.similarWorks.length > 0);
+  assert.equal(scored.neighborScore, 0);
+  assert.ok(Math.abs(scored.normalizedScore - (0.8 * scored.contentScore + 0.2 * scored.qualityScore)) < 1e-12);
 });
 
 test("scores a matching candidate above a disliked-pattern candidate", () => {
@@ -299,7 +327,21 @@ test("full-pool MMR keeps diversity across pagination boundaries", () => {
     .filter(Boolean);
   assert.equal(new Set(selected.map((item) => item.subject.id)).size, 16);
   assert.equal(seriesRanks[0], 1);
-  assert.ok(seriesRanks[1] > 5);
+  assert.ok(seriesRanks[1] > 1);
+  assert.ok(seriesRanks[1] <= 5);
+});
+
+test("MMR is invariant to the arbitrary scale of relevance scores", () => {
+  const pool = Array.from({ length: 8 }, (_, index) => ({
+    subject: { id: index + 1 },
+    normalizedScore: 0.31 - index * 0.013,
+    features: index < 3 ? { "tag:同系列": 1 } : { [`tag:题材${index}`]: 1 },
+  }));
+  const transformed = pool.map((item) => ({ ...item, normalizedScore: 4 + item.normalizedScore * 0.07 }));
+  assert.deepEqual(
+    Core.diversify(pool, pool.length, "balanced", "scale-test").map((item) => item.subject.id),
+    Core.diversify(transformed, transformed.length, "balanced", "scale-test").map((item) => item.subject.id),
+  );
 });
 
 test("supplemental scoring is capped at a weak twenty-percent adjustment", () => {

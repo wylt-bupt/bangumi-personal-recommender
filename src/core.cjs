@@ -123,6 +123,21 @@
     return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
   }
 
+  function candidateExclusion(subjectInput) {
+    const subject = normalizeSubject(subjectInput);
+    const title = normalizeText(`${subject.name} ${subject.nameCn}`);
+    const tagText = normalizeText([...subject.metaTags, ...subject.tags].join(" "));
+    const formatText = `${normalizeText(subject.platform)} ${tagText}`;
+    if (/(?:剧场版|劇場版|映画|movie|film|ova|oad|special|特别篇|特別篇|sp\b)/i.test(`${title} ${formatText}`)) {
+      return "movie-or-special";
+    }
+    if (/(?:总集篇|總集篇|総集編|重制版|重製版|重置版|remake|リメイク|再编辑|再編輯|再編集|re-?edit|recap|digest|etv版)/i.test(`${title} ${tagText}`)) {
+      return "recut-or-remake";
+    }
+    if (subject.totalEpisodes > 0 && subject.totalEpisodes < 10) return "under-10-episodes";
+    return null;
+  }
+
   function isAdultRecommendationCandidate(subjectInput, allowDirectOnly = false) {
     const subject = normalizeSubject(subjectInput);
     const tags = new Set([...subject.tags, ...subject.metaTags]);
@@ -204,6 +219,8 @@
         : [],
       relation: String(raw.relation || ""),
       sourceUrl: String(raw.sourceUrl || ""),
+      platform: String(raw.platform || ""),
+      totalEpisodes: Number(raw.total_episodes || raw.eps || raw.totalEpisodes || 0),
       adultEvidenceVerified: raw.adultEvidenceVerified === undefined
         ? undefined
         : Boolean(raw.adultEvidenceVerified),
@@ -546,17 +563,21 @@
       const similarityVector = buildSimilarityVector(item.subject, item.tags);
       const familyKey = seriesFamilyKey(item.subject);
       ratedFamilies.add(familyKey);
-      const expected = expectedRating(item.subject, baseline);
-      const residual = clamp((item.rate - expected) / 2.5, -1.5, 1.5);
-      anchors.push({
-        subjectId: item.subjectId,
-        name: item.subject.nameCn || item.subject.name,
-        rate: item.rate,
-        residual,
-        features: vector.features,
-        similarityFeatures: similarityVector.features,
-        familyKey,
-      });
+      // Personal ratings are an absolute rubric: 7 is neutral, 8+ is liked,
+      // and 6- is disliked. Site score is handled separately by the quality
+      // term and must not turn a neutral 7 into positive preference evidence.
+      const residual = clamp((item.rate - 7) / 3, -1, 1);
+      if (residual !== 0) {
+        anchors.push({
+          subjectId: item.subjectId,
+          name: item.subject.nameCn || item.subject.name,
+          rate: item.rate,
+          residual,
+          features: vector.features,
+          similarityFeatures: similarityVector.features,
+          familyKey,
+        });
+      }
 
       for (const [token, magnitude] of Object.entries(vector.features)) {
         const current = stats.get(token) || {
@@ -898,11 +919,10 @@
 
     const bayes = bayesianScore(subject, profile.baseline.globalMean);
     const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
-    const weights = {
-      stable: { content: 0.5, neighbor: 0.2, quality: 0.3 },
-      balanced: { content: 0.6, neighbor: 0.25, quality: 0.15 },
-      explore: { content: 0.67, neighbor: 0.25, quality: 0.08 },
-    }[mode] || { content: 0.6, neighbor: 0.25, quality: 0.15 };
+    // Nearest titles remain available as human-readable evidence, but no
+    // longer affect ranking. The global profile already aggregates the full
+    // collection and proved more robust than a second, six-title correction.
+    const weights = { content: 0.8, neighbor: 0, quality: 0.2 };
     const normalizedScore =
       weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
     const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
@@ -936,7 +956,7 @@
       normalizedScore,
       bayesianScore: bayes,
       contentScore: content,
-      neighborScore: neighbor,
+      neighborScore: 0,
       rawNeighborScore: rawNeighbor,
       neighborReliability,
       qualityScore: quality,
@@ -986,6 +1006,10 @@
 
   function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
     const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
+    const scores = scoredInputs.map((item) => Number(item.normalizedScore || 0));
+    const highestScore = scores.length ? Math.max(...scores) : 0;
+    const lowestScore = scores.length ? Math.min(...scores) : 0;
+    const scoreRange = highestScore - lowestScore;
     const remaining = scoredInputs.map((item) => ({
       item,
       maxSimilarity: 0,
@@ -1000,10 +1024,13 @@
       for (let index = 0; index < remaining.length; index += 1) {
         const entry = remaining[index];
         const candidate = entry.item;
+        const relevance = scoreRange > 1e-9
+          ? (Number(candidate.normalizedScore || 0) - lowestScore) / scoreRange
+          : 1;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
         const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
-          candidate.normalizedScore -
+          relevance -
           penalty * entry.maxSimilarity -
           studioPenalty +
           explorationJitter;
@@ -1091,6 +1118,7 @@
     normalizeTagList,
     subjectHasTag,
     collectionHasTag,
+    candidateExclusion,
     isAdultRecommendationCandidate,
     normalizeInfoboxEntries,
     normalizeSubject,
