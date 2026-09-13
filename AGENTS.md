@@ -2,6 +2,8 @@
 
 Unless the user explicitly asks for a local-only draft, do not treat a product change as complete until the full delivery flow is finished:
 
+Once the user has explicitly authorized the task scope and release targets, carry this workflow through without redundant confirmation prompts or asking the user to perform routine delivery steps. Pause only if the scope materially changes or an applicable safety/platform policy requires fresh user input.
+
 1. Implement the requested source and test changes.
 2. Run the relevant unit and browser-level verification.
 3. Bump every affected release version in `package.json` and update `README.md` release notes.
