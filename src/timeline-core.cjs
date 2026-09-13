@@ -4,6 +4,7 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const DAY = 86400000;
+  const REFRESH_INTERVAL = 15 * 60 * 1000;
   const TYPES = ['subject', 'progress'];
   const pad = n => String(n).padStart(2, '0');
   const dayKey = ms => new Date(ms + 8 * 3600000).toISOString().slice(0, 10);
@@ -59,6 +60,18 @@
     const map = new Map(old.map(e => [e.id, e]));
     incoming.forEach(e => map.set(e.id, e));
     return [...map.values()].sort((a, b) => b.time - a.time || Number(b.id) - Number(a.id));
+  }
+  function nextSyncAt(state, now = Date.now()) {
+    if (Number(state?.retryAt || 0) > now) return Number(state.retryAt);
+    let next = Infinity;
+    for (const type of TYPES) {
+      const stream = state?.streams?.[type];
+      if (!stream || !stream.complete || stream.refresh) return 0;
+      const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
+      if (!checkedAt) return 0;
+      next = Math.min(next, checkedAt + REFRESH_INTERVAL);
+    }
+    return next;
   }
   function importBackup(text, user, state) {
     if (text.length > 30 * 1024 * 1024) throw new Error('备份文件超过 30 MB');
@@ -120,5 +133,5 @@
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
     return { days, hourly, weekly, platform, total, complete: TYPES.every(t => state.streams[t].complete), start, end };
   }
-  return { DAY, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, aggregate, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
 });

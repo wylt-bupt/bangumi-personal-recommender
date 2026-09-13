@@ -607,12 +607,13 @@
     async enrichOriginMetadata(subjects, subjectIds, limit = 180) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, limit);
+      const subjectsById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
         const details = await this.getSubjectDetails(subjectId);
         completed += 1;
         this.progress("正在确认候选作品来源…", completed, uniqueIds.length);
-        const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
+        const base = subjectsById.get(Number(subjectId));
         return base
           ? [subjectId, {
               ...Core.normalizeSubject(details || base),
@@ -626,6 +627,7 @@
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
+      const subjectsById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 3, async (subjectId) => {
         const [persons, characters] = await Promise.all([
@@ -634,7 +636,7 @@
         ]);
         completed += 1;
         this.progress("正在补充导演、制作与声优信息…", completed, uniqueIds.length);
-        const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
+        const base = subjectsById.get(Number(subjectId));
         return base ? [subjectId, { ...base, persons, characters }] : null;
       });
       return new Map(rows.filter(Boolean));

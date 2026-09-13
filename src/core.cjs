@@ -1008,9 +1008,6 @@
     const remaining = scoredInputs.map((item) => ({
       item,
       maxSimilarity: 0,
-      sameStudioCount: 0,
-      studioTokens: Object.keys(item.diversityFeatures || item.features || {})
-        .filter((token) => token.startsWith("studio:")),
     }));
     const selected = [];
     while (selected.length < count && remaining.length) {
@@ -1023,11 +1020,9 @@
           ? (Number(candidate.normalizedScore || 0) - lowestScore) / scoreRange
           : 1;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
-        const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
           relevance -
           penalty * entry.maxSimilarity -
-          studioPenalty +
           explorationJitter;
         if (adjusted > bestValue) {
           bestValue = adjusted;
@@ -1043,7 +1038,6 @@
           entry.maxSimilarity,
           weightedJaccard(candidateFeatures, chosenFeatures),
         );
-        if (entry.studioTokens.some((token) => chosenFeatures[token])) entry.sameStudioCount += 1;
       }
     }
     return selected;

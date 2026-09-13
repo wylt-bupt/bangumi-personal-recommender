@@ -182,18 +182,23 @@
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function run(force = false) {
     if (!db || busy || demo || storageBlocked || !navigator.onLine) return;
+    if (!force && Date.now() < idleUntil) return;
     if (!navigator.locks) { message = '当前浏览器不支持安全的多标签同步，请使用新版 Chrome'; render(); return; }
     await navigator.locks.request('bgmtl-sync-wylt', { ifAvailable: true }, async lock => {
       if (!lock) return;
       state = await read();
-      if (state.retryAt > Date.now()) return;
+      const now = Date.now();
+      const nextSyncAt = C.nextSyncAt(state, now);
+      if (!force && nextSyncAt > now) { idleUntil = nextSyncAt; return; }
       busy = true; aborted = false; message = ''; render();
       try {
         for (const t of C.TYPES) {
           const s = state.streams[t];
           if (!s.complete && s.page > 1) s.page = Math.max(1, s.page - 2);
           if (s.refresh?.page > 1) s.refresh.page = Math.max(1, s.refresh.page - 1);
-          if (!s.refresh && s.latestTime && (force || Date.now() - s.headAt > 15 * 60000)) s.refresh = { page: 1, until: s.latestTime, newest: s.latestTime };
+          if (s.complete && !s.refresh && (force || Date.now() - s.headAt >= C.REFRESH_INTERVAL)) {
+            s.refresh = { page: 1, until: s.latestTime || 0, newest: s.latestTime || 0 };
+          }
         }
         let made = 0;
         while (made < 24 && !aborted) {
@@ -228,7 +233,7 @@
         state.retryAt = Date.now() + Math.max(error.cooldown || 0, Math.min(3600000, 60000 * 2 ** Math.min(6, state.failures - 1)));
         message = error.message;
         try { await save(); } catch (storageError) { message = storageError.message; }
-      } finally { busy = false; render(); }
+      } finally { idleUntil = C.nextSyncAt(state, Date.now()); busy = false; render(); }
     }).catch(error => { busy = false; message = error.message; render(); });
   }
   async function start() {
@@ -238,14 +243,14 @@
     }
     if (!mount()) return;
     try {
-      db = await openDB(); state = await read();
+      db = await openDB(); state = await read(); idleUntil = C.nextSyncAt(state, Date.now());
       if (state.paused) { state.paused = false; await save(); }
       render();
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('bgmtl-personal');
         channel.onmessage = async event => {
           if (event.data === 'pause-request') aborted = true;
-          else if (!busy) { state = await read(); render(); }
+          else if (!busy) { state = await read(); idleUntil = C.nextSyncAt(state, Date.now()); render(); }
         };
       }
       run(); timer = setInterval(() => run(), 30000);

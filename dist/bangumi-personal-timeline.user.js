@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.8
+// @version      1.0.9
 // @description  原版风格的年度标记热力图；保留每条活动，并按实际新增集数计算批量进度。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -15,6 +15,7 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const DAY = 86400000;
+  const REFRESH_INTERVAL = 15 * 60 * 1000;
   const TYPES = ['subject', 'progress'];
   const pad = n => String(n).padStart(2, '0');
   const dayKey = ms => new Date(ms + 8 * 3600000).toISOString().slice(0, 10);
@@ -70,6 +71,18 @@
     const map = new Map(old.map(e => [e.id, e]));
     incoming.forEach(e => map.set(e.id, e));
     return [...map.values()].sort((a, b) => b.time - a.time || Number(b.id) - Number(a.id));
+  }
+  function nextSyncAt(state, now = Date.now()) {
+    if (Number(state?.retryAt || 0) > now) return Number(state.retryAt);
+    let next = Infinity;
+    for (const type of TYPES) {
+      const stream = state?.streams?.[type];
+      if (!stream || !stream.complete || stream.refresh) return 0;
+      const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
+      if (!checkedAt) return 0;
+      next = Math.min(next, checkedAt + REFRESH_INTERVAL);
+    }
+    return next;
   }
   function importBackup(text, user, state) {
     if (text.length > 30 * 1024 * 1024) throw new Error('备份文件超过 30 MB');
@@ -131,7 +144,7 @@
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
     return { days, hourly, weekly, platform, total, complete: TYPES.every(t => state.streams[t].complete), start, end };
   }
-  return { DAY, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, aggregate, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
 });
 
 
@@ -319,18 +332,23 @@
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   async function run(force = false) {
     if (!db || busy || demo || storageBlocked || !navigator.onLine) return;
+    if (!force && Date.now() < idleUntil) return;
     if (!navigator.locks) { message = '当前浏览器不支持安全的多标签同步，请使用新版 Chrome'; render(); return; }
     await navigator.locks.request('bgmtl-sync-wylt', { ifAvailable: true }, async lock => {
       if (!lock) return;
       state = await read();
-      if (state.retryAt > Date.now()) return;
+      const now = Date.now();
+      const nextSyncAt = C.nextSyncAt(state, now);
+      if (!force && nextSyncAt > now) { idleUntil = nextSyncAt; return; }
       busy = true; aborted = false; message = ''; render();
       try {
         for (const t of C.TYPES) {
           const s = state.streams[t];
           if (!s.complete && s.page > 1) s.page = Math.max(1, s.page - 2);
           if (s.refresh?.page > 1) s.refresh.page = Math.max(1, s.refresh.page - 1);
-          if (!s.refresh && s.latestTime && (force || Date.now() - s.headAt > 15 * 60000)) s.refresh = { page: 1, until: s.latestTime, newest: s.latestTime };
+          if (s.complete && !s.refresh && (force || Date.now() - s.headAt >= C.REFRESH_INTERVAL)) {
+            s.refresh = { page: 1, until: s.latestTime || 0, newest: s.latestTime || 0 };
+          }
         }
         let made = 0;
         while (made < 24 && !aborted) {
@@ -365,7 +383,7 @@
         state.retryAt = Date.now() + Math.max(error.cooldown || 0, Math.min(3600000, 60000 * 2 ** Math.min(6, state.failures - 1)));
         message = error.message;
         try { await save(); } catch (storageError) { message = storageError.message; }
-      } finally { busy = false; render(); }
+      } finally { idleUntil = C.nextSyncAt(state, Date.now()); busy = false; render(); }
     }).catch(error => { busy = false; message = error.message; render(); });
   }
   async function start() {
@@ -375,14 +393,14 @@
     }
     if (!mount()) return;
     try {
-      db = await openDB(); state = await read();
+      db = await openDB(); state = await read(); idleUntil = C.nextSyncAt(state, Date.now());
       if (state.paused) { state.paused = false; await save(); }
       render();
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('bgmtl-personal');
         channel.onmessage = async event => {
           if (event.data === 'pause-request') aborted = true;
-          else if (!busy) { state = await read(); render(); }
+          else if (!busy) { state = await read(); idleUntil = C.nextSyncAt(state, Date.now()); render(); }
         };
       }
       run(); timer = setInterval(() => run(), 30000);

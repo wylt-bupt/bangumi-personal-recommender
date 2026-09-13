@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.10.5
+// @version      0.10.6
 // @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -1081,9 +1081,6 @@
     const remaining = scoredInputs.map((item) => ({
       item,
       maxSimilarity: 0,
-      sameStudioCount: 0,
-      studioTokens: Object.keys(item.diversityFeatures || item.features || {})
-        .filter((token) => token.startsWith("studio:")),
     }));
     const selected = [];
     while (selected.length < count && remaining.length) {
@@ -1096,11 +1093,9 @@
           ? (Number(candidate.normalizedScore || 0) - lowestScore) / scoreRange
           : 1;
         const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
-        const studioPenalty = Math.min(2, Math.max(0, entry.sameStudioCount - 1)) * 0.12;
         const adjusted =
           relevance -
           penalty * entry.maxSimilarity -
-          studioPenalty +
           explorationJitter;
         if (adjusted > bestValue) {
           bestValue = adjusted;
@@ -1116,7 +1111,6 @@
           entry.maxSimilarity,
           weightedJaccard(candidateFeatures, chosenFeatures),
         );
-        if (entry.studioTokens.some((token) => chosenFeatures[token])) entry.sameStudioCount += 1;
       }
     }
     return selected;
@@ -1647,7 +1641,7 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.5";
+  const APP_VERSION = "0.10.6";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2225,7 +2219,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.10.5";
+  const APP_VERSION = "0.10.6";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
@@ -2828,12 +2822,13 @@
     async enrichOriginMetadata(subjects, subjectIds, limit = 180) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, limit);
+      const subjectsById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
         const details = await this.getSubjectDetails(subjectId);
         completed += 1;
         this.progress("正在确认候选作品来源…", completed, uniqueIds.length);
-        const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
+        const base = subjectsById.get(Number(subjectId));
         return base
           ? [subjectId, {
               ...Core.normalizeSubject(details || base),
@@ -2847,6 +2842,7 @@
     async enrichSubjects(subjects, subjectIds) {
       if (!this.apiAvailable || !subjectIds.length) return new Map();
       const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
+      const subjectsById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
       let completed = 0;
       const rows = await concurrentMap(uniqueIds, 3, async (subjectId) => {
         const [persons, characters] = await Promise.all([
@@ -2855,7 +2851,7 @@
         ]);
         completed += 1;
         this.progress("正在补充导演、制作与声优信息…", completed, uniqueIds.length);
-        const base = subjects.find((subject) => Number(subject.id) === Number(subjectId));
+        const base = subjectsById.get(Number(subjectId));
         return base ? [subjectId, { ...base, persons, characters }] : null;
       });
       return new Map(rows.filter(Boolean));

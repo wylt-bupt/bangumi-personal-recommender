@@ -15,6 +15,21 @@ test('overlapping pages deduplicate by timeline id, not episode or minute', () =
   assert.equal(merged.length, 3);
   assert.deepEqual(merged.map(e => e.id), ['3', '2', '1']);
 });
+
+test('completed streams expose one shared idle deadline and retries take precedence', () => {
+  const now = Date.now();
+  const state = C.freshState('wylt');
+  assert.equal(C.nextSyncAt(state, now), 0);
+  for (const stream of Object.values(state.streams)) {
+    stream.complete = true;
+    stream.headAt = now;
+  }
+  assert.equal(C.nextSyncAt(state, now), now + C.REFRESH_INTERVAL);
+  state.streams.subject.headAt = now - C.REFRESH_INTERVAL;
+  assert.equal(C.nextSyncAt(state, now), now);
+  state.retryAt = now + 123456;
+  assert.equal(C.nextSyncAt(state, now), state.retryAt);
+});
 test('one activity is one count even when multiple subjects are grouped', () => {
   const state = C.freshState('wylt');
   state.events = [{ ...event(1), subjects: ['1', '2'] }, event(2, now, 'subject')];

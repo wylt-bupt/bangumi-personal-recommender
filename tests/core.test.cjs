@@ -344,6 +344,24 @@ test("MMR is invariant to the arbitrary scale of relevance scores", () => {
   );
 });
 
+test("MMR has no separate same-studio penalty", () => {
+  const make = (id, normalizedScore, features) => ({
+    subject: { id },
+    normalizedScore,
+    features,
+  });
+  const pool = [
+    make(1, 1, { "studio:shared": 0.01 }),
+    make(2, 0.99, { "studio:shared": 0.01 }),
+    make(3, 0.98, { "studio:shared": 0.01 }),
+    make(4, 0.97, { "tag:alternative": 1 }),
+  ];
+  assert.deepEqual(
+    Core.diversify(pool, pool.length, "balanced", "studio-test").map((item) => item.subject.id),
+    [1, 2, 3, 4],
+  );
+});
+
 test("supplemental scoring is capped at a weak twenty-percent adjustment", () => {
   const base = {
     personalMean: 7,
