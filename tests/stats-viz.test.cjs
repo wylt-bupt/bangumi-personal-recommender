@@ -61,7 +61,8 @@ test('cloud packing places every word, deterministically, without overlap or ove
 test('moderate clouds stay close to the frame aspect and keep a center-out hierarchy', () => {
   const input=Array.from({length:24},(_,index)=>({index,seed:index*31+7,width:60+(index*53)%120,height:24+(index*7)%14}));
   const cloud=Viz.packCloud(input,816);
-  assert.ok(cloud.height<=Math.max(816*1.08,260)+1);
+  assert.equal(cloud.shape,'oval');
+  assert.ok(cloud.height<=Math.max(816*.72,260)+1);
   const largestFirst=cloud.items[0];
   const centerDistance=Math.abs(largestFirst.x+largestFirst.width/2-408);
   assert.ok(centerDistance<300,'largest word should sit near the center');

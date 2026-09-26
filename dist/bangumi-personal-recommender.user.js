@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.10.6
+// @version      0.10.7
 // @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -1537,29 +1537,27 @@
   function featuredTags(rows) {
     return rows.filter(row => Number(row.count) > 10 && !isTemporalTag(row.name)).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name, 'zh-CN'));
   }
-  function overlaps(a, b, gap = 5) {
+  function overlaps(a, b, gap = 2) {
     return a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
   }
-  // Commercial-style organic cloud: every qualified tag is placed and none is
-  // dropped. The largest words claim the center and the rest spiral outward,
-  // like the layouts produced by dedicated word-cloud libraries. One bounded
-  // pass per global scale factor replaces the old trim-and-retry loop, which
-  // could spin through tens of millions of candidate positions and still end
-  // up showing only eight words.
+  // Traditional oval cloud: every qualified tag is placed and none is dropped.
+  // The largest words claim the center and the rest follow a compressed spiral,
+  // producing the dense horizontal silhouette used by classic projected word
+  // clouds instead of filling the whole rectangular canvas.
   function packCloud(items, width) {
     if (!items.length) return { items: [], height: 0 };
     const order = [...items].sort((a, b) => (b.width * b.height) - (a.width * a.height) || a.index - b.index);
-    // Huge sets are inherently tall; forcing them into a square would shrink
-    // text beyond readability, so the aspect target adapts to the word count.
-    const generous = order.length > 250 ? 2.3 : order.length > 80 ? 1.7 : 1.05;
-    const aspectCap = width >= 460 ? generous : Math.max(1.6, generous);
+    // Very large sets and narrow screens still get more vertical room. Ordinary
+    // desktop clouds target a broad ellipse close to the supplied reference.
+    const generous = order.length > 250 ? 1.8 : order.length > 120 ? 1.05 : order.length > 80 ? 0.78 : 0.62;
+    const aspectCap = width >= 460 ? generous : Math.max(1.12, generous);
     let best = null;
-    for (const scale of [1, 0.94, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58]) {
+    for (const scale of [1, 0.94, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58, 0.52, 0.46]) {
       const attempt = placeOrganic(order, width, scale);
       if (!best || attempt.height < best.height) best = attempt;
       if (attempt.height <= width * aspectCap + 1) break;
     }
-    return { items: best.items, height: best.height, scale: best.scale, shape: 'organic', omitted: 0 };
+    return { items: best.items, height: best.height, scale: best.scale, shape: 'oval', omitted: 0 };
   }
   function placeOrganic(order, width, scale) {
     const sized = order.map(item => ({
@@ -1568,10 +1566,10 @@
       height: Math.max(6, Math.ceil(item.height * scale)),
       fitScale: scale
     }));
-    const totalArea = sized.reduce((sum, item) => sum + (item.width + 4) * (item.height + 4), 0);
+    const totalArea = sized.reduce((sum, item) => sum + (item.width + 2) * (item.height + 2), 0);
     const centerX = width / 2;
-    const centerY = Math.max(120, Math.ceil(totalArea / Math.max(1, width - 8) / 0.62) / 2);
-    const cells = new Map(), cellSize = 48;
+    const centerY = Math.max(88, Math.ceil(totalArea / Math.max(1, width - 16) / 0.72) / 2);
+    const cells = new Map(), cellSize = 40;
     const keys = (box, padding = 0) => {
       const result = [];
       for (let x = Math.floor((box.x - padding) / cellSize); x <= Math.floor((box.x + box.width + padding) / cellSize); x++)
@@ -1580,42 +1578,42 @@
     };
     const collides = box => keys(box).some(key => (cells.get(key) || []).some(other => overlaps(box, other)));
     const placed = [];
-    let fallbackY = 12;
+    let fallbackY = 8;
     for (const item of sized) {
       const seed = Math.abs(Number(item.seed) || item.index + 1);
       const phase = (seed % 6283) / 1000;
       const direction = seed % 2 ? 1 : -1;
       const angularStep = 0.31 + (seed % 11) / 100;
       let box;
-      // Words stay 12px inside the frame so the rounded container corners
-      // and hover glow never clip a glyph.
+      // The vertical component is deliberately compressed: the words themselves
+      // define an oval outline while remaining ordinary accessible DOM buttons.
       for (let step = 0; step < 6000; step++) {
         const angle = phase + direction * step * angularStep;
-        const radius = step * 0.9;
+        const radius = step * 0.72;
         const x = centerX + Math.cos(angle) * radius - item.width / 2;
-        const y = centerY + Math.sin(angle) * radius * 0.72 - item.height / 2;
-        if (x < 12 || x + item.width > width - 12 || y < 12) continue;
+        const y = centerY + Math.sin(angle) * radius * 0.52 - item.height / 2;
+        if (x < 8 || x + item.width > width - 8 || y < 8) continue;
         const candidate = { ...item, x, y };
         if (!collides(candidate)) { box = candidate; break; }
       }
       if (!box) {
         // Guaranteed lane below the cloud: a qualified word is never dropped.
-        box = { ...item, x: 4, y: fallbackY };
+        box = { ...item, x: Math.max(4, (width - item.width) / 2), y: fallbackY };
       }
-      fallbackY = Math.max(fallbackY, box.y + box.height + 6);
+      fallbackY = Math.max(fallbackY, box.y + box.height + 3);
       placed.push(box);
-      // Registration padding must exceed the collision gap (5): a pair sitting
-      // 4.x px apart could otherwise land in adjacent grid cells and slip
+      // Registration padding must exceed the collision gap (2): a pair sitting
+      // 1.x px apart could otherwise land in adjacent grid cells and slip
       // through the collision check.
-      for (const key of keys(box, 6)) {
+      for (const key of keys(box, 3)) {
         if (!cells.has(key)) cells.set(key, []);
         cells.get(key).push(box);
       }
     }
     // Re-center vertically so the cloud fills its frame instead of drifting.
     const minY = Math.min(...placed.map(box => box.y));
-    if (minY > 12) for (const box of placed) box.y -= minY - 12;
-    const height = Math.ceil(Math.max(...placed.map(box => box.y + box.height))) + 12;
+    if (minY > 8) for (const box of placed) box.y -= minY - 8;
+    const height = Math.ceil(Math.max(...placed.map(box => box.y + box.height))) + 8;
     return { items: placed, height, scale };
   }
   const api = { yearSeries, axis, fontSize, scoreFontSize, isTemporalTag, featuredTags, overlaps, packCloud };
@@ -1641,7 +1639,7 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.6";
+  const APP_VERSION = "0.10.7";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2093,13 +2091,12 @@
         const tone = ratio >= 0.72 ? 'hero' : ratio >= 0.42 ? 'strong' : ratio >= 0.18 ? 'medium' : 'quiet';
         const size = metric === 'average' ? Viz.scoreFontSize(value, values) : Viz.fontSize(value, min, max);
         const seed = Array.from(String(row.name)).reduce((hash, character) => Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0, 2166136261);
-        const angles = [0, -8, 5, -4, 8, 0, -6, 4, 0, 7, -5, 3];
-        const angle = ratio >= 0.72 ? 0 : angles[seed % angles.length];
+        const angle = 0;
         const color = seed % 8;
         const detail = metric === 'average'
           ? `${row.name} · 个人均分 ${formatRate(row.averageRate)} · ${row.ratedCount}/${row.count} 部已评分`
           : `${row.name} · ${row.count} 部`;
-        return `<button class="cloud-word" data-tone="${tone}" data-color="${color}" data-count="${row.count}" data-value="${value}" data-viz-label="${escapeHtml(detail)}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(detail)}" data-size="${size}" data-angle="${angle}" data-seed="${seed}" style="font-size:${size}px;--angle:${angle}deg;--delay:${Math.min(360, index * 12)}ms"><span class="cloud-label">${escapeHtml(row.name)}</span></button>`;
+        return `<button class="cloud-word" data-tone="${tone}" data-color="${color}" data-count="${row.count}" data-value="${value}" data-viz-label="${escapeHtml(detail)}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(detail)}" data-size="${size}" data-angle="${angle}" data-seed="${seed}" style="font-size:${size}px"><span class="cloud-label">${escapeHtml(row.name)}</span></button>`;
       }).join('')}</div></section>`;
     }
     scheduleCloud() {
@@ -2140,7 +2137,7 @@
           rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
         }
         const rotatedHeight = Math.abs(Math.sin(angle)) * naturalWidth + Math.abs(Math.cos(angle)) * naturalHeight;
-        return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 8, height: Math.ceil(rotatedHeight) + 6 };
+        return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 4, height: Math.ceil(rotatedHeight) + 3 };
       });
       // Every qualified tag is laid out; the packer never drops words.
       const layout = Viz.packCloud(boxes, width);
@@ -2199,7 +2196,7 @@
       .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
       .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
-      .tag-cloud{--cloud-c0:#a52f5b;--cloud-c1:#6546b8;--cloud-c2:#08758c;--cloud-c3:#25734f;--cloud-c4:#a7520b;--cloud-c5:#8b3979;--cloud-c6:#315d9b;--cloud-c7:#7b5427;position:relative;isolation:isolate;min-height:280px;visibility:hidden;overflow:hidden;border-radius:18px;background:radial-gradient(circle at 14% 20%,#ffb86b20 0,transparent 27%),radial-gradient(circle at 85% 16%,#7b61ff1a 0,transparent 30%),radial-gradient(circle at 68% 86%,#00a6a61a 0,transparent 31%),linear-gradient(145deg,#fffaf8 0%,#faf8ff 48%,#f5fcfb 100%);box-shadow:inset 0 0 0 1px #65556b0d}.tag-cloud::before{content:"";position:absolute;z-index:-1;inset:12% 18%;border-radius:50%;background:#ffffff8c;filter:blur(32px)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#ff8cad;--cloud-c1:#bca6ff;--cloud-c2:#66d2e4;--cloud-c3:#79d39f;--cloud-c4:#ffb864;--cloud-c5:#eda1da;--cloud-c6:#91b8ff;--cloud-c7:#e7bd7c;background:radial-gradient(circle at 14% 20%,#ff9b4a22 0,transparent 30%),radial-gradient(circle at 85% 16%,#886dff26 0,transparent 32%),radial-gradient(circle at 68% 86%,#1fc9b822 0,transparent 34%),linear-gradient(145deg,#18141d 0%,#171827 52%,#101f20 100%);box-shadow:inset 0 0 0 1px #ffffff12}:host([data-theme="dark"]) .tag-cloud::before{background:#15131a70}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1.05;min-height:0!important;font-weight:450;border-radius:12px;color:var(--word-color);overflow:visible;letter-spacing:-.035em;opacity:.78;transition:opacity .2s ease,filter .2s ease;animation:cloud-in .34s cubic-bezier(.22,.8,.32,1) both;animation-delay:var(--delay)}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:3px 5px;transform:rotate(var(--angle)) scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease,text-shadow .2s ease,background .2s ease;filter:saturate(.9)}.cloud-word[data-tone="hero"]{font-weight:850;opacity:1}.cloud-word[data-tone="hero"] .cloud-label{padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--word-color) 9%,transparent);text-shadow:0 8px 24px color-mix(in srgb,var(--word-color) 26%,transparent)}.cloud-word[data-tone="strong"]{font-weight:720;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:580;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:transparent;filter:saturate(1.22)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:rotate(var(--angle)) scale(var(--fit-scale,1)) scale(1.055);background:color-mix(in srgb,var(--word-color) 12%,transparent);text-shadow:0 6px 20px color-mix(in srgb,var(--word-color) 24%,transparent)}@keyframes cloud-in{from{opacity:0;filter:blur(3px);transform:scale(.96)}to{filter:blur(0);transform:scale(1)}}
+      .tag-cloud{--cloud-c0:#313642;--cloud-c1:#8b3f59;--cloud-c2:#836d2f;--cloud-c3:#4f6b61;--cloud-c4:#53677e;--cloud-c5:#765570;--cloud-c6:#805947;--cloud-c7:#5f666f;position:relative;isolation:isolate;min-height:240px;visibility:hidden;overflow:visible;background:radial-gradient(ellipse at center,#fbfbfc 0%,#fdfdfd 58%,transparent 78%)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#e4e7ed;--cloud-c1:#e5a0b3;--cloud-c2:#d6c180;--cloud-c3:#9bc9b9;--cloud-c4:#a9bfd9;--cloud-c5:#cfacd0;--cloud-c6:#d3aa91;--cloud-c7:#b8bec8;background:radial-gradient(ellipse at center,#27282c 0%,#222328 58%,transparent 78%)}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1;min-height:0!important;font-weight:420;border-radius:5px;color:var(--word-color);overflow:visible;letter-spacing:-.018em;opacity:.76;transition:opacity .2s ease,background .2s ease}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:1px 2px;transform:scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease}.cloud-word[data-tone="hero"]{font-weight:680;opacity:1}.cloud-word[data-tone="strong"]{font-weight:590;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:510;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:color-mix(in srgb,var(--word-color) 9%,transparent)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:scale(var(--fit-scale,1)) scale(1.045)}
       .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
       .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
       .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}
@@ -2219,7 +2216,7 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.10.6";
+  const APP_VERSION = "0.10.7";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
