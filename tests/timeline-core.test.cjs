@@ -25,23 +25,44 @@ test('completed streams expose one shared idle deadline and retries take precede
     stream.headAt = now;
   }
   assert.equal(C.nextSyncAt(state, now), now + C.REFRESH_INTERVAL);
-  state.streams.subject.headAt = now - C.REFRESH_INTERVAL;
+  state.streams.progress.headAt = now - C.REFRESH_INTERVAL;
   assert.equal(C.nextSyncAt(state, now), now);
   state.retryAt = now + 123456;
   assert.equal(C.nextSyncAt(state, now), state.retryAt);
 });
-test('one activity is one count even when multiple subjects are grouped', () => {
+test('only watched episodes count, not collections or other timeline actions', () => {
   const state = C.freshState('wylt');
-  state.events = [{ ...event(1), subjects: ['1', '2'] }, event(2, now, 'subject')];
+  state.events = [
+    { ...event(1), subjects: ['1', '2'] },
+    { ...event(2, now, 'subject'), text: '将作品标记为看过' },
+    { ...event(3), text: '读过 ep.2' },
+    { ...event(4), text: '更新了进度' },
+    { ...event(5), text: '看过 sp.1' }
+  ];
   const stats = C.aggregate(state, now);
   assert.equal(stats.total, 2);
   assert.equal(stats.hourly[12], 2);
   assert.equal(stats.weekly[5], 2);
   assert.equal(stats.platform[0].name, '网页端');
 });
+test('batch progress counts newly watched episodes without a one-event minimum', () => {
+  const state = C.freshState('wylt');
+  const yesterday = now - C.DAY;
+  state.events = [
+    { ...event(1, yesterday), text: '完成了 风が強く吹いている 4 of 23 话' },
+    { ...event(2, yesterday + 1000), text: '看过 ep.5' },
+    { ...event(3, now), text: '完成了 风が強く吹いている 9 of 23 话' },
+    { ...event(4, now + 1000), text: '完成了 风が強く吹いている 9 of 23 话' },
+    { ...event(5, now + 2000), text: '完成了 风が強く吹いている 8 of 23 话' }
+  ];
+  const stats = C.aggregate(state, now + 3000);
+  assert.equal(stats.days.find(day => day.key === C.dayKey(yesterday)).count, 5);
+  assert.equal(stats.days.find(day => day.key === C.dayKey(now)).count, 4);
+  assert.equal(stats.total, 9);
+});
 test('incomplete stream cannot mark unknown dates as zero activity', () => {
   const state = C.freshState('wylt');
-  state.streams.subject.complete = true;
+  assert.deepEqual(C.SYNC_TYPES, ['progress']);
   let data = C.aggregate(state, now);
   assert.equal(data.days.filter(d => d.known).length, 0);
   state.streams.progress.oldest = C.parseTime('2026-9-3 21:00');
@@ -51,6 +72,9 @@ test('incomplete stream cannot mark unknown dates as zero activity', () => {
   data = C.aggregate(state, now);
   assert.equal(data.days.filter(d => d.known).length, 365);
   assert.equal(data.days[0].key, '2025-09-06');
+  state.streams.subject = { complete: false, headAt: 0 };
+  assert.equal(C.aggregate(state, now).complete, true);
+  assert.equal(C.nextSyncAt(state, now), 0);
 });
 test('rolling year excludes old records and groups small platforms', () => {
   const state = C.freshState('wylt');

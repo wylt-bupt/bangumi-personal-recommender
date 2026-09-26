@@ -8,8 +8,7 @@ const codePath = path.resolve('dist/bangumi-personal-timeline.user.js');
 const now = Date.now();
 
 // Batch progress is a checkpoint, so only its delta from the previous known
-// checkpoint/episode belongs to that day. Every old activity remains worth at
-// least one, keeping the revised heatmap monotonic against the original count.
+// checkpoint/episode belongs to that day. Collection actions never count.
 const core = require('../src/timeline-core.cjs');
 const episodeState = core.freshState('wylt');
 const episodeDayA = core.dayStart(now) - 2 * core.DAY + 12 * 3600000;
@@ -22,17 +21,17 @@ episodeState.events = [
   { id: '2', type: 'progress', time: episodeDayA + 1000, source: 'web', subjects: ['248154'], text: '看过 ep.5 灰かぶり' },
   { id: '4', type: 'progress', time: episodeDayB + 1000, source: 'web', subjects: ['248154'], text: '完成了 风が強く吹いている 9 of 23 话' }
 ];
-episodeState.streams.subject.complete = episodeState.streams.progress.complete = true;
+episodeState.streams.progress.complete = true;
 const episodeAggregate = core.aggregate(episodeState, now);
 assert.equal(episodeAggregate.days.find(day => day.key === core.dayKey(episodeDayA)).count, 6);
-assert.equal(episodeAggregate.days.find(day => day.key === core.dayKey(episodeDayB)).count, 7);
-assert.equal(episodeAggregate.total, 13);
+assert.equal(episodeAggregate.days.find(day => day.key === core.dayKey(episodeDayB)).count, 6);
+assert.equal(episodeAggregate.total, 12);
 
 function fixture(type, page, extra = false) {
   const base = type === 'subject' ? 100 : 200;
   const rows = page === 1 ? [0, 1, 2].map(i => ({ id: base + i, time: now - (i + 1) * 86400000 })) : [{ id: base + 4, time: now - 400 * 86400000 }];
   if (extra && page === 1) rows.unshift({ id: base + 10, time: now - 3600000 });
-  return `<html><a href="/user/wylt">wylt</a><div id="timeline"><ul>${rows.map((event, i) => `<li id="tml_${event.id}"><span class="info_full">看过 <a href="/subject/${i + 1}">作品 &lt;img onerror=alert(1)&gt;</a><div class="card"><img src="https://never-request.invalid/cover.jpg"><a href="/subject/${i + 1}">封面</a></div><div class="date"><span title="${stamp(event.time)}">昨天</span> · ${i % 2 ? '<a href="/dev/app/1">API</a>' : 'web'}</div></span></li>`).join('')}</ul></div>${page === 1 ? `<a href="/user/wylt/timeline?type=${type}&page=2">下一页 ››</a>` : ''}</html>`;
+  return `<html><a href="/user/wylt">wylt</a><div id="timeline"><ul>${rows.map((event, i) => `<li id="tml_${event.id}"><span class="info_full">${type === 'progress' ? `看过 <a href="/subject/ep/${i + 1}">ep.${i + 1}</a>` : '收藏了'} <a href="/subject/${i + 1}">作品 &lt;img onerror=alert(1)&gt;</a><div class="card"><img src="https://never-request.invalid/cover.jpg"><a href="/subject/${i + 1}">封面</a></div><div class="date"><span title="${stamp(event.time)}">昨天</span> · ${i % 2 ? '<a href="/dev/app/1">API</a>' : 'web'}</div></span></li>`).join('')}</ul></div>${page === 1 ? `<a href="/user/wylt/timeline?type=${type}&page=2">下一页 ››</a>` : ''}</html>`;
 }
 
 const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fafafa}#columnHomeB{width:min(100%,820px);margin:auto}</style><div id="dock"><a href="https://bgm.tv/user/wylt" title="时光机">wylt</a></div><div id="columnHomeB" class="column"></div></html>';
@@ -65,7 +64,8 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
       get.onsuccess = () => {
         const value = get.result;
         value.retryAt = 0;
-        for (const stream of Object.values(value.streams)) { stream.headAt = 0; delete stream.refresh; }
+        value.updatedAt = 0;
+        for (const stream of Object.values(value.streams)) { stream.headAt = 1; delete stream.refresh; }
         store.put(value, 'wylt');
       };
       tx.oncomplete = () => { database.close(); resolve(); };
@@ -90,13 +90,17 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
       req.onsuccess = () => { const get = req.result.transaction('state').objectStore('state').get('wylt'); get.onsuccess = () => resolve(Object.values(get.result.streams).every(stream => stream.complete)); };
     }), null, { timeout: 60000 });
     assert.equal(maxInflight, 1, 'only one tab may sync at a time');
+    assert.ok(requests.every(value => new URL(value).searchParams.get('type') !== 'subject'), 'collection activities are no longer fetched');
     const cellCount = await page.locator('.hm-cell').count();
     assert.ok(cellCount >= 365 && cellCount <= 371, `expected a complete aligned year, got ${cellCount} cells`);
     assert.equal(await page.locator('button,nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap');
-    assert.equal(await page.locator('h2').textContent(), '时光机统计');
+    assert.equal(await page.locator('h2').textContent(), '活跃度热力图');
+    assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-label'), '活跃度热力图');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
     assert.equal(await page.locator('.hm-chart-area i').count(), 4);
     assert.match(await page.locator('.hm-cell').last().locator('title').textContent(), /\d{4}-\d{2}-\d{2}: \d+ 集/);
+    const firstDay = core.dayKey(now - core.DAY);
+    assert.ok((await page.locator('.hm-cell title').allTextContents()).includes(`${firstDay}: 1 集`), 'a collection on the same day must not add another episode');
     assert.match(await page.locator('.hm-chart-area').textContent(), /近1年活跃率:\s*0\.8%\s*·\s*近30天活跃:\s*3\s*天少多/);
     assert.equal(await page.locator('img').count(), 0, 'remote covers never enter live DOM');
     const style = await page.locator('#hm-dashboard').evaluate(element => {
@@ -145,7 +149,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     extra = true; await prepareRefresh(); await load(page);
     await page.waitForFunction(() => /近1年活跃率:\s*1\.1%/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent), null, { timeout: 30000 });
     const updated = await readState();
-    assert.ok(updated.events.length >= 7, 'new records added incrementally');
+    assert.ok(updated.events.length >= 5, 'new progress records added incrementally');
 
     // Rate limiting stores a cooldown but never replaces the cached chart with an error panel.
     fail = true; await prepareRefresh(); const beforeFailure = requests.length; await load(page);

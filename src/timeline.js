@@ -86,7 +86,7 @@
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems" aria-label="时光机统计"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">时光机统计</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的时间胶囊…</div></div></section>`;
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></section>`;
     theme();
     new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
@@ -108,7 +108,7 @@
     const height = padT + rows * (cell + gap) + 4;
     const labels = ['一', '', '三', '', '五', '', '日'];
     const monthDrawn = Object.create(null);
-    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日标记集数热力图"><g transform="translate(${padL} ${padT})">`;
+    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
     labels.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
@@ -192,7 +192,7 @@
       if (!force && nextSyncAt > now) { idleUntil = nextSyncAt; return; }
       busy = true; aborted = false; message = ''; render();
       try {
-        for (const t of C.TYPES) {
+        for (const t of C.SYNC_TYPES) {
           const s = state.streams[t];
           if (!s.complete && s.page > 1) s.page = Math.max(1, s.page - 2);
           if (s.refresh?.page > 1) s.refresh.page = Math.max(1, s.refresh.page - 1);
@@ -203,7 +203,7 @@
         let made = 0;
         while (made < 24 && !aborted) {
           let worked = false;
-          for (const t of C.TYPES) {
+          for (const t of C.SYNC_TYPES) {
             if (aborted || made >= 24) break;
             const s = state.streams[t];
             if (s.complete && !s.refresh) continue;

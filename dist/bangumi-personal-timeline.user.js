@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.9
+// @version      1.0.10
 // @description  原版风格的年度标记热力图；保留每条活动，并按实际新增集数计算批量进度。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -17,6 +17,7 @@
   const DAY = 86400000;
   const REFRESH_INTERVAL = 15 * 60 * 1000;
   const TYPES = ['subject', 'progress'];
+  const SYNC_TYPES = ['progress'];
   const pad = n => String(n).padStart(2, '0');
   const dayKey = ms => new Date(ms + 8 * 3600000).toISOString().slice(0, 10);
   const dayStart = ms => Date.parse(dayKey(ms) + 'T00:00:00+08:00');
@@ -65,7 +66,7 @@
     return { events, next, oldest: events.length ? Math.min(...events.map(e => e.time)) : null, newest: events.length ? Math.max(...events.map(e => e.time)) : null };
   }
   function freshState(user) {
-    return { schema: 1, user, events: [], streams: Object.fromEntries(TYPES.map(t => [t, { page: 1, complete: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
+    return { schema: 1, user, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
   }
   function mergeEvents(old, incoming) {
     const map = new Map(old.map(e => [e.id, e]));
@@ -75,7 +76,7 @@
   function nextSyncAt(state, now = Date.now()) {
     if (Number(state?.retryAt || 0) > now) return Number(state.retryAt);
     let next = Infinity;
-    for (const type of TYPES) {
+    for (const type of SYNC_TYPES) {
       const stream = state?.streams?.[type];
       if (!stream || !stream.complete || stream.refresh) return 0;
       const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
@@ -97,18 +98,18 @@
     return `text:${event.text.replace(/\bep\.\s*\d+\b/ig, '').replace(/\d+\s+of\s+\d+\s*话/ig, '').replace(/\s+/g, ' ').trim()}`;
   }
   function progressUnits(event, progress) {
+    const text = event.text.trim();
     const key = progressSubjectKey(event);
     const previous = progress.get(key) || 0;
-    const checkpoint = event.text.match(/(?:^|\s)(\d+)\s+of\s+\d+\s*话(?:\s|$)/i);
+    const checkpoint = /^完成了\s/.test(text) && text.match(/(?:^|\s)(\d+)\s+of\s+\d+\s*话(?:\s|$)/i);
     if (checkpoint) {
       const current = Number(checkpoint[1]);
       progress.set(key, Math.max(previous, current));
       return Math.max(0, current - previous);
     }
-    const episode = event.text.match(/\bep\.\s*(\d+)\b/i);
-    if (episode) progress.set(key, Math.max(previous, Number(episode[1])));
-    // Specials and older timeline formats may not expose an episode number,
-    // but each progress entry still represents at least one marked episode.
+    const episode = text.match(/^看过\s+(?:ep|sp)\.\s*(\d+)\b/i);
+    if (!episode) return 0;
+    progress.set(key, Math.max(previous, Number(episode[1])));
     return 1;
   }
   function aggregate(state, now = Date.now()) {
@@ -117,13 +118,12 @@
     const daily = Object.create(null), hourly = Array(24).fill(0), weekly = Array(7).fill(0), sources = Object.create(null);
     const progress = new Map();
     let total = 0;
-    const events = state.events.filter(e => e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
+    const events = state.events.filter(e => e.type === 'progress' && e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
     for (const e of events) {
-      // Preserve the original heatmap contract: every timeline activity counts
-      // at least once. Progress checkpoints only increase that weight when one
-      // action represents multiple newly marked episodes.
-      const amount = e.type === 'progress' ? Math.max(1, progressUnits(e, progress)) : 1;
-      if (e.time < start) continue;
+      // Older progress entries establish the baseline for later batch updates,
+      // but only confirmed watched episodes contribute to the heatmap.
+      const amount = progressUnits(e, progress);
+      if (e.time < start || amount === 0) continue;
       const key = dayKey(e.time), d = new Date(e.time + 8 * 3600000);
       daily[key] = (daily[key] || 0) + amount;
       hourly[d.getUTCHours()] += amount;
@@ -132,19 +132,17 @@
       sources[name] = (sources[name] || 0) + amount;
       total += amount;
     }
-    const coverage = Math.max(...TYPES.map(type => {
-      const stream = state.streams[type];
-      return stream.complete ? start : stream.oldest === null ? end : dayStart(stream.oldest) + DAY;
-    }));
+    const stream = state.streams.progress;
+    const coverage = stream.complete ? start : stream.oldest === null ? end : dayStart(stream.oldest) + DAY;
     const days = Array.from({ length: 365 }, (_, i) => {
       const time = start + i * DAY, key = dayKey(time);
       return { key, time, count: daily[key] || 0, known: time >= coverage };
     });
     const ranked = Object.entries(sources).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
-    return { days, hourly, weekly, platform, total, complete: TYPES.every(t => state.streams[t].complete), start, end };
+    return { days, hourly, weekly, platform, total, complete: stream.complete, start, end };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
 });
 
 
@@ -236,7 +234,7 @@
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems" aria-label="时光机统计"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">时光机统计</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的时间胶囊…</div></div></section>`;
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></section>`;
     theme();
     new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
@@ -258,7 +256,7 @@
     const height = padT + rows * (cell + gap) + 4;
     const labels = ['一', '', '三', '', '五', '', '日'];
     const monthDrawn = Object.create(null);
-    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日标记集数热力图"><g transform="translate(${padL} ${padT})">`;
+    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
     labels.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
@@ -342,7 +340,7 @@
       if (!force && nextSyncAt > now) { idleUntil = nextSyncAt; return; }
       busy = true; aborted = false; message = ''; render();
       try {
-        for (const t of C.TYPES) {
+        for (const t of C.SYNC_TYPES) {
           const s = state.streams[t];
           if (!s.complete && s.page > 1) s.page = Math.max(1, s.page - 2);
           if (s.refresh?.page > 1) s.refresh.page = Math.max(1, s.refresh.page - 1);
@@ -353,7 +351,7 @@
         let made = 0;
         while (made < 24 && !aborted) {
           let worked = false;
-          for (const t of C.TYPES) {
+          for (const t of C.SYNC_TYPES) {
             if (aborted || made >= 24) break;
             const s = state.streams[t];
             if (s.complete && !s.refresh) continue;
