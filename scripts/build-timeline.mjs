@@ -8,7 +8,7 @@ const header = `// ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
 // @version      ${version}
-// @description  原版风格的年度标记热力图；保留每条活动，并按实际新增集数计算批量进度。
+// @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
 // @match        https://bangumi.tv/*
