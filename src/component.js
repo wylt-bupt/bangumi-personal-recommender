@@ -11,7 +11,7 @@
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "30";
+  const RECOMMENDATION_MODEL_VERSION = "31";
   const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
@@ -358,7 +358,7 @@
       }
       const tags = Core.topRetrievalTags(profile, CANDIDATE_TAG_COUNT);
       const signature = tags.map(Core.normalizeText).sort().join("|");
-      const key = `candidates:v3:${subjectType}:${signature}`;
+      const key = `candidates:v4:${subjectType}:${signature}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
@@ -367,7 +367,7 @@
             const pools = [];
             const rankOffsets = Array.from({ length: CANDIDATE_RANK_PAGES }, (_, index) => index * 100);
             const tagQueries = tags.flatMap((tag) =>
-              Array.from({ length: CANDIDATE_TAG_PAGES }, (_, index) => ({ tag, offset: index * 50 })),
+              Array.from({ length: CANDIDATE_TAG_PAGES }, (_, index) => ({ tag, pageIndex: index })),
             );
             const totalRequests = rankOffsets.length + tagQueries.length;
             let completed = 0;
@@ -380,16 +380,13 @@
               completed += 1;
               this.progress("正在建立候选池…", completed, totalRequests);
             }
-            const searched = await concurrentMap(tagQueries, 3, async ({ tag, offset }) => {
+            const searched = await concurrentMap(tagQueries, 3, async ({ tag, pageIndex }) => {
+              const query = Core.candidateTagSearchQuery(subjectType, tag, pageIndex);
               const page = await this.requestJson(
-                `/v0/search/subjects?limit=50&offset=${offset}`,
+                query.path,
                 {
                   method: "POST",
-                  body: JSON.stringify({
-                    keyword: tag,
-                    sort: "heat",
-                    filter: { type: [subjectType], tag: [tag] },
-                  }),
+                  body: JSON.stringify(query.body),
                 },
               );
               completed += 1;

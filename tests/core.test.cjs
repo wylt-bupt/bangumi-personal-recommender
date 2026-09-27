@@ -2,6 +2,15 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Core = require("../src/core.cjs");
 
+test("candidate tag retrieval filters by tag without self-AND keyword and pages by 20", () => {
+  assert.deepEqual(Core.candidateTagSearchQuery(2, "意识流", 0), {
+    path: "/v0/search/subjects?limit=20&offset=0",
+    body: { keyword: "", sort: "heat", filter: { type: [2], tag: ["意识流"] } },
+  });
+  assert.equal(Core.candidateTagSearchQuery(2, "意识流", 1).path,
+    "/v0/search/subjects?limit=20&offset=20");
+});
+
 function subject(id, score, tags, extra = {}) {
   return {
     id,

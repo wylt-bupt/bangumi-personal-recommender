@@ -1097,6 +1097,18 @@
       .map((entry) => entry.label);
   }
 
+  function candidateTagSearchQuery(subjectType, tag, pageIndex) {
+    const pageSize = 20; // Bangumi search currently caps each response at 20.
+    return {
+      path: `/v0/search/subjects?limit=${pageSize}&offset=${pageIndex * pageSize}`,
+      body: {
+        keyword: "",
+        sort: "heat",
+        filter: { type: [subjectType], tag: [tag] },
+      },
+    };
+  }
+
   const Core = Object.freeze({
     SUBJECT_TYPES,
     COLLECTION_STATUS,
@@ -1136,6 +1148,7 @@
     collectionFingerprint,
     influentialSubjectIds,
     topRetrievalTags,
+    candidateTagSearchQuery,
   });
 
   if (typeof module !== "undefined" && module.exports) module.exports = Core;

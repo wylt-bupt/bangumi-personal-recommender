@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.10.7
+// @version      0.10.8
 // @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -1170,6 +1170,18 @@
       .map((entry) => entry.label);
   }
 
+  function candidateTagSearchQuery(subjectType, tag, pageIndex) {
+    const pageSize = 20; // Bangumi search currently caps each response at 20.
+    return {
+      path: `/v0/search/subjects?limit=${pageSize}&offset=${pageIndex * pageSize}`,
+      body: {
+        keyword: "",
+        sort: "heat",
+        filter: { type: [subjectType], tag: [tag] },
+      },
+    };
+  }
+
   const Core = Object.freeze({
     SUBJECT_TYPES,
     COLLECTION_STATUS,
@@ -1209,6 +1221,7 @@
     collectionFingerprint,
     influentialSubjectIds,
     topRetrievalTags,
+    candidateTagSearchQuery,
   });
 
   if (typeof module !== "undefined" && module.exports) module.exports = Core;
@@ -1639,7 +1652,7 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.7";
+  const APP_VERSION = "0.10.8";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2216,14 +2229,14 @@
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.10.7";
+  const APP_VERSION = "0.10.8";
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
   const COLLECTION_TTL = 24 * 60 * 60 * 1000;
   const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
   const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
   const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "30";
+  const RECOMMENDATION_MODEL_VERSION = "31";
   const RECOMMENDATION_PAGE_SIZE = 5;
   const CANDIDATE_TAG_COUNT = 12;
   const CANDIDATE_TAG_PAGES = 2;
@@ -2570,7 +2583,7 @@
       }
       const tags = Core.topRetrievalTags(profile, CANDIDATE_TAG_COUNT);
       const signature = tags.map(Core.normalizeText).sort().join("|");
-      const key = `candidates:v3:${subjectType}:${signature}`;
+      const key = `candidates:v4:${subjectType}:${signature}`;
       return this.cached(
         key,
         CANDIDATE_TTL,
@@ -2579,7 +2592,7 @@
             const pools = [];
             const rankOffsets = Array.from({ length: CANDIDATE_RANK_PAGES }, (_, index) => index * 100);
             const tagQueries = tags.flatMap((tag) =>
-              Array.from({ length: CANDIDATE_TAG_PAGES }, (_, index) => ({ tag, offset: index * 50 })),
+              Array.from({ length: CANDIDATE_TAG_PAGES }, (_, index) => ({ tag, pageIndex: index })),
             );
             const totalRequests = rankOffsets.length + tagQueries.length;
             let completed = 0;
@@ -2592,16 +2605,13 @@
               completed += 1;
               this.progress("正在建立候选池…", completed, totalRequests);
             }
-            const searched = await concurrentMap(tagQueries, 3, async ({ tag, offset }) => {
+            const searched = await concurrentMap(tagQueries, 3, async ({ tag, pageIndex }) => {
+              const query = Core.candidateTagSearchQuery(subjectType, tag, pageIndex);
               const page = await this.requestJson(
-                `/v0/search/subjects?limit=50&offset=${offset}`,
+                query.path,
                 {
                   method: "POST",
-                  body: JSON.stringify({
-                    keyword: tag,
-                    sort: "heat",
-                    filter: { type: [subjectType], tag: [tag] },
-                  }),
+                  body: JSON.stringify(query.body),
                 },
               );
               completed += 1;
