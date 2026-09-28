@@ -12,7 +12,7 @@ const header = `// ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
 // @version      ${version}
-// @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
+// @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
 // @match        http://bgm.tv/*
@@ -23,9 +23,14 @@ const header = `// ==UserScript==
 // ==/UserScript==
 `;
 
-const core = await readFile(resolve(root, "src/core.cjs"), "utf8");
 const profileUI = await readFile(resolve(root, "src/profile-ui.js"), "utf8");
-const component = await readFile(resolve(root, "src/component.js"), "utf8");
+const recommendationFeed = await readFile(resolve(root, "src/recommendation-feed.cjs"), "utf8");
+const component = await readFile(resolve(root, "src/recommender-v2.js"), "utf8");
+const initialFeed = JSON.parse(await readFile(resolve(root, "public/recommendations.json"), "utf8"));
+// The bundle matches every Bangumi page; keep only a small offline fallback.
+// The full monthly feed is fetched lazily on the actual wylt profile.
+const embeddedFeed = JSON.stringify({ ...initialFeed, candidates: initialFeed.candidates.slice(0, 50) }, null, 2)
+  .replaceAll("<", "\\u003c");
 const statsCore = await readFile(resolve(root, "src/stats-core.cjs"), "utf8");
 const stats = await readFile(resolve(root, "src/stats.js"), "utf8");
 const statsViz = await readFile(resolve(root, "src/stats-viz.cjs"), "utf8");
@@ -39,7 +44,7 @@ function injectVersion(source, file) {
 }
 
 await mkdir(dirname(output), { recursive: true });
-const bundle = `${header}\n${profileUI}\n\n${core}\n\n${statsCore}\n\n${statsViz}\n\n${injectVersion(stats, "src/stats.js")}\n\n${injectVersion(component, "src/component.js")}\n`;
+const bundle = `${header}\n${profileUI}\n\n${recommendationFeed}\n\nglobalThis.BangumiInitialRecommendationFeed = ${embeddedFeed};\n\n${statsCore}\n\n${statsViz}\n\n${injectVersion(stats, "src/stats.js")}\n\n${injectVersion(component, "src/recommender-v2.js")}\n`;
 await writeFile(output, bundle, "utf8");
 await writeFile(publishOutput, bundle, "utf8");
 console.log(`Built ${output} (${version})`);

@@ -10,3 +10,7 @@ experiments/*/data/
 experiments/*/results.json
 experiments/*/snapshot.json
 experiments/*/*-details.json
+experiments/*/__pycache__/
+scripts/.cache/
+scripts/__pycache__/
+public/*.tmp

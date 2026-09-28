@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.10.8
-// @description  个人主页的动画回顾与个性推荐：年代柱图、偏好词云与人物排行。
+// @version      0.11.0
+// @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
 // @match        http://bgm.tv/*
@@ -71,1163 +71,1686 @@
 })(globalThis);
 
 
-(function attachBangumiRecommenderCore(globalObject) {
+(function attachRecommendationFeed(globalObject) {
   "use strict";
 
-  const SUBJECT_TYPES = Object.freeze({
-    1: { label: "书籍", slug: "book" },
-    2: { label: "动画", slug: "anime" },
-    3: { label: "音乐", slug: "music" },
-    4: { label: "游戏", slug: "game" },
-    6: { label: "三次元", slug: "real" },
-  });
+  const SCHEMA_VERSION = 1;
+  const OWNER = "wylt";
 
-  const COLLECTION_STATUS = Object.freeze({
-    1: "wish",
-    2: "collect",
-    3: "doing",
-    4: "on_hold",
-    5: "dropped",
-  });
-
-  const ROLE_WEIGHTS = Object.freeze({
-    tag: 1,
-    meta: 0.9,
-    director: 0.35,
-    studio: 0.28,
-    creator: 0.25,
-    series: 0.2,
-    script: 0.2,
-    music: 0.15,
-    cv: 0.07,
-    decade: 0.22,
-    format: 0.2,
-  });
-
-  const ROLE_SHRINKAGE = Object.freeze({
-    tag: 4,
-    meta: 4,
-    director: 2.5,
-    studio: 4,
-    creator: 3,
-    series: 3,
-    script: 3,
-    music: 4,
-    cv: 7,
-    decade: 8,
-    format: 6,
-  });
-
-  const ROLE_MIN_SUPPORT = Object.freeze({
-    tag: 4,
-    meta: 3,
-    director: 2,
-    studio: 3,
-    creator: 2,
-    series: 2,
-    script: 2,
-    music: 3,
-    cv: 4,
-    decade: 4,
-    format: 3,
-  });
-
-  // Matches the same calendar-like forms as stats-viz isTemporalTag so time
-  // index tags never leak into profile features or recommendation cards.
-  const TEMPORAL_TAG = /^(?:19|20)\d{2}(?:年)?$|^(?:19|20)\d{2}(?:年|[-./])(?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?$|^(?:19|20)\d{2}年?(?:春|夏|秋|冬)(?:季|番|新番)?$|^(?:1|4|7|10)月(?:番|新番)$|^(?:19|20)\d0s$/i;
-  const FORMAT_TAGS = new Set(["tv", "剧场版", "劇場版", "ova", "oad", "web", "泡面番"]);
-  const ADULT_RECOMMENDATION_TAGS = Object.freeze({
-    profile: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画", "r18", "18x", "18禁"]),
-    direct: Object.freeze(["里番", "裏番", "步兵裡番", "泡面里番", "成人动画"]),
-    strongDirect: Object.freeze(["步兵裡番", "泡面里番", "成人动画"]),
-    supplemental: Object.freeze(["r18", "18x", "18禁"]),
-    corroborating: Object.freeze([
-      "实用", "无码", "本番", "里番下限", "成人向", "成人三部曲", "有h", "有h哦", "hentai",
-      "エロ", "エロアニメ", "色情", "官能", "三级", "拔作", "抜きゲー", "r17", "r18+", "18+",
-      "poro", "ピンクパイナップル", "queenbee",
-      "メリー・ジェーン", "mary jane", "t-rex", "雷火剣", "雷火剑", "milky", "discovery", "nur",
-    ]),
-  });
-  const CONTENT_TAG_PATTERN = /(?:治[愈癒]|致郁|日常|恋爱|愛情|纯爱|校園|校园|青春|成长|百合|耽美|\bbl\b|\bgl\b|科幻|奇幻|魔幻|悬疑|推理|恐怖|惊悚|猎奇|黑暗|压抑|扭曲|虚无|空虚|孤独|冒险|战争|历史|社会|政治|职场|家庭|亲情|友情|喜剧|搞笑|爆笑|吐槽|电波|意识流|群像|公路|音乐|运动|竞技|偶像|机战|机器人|超能力|异世界|穿越|轮回|时间|末日|灾难|犯罪|侦探|心理|哲学|文学|童话|自传|私小说|催泪|感动|热血|萌|美食|旅行|剧情|后宫|ntr|胃[疼痛药]|内涵|经典|轻小说|輕小說|漫画|漫畫|小说改|漫改|gal改|游戏改|原创|原創|乱伦|工口|成人|里番|r18|ova|oad|剧场版|劇場版|一卷全|短篇|长篇)/i;
-  const GENERIC_TAGS = new Set([
-    "tv", "日本", "动画", "動畫", "anime", "アニメ", "书籍", "書籍", "book", "小说", "小説",
-    "系列", "小说系列", "小說系列", "补番", "補番", "神作", "佳作", "名作", "自用", "已购", "已購",
-  ]);
-
-  function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
-  }
-
-  function mean(values) {
-    if (!values.length) return 0;
-    return values.reduce((sum, value) => sum + value, 0) / values.length;
-  }
-
-  function normalizeText(value) {
-    return String(value ?? "")
-      .normalize("NFKC")
-      .trim()
-      .replace(/\s+/g, " ")
-      .toLocaleLowerCase("zh-CN");
-  }
-
-  function tokenPrefix(token) {
-    return String(token).split(":", 1)[0];
-  }
-
-  function normalizeTagList(tags) {
-    if (!Array.isArray(tags)) return [];
-    const normalized = tags
-      .map((tag) => (typeof tag === "string" ? tag : tag?.name))
-      .map(normalizeText)
-      .filter(Boolean);
-    return [...new Set(normalized)];
-  }
-
-  function subjectHasTag(subjectInput, tagInput) {
-    const target = normalizeText(tagInput);
-    if (!target) return false;
-    const subject = normalizeSubject(subjectInput);
-    return [...subject.tags, ...subject.metaTags].includes(target);
-  }
-
-  function collectionHasTag(collectionInput, tagInput) {
-    const target = normalizeText(tagInput);
-    if (!target) return false;
-    const collection = normalizeCollection(collectionInput);
-    return [...collection.tags, ...collection.subject.tags, ...collection.subject.metaTags].includes(target);
-  }
-
-  function candidateExclusion(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const title = normalizeText(`${subject.name} ${subject.nameCn}`);
-    const tagText = normalizeText([...subject.metaTags, ...subject.tags].join(" "));
-    const formatText = `${normalizeText(subject.platform)} ${tagText}`;
-    // Latin form tokens need word boundaries: plain substring matching would
-    // flag titles like "NOVA" (contains "ova") as specials.
-    if (/(?:剧场版|劇場版|映画|特别篇|特別篇|\b(?:movie|film|ova|oad|special|sp)\b)/i.test(`${title} ${formatText}`)) {
-      return "movie-or-special";
-    }
-    if (/(?:总集篇|總集篇|総集編|重制版|重製版|重置版|remake|リメイク|再编辑|再編輯|再編集|re-?edit|recap|digest|etv版)/i.test(`${title} ${tagText}`)) {
-      return "recut-or-remake";
-    }
-    if (subject.totalEpisodes > 0 && subject.totalEpisodes < 10) return "under-10-episodes";
-    return null;
-  }
-
-  function isAdultRecommendationCandidate(subjectInput, allowDirectOnly = false) {
-    const subject = normalizeSubject(subjectInput);
-    const tags = new Set([...subject.tags, ...subject.metaTags]);
-    const containsAny = (values) => values.some((value) => tags.has(normalizeText(value)));
-    const hasDirect = containsAny(ADULT_RECOMMENDATION_TAGS.direct);
-    if (allowDirectOnly && hasDirect) return true;
-    const hasStrongDirect = containsAny(ADULT_RECOMMENDATION_TAGS.strongDirect);
-    const hasDirectConsensus = ADULT_RECOMMENDATION_TAGS.direct.some((value) => {
-      const tag = normalizeText(value);
-      return tags.has(tag) && Number(subject.tagCounts[tag] || 0) >= 3;
-    });
-    if (hasStrongDirect || hasDirectConsensus) return true;
-    const supplementalCount = ADULT_RECOMMENDATION_TAGS.supplemental
-      .filter((value) => tags.has(normalizeText(value))).length;
-    const hasCorroboration = containsAny(ADULT_RECOMMENDATION_TAGS.corroborating)
-      || [...tags].some((tag) => /\d(?:里番|裏番)$|(?:成人|hentai|エロ|色情|官能)/i.test(tag));
-    return (hasDirect || supplementalCount >= 1) && hasCorroboration;
-  }
-
-  function infoboxValueText(value) {
-    if (Array.isArray(value)) return value.map(infoboxValueText).filter(Boolean).join(" ");
-    if (value && typeof value === "object") {
-      return [value.k, value.v, value.value, value.name]
-        .map(infoboxValueText)
-        .filter(Boolean)
-        .join(" ");
-    }
-    return String(value ?? "").trim();
-  }
-
-  function normalizeInfoboxEntries(infobox) {
-    if (!Array.isArray(infobox)) return [];
-    return infobox
-      .map((entry) => ({
-        key: normalizeText(entry?.key || entry?.k || ""),
-        value: normalizeText(infoboxValueText(entry?.value ?? entry?.v ?? entry)),
-      }))
-      .filter((entry) => entry.key || entry.value);
-  }
-
-  function normalizeSubject(raw = {}) {
-    const rating = raw.rating || {};
-    const date = String(raw.date || raw.air_date || "");
-    const tagCounts = {};
-    for (const tag of Array.isArray(raw.tags) ? raw.tags : []) {
-      if (!tag || typeof tag !== "object") continue;
-      const name = normalizeText(tag.name);
-      if (name) tagCounts[name] = Math.max(Number(tagCounts[name] || 0), Number(tag.count || 0));
-    }
-    for (const [nameInput, count] of Object.entries(raw.tagCounts || {})) {
-      const name = normalizeText(nameInput);
-      if (name) tagCounts[name] = Math.max(Number(tagCounts[name] || 0), Number(count || 0));
-    }
+  function normalizeCandidate(row) {
+    const subject = row?.subject || {};
+    const id = Number(subject.id);
+    const predicted = Number(row?.predicted);
+    if (!Number.isSafeInteger(id) || id <= 0 || Number(subject.type) !== 2 ||
+        !Number.isFinite(predicted) || predicted < 1 || predicted > 10) return null;
     return {
-      id: Number(raw.id || raw.subject_id || 0),
-      type: Number(raw.type || raw.subject_type || 0),
-      name: String(raw.name || ""),
-      nameCn: String(raw.name_cn || raw.nameCn || ""),
-      date,
-      image:
-        raw.image ||
-        raw.images?.common ||
-        raw.images?.medium ||
-        raw.images?.small ||
-        "",
-      tags: normalizeTagList(raw.tags),
-      tagCounts,
-      metaTags: normalizeTagList(raw.meta_tags || raw.metaTags),
-      rating: {
-        score: Number(rating.score || raw.score || 0),
-        total: Number(rating.total || raw.rating_total || 0),
+      subject: {
+        id,
+        type: 2,
+        name: String(subject.name || ""),
+        nameCn: String(subject.nameCn || subject.name_cn || ""),
+        image: String(subject.image || ""),
+        tags: Array.isArray(subject.tags) ? subject.tags.filter((tag) => typeof tag === "string" && tag.trim()).slice(0, 12) : [],
+        rating: {
+          score: Number.isFinite(Number(subject.rating?.score)) ? Number(subject.rating.score) : 0,
+          total: Number.isFinite(Number(subject.rating?.total)) ? Math.max(0, Number(subject.rating.total)) : 0,
+        },
       },
-      rank: Number(raw.rank || 0),
-      infobox: Array.isArray(raw.infobox || raw.infoBox) ? raw.infobox || raw.infoBox : [],
-      summary: String(raw.summary || ""),
-      persons: Array.isArray(raw.persons || raw._persons) ? raw.persons || raw._persons : [],
-      characters: Array.isArray(raw.characters || raw._characters)
-        ? raw.characters || raw._characters
-        : [],
-      relation: String(raw.relation || ""),
-      sourceUrl: String(raw.sourceUrl || ""),
-      platform: String(raw.platform || ""),
-      totalEpisodes: Number(raw.total_episodes || raw.eps || raw.totalEpisodes || 0),
-      adultEvidenceVerified: raw.adultEvidenceVerified === undefined
-        ? undefined
-        : Boolean(raw.adultEvidenceVerified),
-      adultVerificationPriority: Number(raw.adultVerificationPriority || 0),
-    };
-  }
-
-  function classifyJapaneseOrigin(subjectInput) {
-    const source = subjectInput?.originMetadata || subjectInput || {};
-    const subject = normalizeSubject(source);
-    const entries = normalizeInfoboxEntries(subject.infobox);
-    const tagText = normalizeText([...subject.tags, ...subject.metaTags].join(" "));
-    const titleText = normalizeText(`${subject.name} ${subject.nameCn}`);
-    const infoText = entries.map((entry) => `${entry.key} ${entry.value}`).join(" ");
-    const evidence = [];
-    let japaneseScore = 0;
-    let foreignScore = 0;
-    let explicitJapanese = false;
-    let explicitForeign = false;
-
-    const countryKey = /(?:国家|國家|地区|地區|原产|原產|制作国|製作国|製作國|country|region)/i;
-    // Compare whole country tokens on both sides. Substring matching treated
-    // "日本／美国" as foreign-only ("日本" needed whitespace around it, "美国"
-    // did not), so co-productions were misclassified as non-Japanese.
-    const japaneseCountry = /^(?:日本|japan|japanese)$/i;
-    const foreignCountry = /^(?:美国|美國|英国|英國|法国|法國|德国|德國|中国|中國|中国大陆|中國大陸|大陆|大陸|香港|台湾|台灣|韩国|韓國|俄国|俄國|俄罗斯|俄羅斯|加拿大|澳大利亚|澳大利亞|意大利|西班牙|印度|泰国|泰國|united states|united kingdom|america|britain|france|germany|china|korea|russia|canada|australia|italy|spain|india|thailand)$/i;
-    for (const entry of entries) {
-      if (!countryKey.test(entry.key)) continue;
-      const tokens = entry.value.split(/[\s/／、，,;；|·]+/).filter(Boolean);
-      if (tokens.some((token) => japaneseCountry.test(token))) explicitJapanese = true;
-      if (tokens.some((token) => foreignCountry.test(token))) explicitForeign = true;
-    }
-
-    if (/(?:日本|日漫|日本动画|日本動畫|日剧|日劇|日影|日本电影|日本電影|j-?pop|アニソン|同人音楽|同人音乐|東方|东方project|vocaloid|特撮|特摄|轻小说|輕小說|ライトノベル|galgame|eroge|jrpg)/i.test(tagText)) {
-      japaneseScore += 2;
-      evidence.push("日系标签");
-    }
-    if (/(?:欧美|歐美|美剧|美劇|英剧|英劇|韩剧|韓劇|国产|國產|中国动画|中國動畫|韩漫|韓漫|美漫|k-?pop)/i.test(tagText)) {
-      foreignScore += 3;
-      evidence.push("非日系标签");
-    }
-    if (/[ぁ-ゖァ-ヺ]/.test(subject.name)) {
-      japaneseScore += 2;
-      evidence.push("日文原名");
-    }
-
-    const japaneseInstitution = /(?:gainax|production\s*i\.?g|shaft|a-1\s*pictures|cloverworks|mappa|madhouse|ufotable|trigger|bones|sunrise|サンライズ|京都アニメーション|京アニ|東映|toei|tms|wit\s*studio|studio\s*deen|j\.?c\.?staff|ぴえろ|日本アニメーション|aniplex|kadokawa|角川|講談社|讲谈社|集英社|小学館|小学馆|芳文社|白泉社|双葉社|双叶社|徳間書店|德间书店|電撃|电击|key\s*sounds\s*label|sony\s*music\s*japan|avex|lantis|日本テレビ|テレビ朝日|テレビ東京|フジテレビ|nhk)/i;
-    if (japaneseInstitution.test(infoText)) {
-      japaneseScore += 3;
-      evidence.push("日本机构");
-    }
-
-    if (explicitJapanese && !explicitForeign) {
-      return { status: "japanese", confidence: 1, evidence: ["明确日本地区", ...evidence] };
-    }
-    if (explicitForeign && !explicitJapanese) {
-      return { status: "non_japanese", confidence: 1, evidence: ["明确非日本地区", ...evidence] };
-    }
-    if (japaneseScore >= 3 && japaneseScore >= foreignScore + 2) {
-      return { status: "japanese", confidence: clamp(japaneseScore / 5, 0, 1), evidence };
-    }
-    if (foreignScore >= 3) {
-      return { status: "non_japanese", confidence: clamp(foreignScore / 5, 0, 1), evidence };
-    }
-    return { status: "unknown", confidence: 0, evidence };
-  }
-
-  function normalizeCollection(raw = {}) {
-    const subject = normalizeSubject(raw.subject || raw);
-    const type = Number(raw.type || raw.collection_type || 0);
-    return {
-      subjectId: Number(raw.subject_id || subject.id || 0),
-      type,
-      status: COLLECTION_STATUS[type] || String(raw.status || "unknown"),
-      rate: Number(raw.rate || 0),
-      tags: normalizeTagList(raw.tags),
-      comment: String(raw.comment || ""),
-      updatedAt: String(raw.updated_at || raw.updatedAt || ""),
-      subject,
-    };
-  }
-
-  function normalizeRole(relation) {
-    const value = normalizeText(relation);
-    if (!value) return null;
-    if (/(动画制作|動畫製作|アニメーション制作|animation production|制作会社|studio)/i.test(value)) {
-      return "studio";
-    }
-    if (/(总导演|總導演|导演|導演|監督|director)/i.test(value)) return "director";
-    if (/(原作|作者|creator|original work)/i.test(value)) return "creator";
-    if (/(系列构成|系列構成|シリーズ構成|series composition)/i.test(value)) return "series";
-    if (/(脚本|劇本|剧本|scenario|screenplay)/i.test(value)) return "script";
-    if (/(音乐|音樂|音楽|music)/i.test(value)) return "music";
-    return null;
-  }
-
-  function normalizeInfoboxRole(keyInput) {
-    const key = normalizeText(keyInput);
-    if (/^(?:动画制作|動畫製作|アニメーション制作|制作会社|制作公司|studio)$/.test(key)) return "studio";
-    if (/^(?:总导演|總導演|导演|導演|監督|director)$/.test(key)) return "director";
-    if (/^(?:原作|作者|原作者|creator|original work)$/.test(key)) return "creator";
-    if (/^(?:系列构成|系列構成|シリーズ構成|series composition)$/.test(key)) return "series";
-    if (/^(?:脚本|劇本|剧本|scenario|screenplay)$/.test(key)) return "script";
-    if (/^(?:音乐|音樂|音楽|music)$/.test(key)) return "music";
-    return null;
-  }
-
-  function splitCreditNames(valueInput) {
-    const rawValue = infoboxValueText(valueInput).replace(/\[[^\]]*]/g, " ");
-    const aliases = [...rawValue.matchAll(/[（(]([^()（）]{2,24})[）)]/g)]
-      .map((match) => match[1].trim())
-      .filter((value) => /[\p{L}]/u.test(value) && !/\d|[、，,;；]/.test(value));
-    const primaryNames = rawValue
-      .replace(/\([^)]*\)|（[^）]*）|【[^】]*】/g, "")
-      .split(/[、，,\/／;；\n]|\s+[&＆]\s+/)
-      .map((value) => value
-        .replace(/^(?:担当|制作|製作)[:：]\s*/i, "")
-      .trim())
-      .filter((value) => value && value.length <= 48 && !/^https?:/i.test(value))
-      .slice(0, 8);
-    return [...new Set([...primaryNames, ...aliases])].slice(0, 8);
-  }
-
-  function extractInfoboxCredits(infobox = []) {
-    const credits = [];
-    for (const entry of infobox) {
-      const role = normalizeInfoboxRole(entry?.key || entry?.k || "");
-      if (!role) continue;
-      for (const label of splitCreditNames(entry?.value ?? entry?.v ?? "")) {
-        credits.push({ role, label });
-      }
-    }
-    return credits;
-  }
-
-  function creditAlias(value) {
-    return normalizeText(value)
-      .replace(/岡/g, "冈")
-      .replace(/磨里/g, "麿里")
-      .replace(/[瀬瀨]/g, "濑")
-      .replace(/戸/g, "户")
-      .replace(/間/g, "间")
-      .replace(/類/g, "类")
-      .replace(/後/g, "后")
-      .replace(/國/g, "国")
-      .replace(/島/g, "岛")
-      .replace(/學/g, "学")
-      .replace(/樂/g, "乐")
-      .replace(/[辺邊邉]/g, "边")
-      .replace(/葉/g, "叶")
-      .replace(/澤/g, "泽")
-      .replace(/[\s._・·—–-]+/g, "");
-  }
-
-  function canonicalTagAlias(value) {
-    const alias = creditAlias(value);
-    if (/^(?:漫画改|漫畫改|漫改)$/.test(alias)) return "漫改";
-    if (/^(?:轻小说改|輕小說改|ライトノベル改)$/.test(alias)) return "轻小说改";
-    if (/^(?:游戏改|遊戲改|ゲーム改)$/.test(alias)) return "游戏改";
-    if (/^治[愈癒]$/.test(alias)) return "治愈";
-    if (/^校[园園]$/.test(alias)) return "校园";
-    if (/^原[创創]$/.test(alias)) return "原创";
-    if (/^愛情$/.test(alias)) return "爱情";
-    return alias;
-  }
-
-  function subjectCreativeAliases(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const aliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
-    const creativeValues = subject.infobox
-      .filter((entry) => /(?:导演|導演|監督|监修|監修|制作|製作|原作|作者|脚本|劇本|剧本|构成|構成|编剧|編劇|演出|分镜|分鏡|作画|作畫|设计|設計|音响|音響|音乐|音樂|音楽|摄影|攝影|剪辑|剪輯|企画|制片|配給|原画|原畫|美术|美術|色彩|主题歌|主題歌|op|ed|声优|聲優|配音)/i.test(normalizeText(entry?.key || entry?.k || "")))
-      .map((entry) => creditAlias(infoboxValueText(entry?.value ?? entry?.v ?? "")))
-      .filter(Boolean);
-    for (const tag of subject.tags) {
-      const alias = creditAlias(tag);
-      if (alias.length >= 2 && creativeValues.some((value) => value.includes(alias))) aliases.add(alias);
-    }
-    for (const person of subject.persons) {
-      for (const name of [person?.name, person?.name_cn, person?.nameCn]) {
-        const alias = creditAlias(name);
-        if (alias) aliases.add(alias);
-      }
-    }
-    for (const character of subject.characters) {
-      const actors = Array.isArray(character?.actors)
-        ? character.actors
-        : character?.actor
-          ? [character.actor]
-          : [];
-      for (const actor of actors) {
-        for (const name of [actor?.name, actor?.name_cn, actor?.nameCn]) {
-          const alias = creditAlias(name);
-          if (alias) aliases.add(alias);
-        }
-      }
-    }
-    return aliases;
-  }
-
-  function withoutCreativeContributors(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const aliases = subjectCreativeAliases(subject);
-    return {
-      ...subject,
-      tags: subject.tags.filter((tag) => !aliases.has(creditAlias(tag))),
-      metaTags: subject.metaTags.filter((tag) => !aliases.has(creditAlias(tag))),
-      persons: [],
-      characters: [],
-    };
-  }
-
-  function seriesFamilyKey(subjectInput) {
-    const subject = normalizeSubject(subjectInput);
-    const title = creditAlias(subject.nameCn || subject.name);
-    const embedded = subject.tags
-      .map(creditAlias)
-      .filter((tag) => tag.length >= 3 && title.includes(tag) && !GENERIC_TAGS.has(tag) && !CONTENT_TAG_PATTERN.test(tag))
-      .sort((left, right) => left.length - right.length)[0];
-    if (embedded) return `tag:${embedded}`;
-    const stripped = title
-      .replace(/(?:第?[0-9一二三四五六七八九十]+(?:期|季|部|章)|season[0-9]+|[0-9]+(?:st|nd|rd|th)?season|part[0-9]+)$/i, "")
-      .replace(/(?:续篇|續篇|続編|续|續|2nd|second)$/i, "");
-    return `title:${stripped || title || subject.id}`;
-  }
-
-  function addGroupedFeature(groups, role, id, label) {
-    if (!id || !ROLE_WEIGHTS[role]) return;
-    if (!groups.has(role)) groups.set(role, new Map());
-    groups.get(role).set(`${role}:${id}`, String(label || id));
-  }
-
-  function buildFeatureVector(subjectInput, collectionTags = []) {
-    const subject = normalizeSubject(subjectInput);
-    const groups = new Map();
-    const labels = {};
-    const creativeAliases = subjectCreativeAliases(subject);
-
-    const tagValues = [...new Set([...normalizeTagList(collectionTags), ...subject.tags])]
-      .filter((tag) => !TEMPORAL_TAG.test(tag))
-      .filter((tag) => !GENERIC_TAGS.has(tag))
-      .filter((tag) => !creativeAliases.has(creditAlias(tag)))
-      .slice(0, 18);
-    for (const tag of tagValues) addGroupedFeature(groups, "tag", canonicalTagAlias(tag), tag);
-
-    for (const tag of subject.metaTags.slice(0, 8)) {
-      if (!TEMPORAL_TAG.test(tag) && !GENERIC_TAGS.has(tag) && !creativeAliases.has(creditAlias(tag))) {
-        addGroupedFeature(groups, "meta", canonicalTagAlias(tag), tag);
-      }
-    }
-
-    const year = Number.parseInt(subject.date.slice(0, 4), 10);
-    if (Number.isFinite(year) && year >= 1900 && year <= 2100) {
-      addGroupedFeature(groups, "decade", `${Math.floor(year / 10) * 10}s`, `${Math.floor(year / 10) * 10}年代`);
-    }
-
-    const format = [...tagValues, ...subject.metaTags].find((tag) => FORMAT_TAGS.has(tag));
-    if (format) addGroupedFeature(groups, "format", format, format.toUpperCase());
-
-    for (const person of subject.persons) {
-      const role = normalizeRole(person.relation || person.type || person.career || person.jobs?.join(" "));
-      const id = Number(person.id || person.person_id || 0);
-      if (role && id) addGroupedFeature(groups, role, id, person.name || person.name_cn || id);
-    }
-
-    let actorCount = 0;
-    for (const character of subject.characters) {
-      const actors = Array.isArray(character.actors)
-        ? character.actors
-        : character.actor
-          ? [character.actor]
-          : [];
-      for (const actor of actors) {
-        if (actorCount >= 8) break;
-        const id = Number(actor.id || actor.person_id || 0);
-        if (id) {
-          addGroupedFeature(groups, "cv", id, actor.name || actor.name_cn || id);
-          actorCount += 1;
-        }
-      }
-      if (actorCount >= 8) break;
-    }
-
-    const features = {};
-    for (const [role, entries] of groups.entries()) {
-      const scale = ROLE_WEIGHTS[role] / Math.sqrt(Math.max(1, entries.size));
-      for (const [token, label] of entries.entries()) {
-        features[token] = scale;
-        labels[token] = label;
-      }
-    }
-    return { features, labels };
-  }
-
-  function similarityFromVector(vector) {
-    const features = {};
-    for (const [token, magnitude] of Object.entries(vector.features)) {
-      const role = tokenPrefix(token);
-      const label = vector.labels[token] || token.slice(token.indexOf(":") + 1);
-      if ((role === "tag" || role === "meta") && CONTENT_TAG_PATTERN.test(label)) {
-        const contentToken = `content:${canonicalTagAlias(label)}`;
-        features[contentToken] = Math.max(Number(features[contentToken] || 0), magnitude);
-      }
-    }
-    return { features, labels: vector.labels };
-  }
-
-  function buildSimilarityVector(subjectInput, collectionTags = []) {
-    return similarityFromVector(buildFeatureVector(subjectInput, collectionTags));
-  }
-
-  function calculateRatingBaseline(collections) {
-    const rated = collections.filter((item) => item.rate > 0);
-    const userMean = mean(rated.map((item) => item.rate)) || 7;
-    const paired = rated.filter((item) => item.subject.rating.score > 0);
-    const globalMean = mean(paired.map((item) => item.subject.rating.score)) || 6.8;
-    return { userMean, globalMean };
-  }
-
-  function trainProfile(collectionInputs) {
-    const collections = collectionInputs
-      .map(normalizeCollection)
-      .filter((item) => item.subjectId && item.subject.id);
-    const rated = collections.filter((item) => item.rate > 0);
-    const baseline = calculateRatingBaseline(collections);
-    const stats = new Map();
-    const anchors = [];
-    const ratedFamilies = new Set();
-
-    for (const item of rated) {
-      const vector = buildFeatureVector(item.subject, item.tags);
-      const similarityVector = buildSimilarityVector(item.subject, item.tags);
-      const familyKey = seriesFamilyKey(item.subject);
-      ratedFamilies.add(familyKey);
-      // Personal ratings are an absolute rubric: 7 is neutral, 8+ is liked,
-      // and 6- is disliked. Site score is handled separately by the quality
-      // term and must not turn a neutral 7 into positive preference evidence.
-      const residual = clamp((item.rate - 7) / 3, -1, 1);
-      if (residual !== 0) {
-        anchors.push({
-          subjectId: item.subjectId,
-          name: item.subject.nameCn || item.subject.name,
-          rate: item.rate,
-          residual,
-          features: vector.features,
-          similarityFeatures: similarityVector.features,
-          familyKey,
-        });
-      }
-
-      for (const [token, magnitude] of Object.entries(vector.features)) {
-        const current = stats.get(token) || {
-          families: new Map(),
-          label: vector.labels[token] || token,
-        };
-        const family = current.families.get(familyKey) || { count: 0, weightedResidual: 0 };
-        family.count += 1;
-        family.weightedResidual += residual * magnitude;
-        current.families.set(familyKey, family);
-        stats.set(token, current);
-      }
-    }
-
-    const featureWeights = {};
-    const featureSupport = {};
-    const featureLabels = {};
-    const ratedCount = Math.max(1, ratedFamilies.size);
-    for (const [token, stat] of stats.entries()) {
-      const role = tokenPrefix(token);
-      const support = stat.families.size;
-      const configuredMinimum = ROLE_MIN_SUPPORT[role] || 2;
-      const minimumSupport = (role === "tag" || role === "meta")
-        ? Math.min(configuredMinimum, ratedCount >= 60 ? 4 : ratedCount >= 20 ? 3 : 2)
-        : configuredMinimum;
-      if (support < minimumSupport) continue;
-      const shrinkage = ROLE_SHRINKAGE[role] || 4;
-      const weightedResidual = [...stat.families.values()]
-        .reduce((sum, family) => sum + family.weightedResidual / family.count, 0);
-      const idf = clamp(Math.log((ratedCount + 1) / (support + 1)) + 1, 1, 2.5);
-      featureWeights[token] = (weightedResidual / (shrinkage + support)) * idf;
-      featureSupport[token] = support;
-      featureLabels[token] = stat.label;
-    }
-
-    anchors.sort((a, b) => Math.abs(b.residual) - Math.abs(a.residual));
-    const topFeatures = Object.entries(featureWeights)
-      .map(([token, weight]) => ({
-        token,
-        weight,
-        support: featureSupport[token],
-        label: featureLabels[token],
-      }))
-      .sort((a, b) => b.weight - a.weight);
-
-    return {
-      version: 1,
-      createdAt: new Date().toISOString(),
-      ratedCount: rated.length,
-      collectionCount: collections.length,
-      baseline,
-      featureWeights,
-      featureSupport,
-      featureLabels,
-      topFeatures,
-      anchors: anchors.slice(0, 80),
-    };
-  }
-
-  function weightedJaccard(left = {}, right = {}) {
-    const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-    let intersection = 0;
-    let union = 0;
-    for (const key of keys) {
-      const a = Math.abs(Number(left[key] || 0));
-      const b = Math.abs(Number(right[key] || 0));
-      intersection += Math.min(a, b);
-      union += Math.max(a, b);
-    }
-    return union ? intersection / union : 0;
-  }
-
-  function bayesianScore(subject, globalMean = 6.8, minimumVotes = 300) {
-    const rating = subject.rating || {};
-    const score = Number(rating.score || 0);
-    const total = Number(rating.total || 0);
-    if (!score || !total) return globalMean;
-    return (total / (total + minimumVotes)) * score + (minimumVotes / (total + minimumVotes)) * globalMean;
-  }
-
-  function describeToken(token, labels = {}) {
-    const role = tokenPrefix(token);
-    const raw = labels[token] || token.slice(token.indexOf(":") + 1);
-    const roleLabel = {
-      tag: "标签",
-      meta: "类型",
-      director: "导演",
-      studio: "制作",
-      creator: "原作",
-      series: "构成",
-      script: "脚本",
-      music: "音乐",
-      cv: "声优",
-      decade: "年代",
-      format: "形式",
-    }[role];
-    return { role, roleLabel: roleLabel || role, label: raw };
-  }
-
-  function selectByEvidenceCoverage(entries, characterBudget, coverage = 0.78, minimumRatio = 0.38) {
-    const sorted = [...entries]
-      .filter((entry) => Number(entry.value || 0) > 0 && entry.label)
-      .sort((a, b) => b.value - a.value);
-    if (!sorted.length) return [];
-    const strongest = sorted[0].value;
-    const total = sorted.reduce((sum, entry) => sum + entry.value, 0);
-    const selected = [];
-    let selectedMass = 0;
-    let usedCharacters = 0;
-    for (const entry of sorted) {
-      const labelLength = [...String(entry.label)].length + (selected.length ? 1 : 0);
-      if (selected.length && entry.value < strongest * minimumRatio) break;
-      if (selected.length && usedCharacters + labelLength > characterBudget) break;
-      selected.push(entry);
-      selectedMass += entry.value;
-      usedCharacters += labelLength;
-      if (selectedMass / total >= coverage) break;
-    }
-    return selected;
-  }
-
-  function selectContentTags(subjectInput, positiveReasons = [], characterBudget = 24) {
-    const subject = normalizeSubject(subjectInput);
-    const creditAliases = new Set(extractInfoboxCredits(subject.infobox).map((credit) => creditAlias(credit.label)));
-    const titleAliases = new Set(
-      [subject.name, subject.nameCn]
-        .map(creditAlias)
-        .filter(Boolean),
-    );
-    for (const entry of subject.infobox) {
-      const key = normalizeText(entry?.key || entry?.k || "");
-      if (!/(?:别名|別名|中文名|英文名|原名|原題|alias|title)/i.test(key)) continue;
-      for (const alias of infoboxValueText(entry?.value ?? entry?.v ?? "").split(/[、，,\/／;；\n]/)) {
-        const normalizedAlias = creditAlias(alias);
-        if (normalizedAlias) titleAliases.add(normalizedAlias);
-      }
-    }
-    const positiveTagValues = new Map(
-      positiveReasons
-        .filter((entry) => entry.role === "tag" && Number(entry.value || 0) > 0)
-        .map((entry) => [normalizeText(entry.label), Number(entry.value)]),
-    );
-    const strongestMatch = Math.max(0, ...positiveTagValues.values());
-    const ranked = subject.tags
-      .map((label, index) => ({
-        label,
-        matched: positiveTagValues.has(normalizeText(label)),
-        score:
-          1 / (1 + index * 0.18) +
-          (strongestMatch ? 0.55 * Number(positiveTagValues.get(normalizeText(label)) || 0) / strongestMatch : 0),
-      }))
-      .filter((entry) =>
-        entry.label &&
-        !TEMPORAL_TAG.test(entry.label) &&
-        !GENERIC_TAGS.has(normalizeText(entry.label)) &&
-        !creditAliases.has(creditAlias(entry.label)) &&
-        !titleAliases.has(creditAlias(entry.label)) &&
-        [...entry.label].length <= 18,
-      )
-      .sort((a, b) => b.score - a.score);
-    const descriptive = ranked.filter((entry) => CONTENT_TAG_PATTERN.test(entry.label));
-    const displayPool = descriptive.length ? descriptive : ranked;
-    const selected = [];
-    const seenFamilies = new Set();
-    let usedCharacters = 0;
-    for (const entry of displayPool) {
-      const normalizedLabel = creditAlias(entry.label).replace(/[.!！。]+$/g, "");
-      const family = /(?:轻小说|輕小說|ライトノベル)/i.test(normalizedLabel)
-        ? "light-novel"
-        : /群像/.test(normalizedLabel)
-          ? "ensemble"
-          : normalizedLabel;
-      if (seenFamilies.has(family)) continue;
-      const cost = [...entry.label].length + (selected.length ? 1 : 0);
-      if (selected.length && usedCharacters + cost > characterBudget) continue;
-      selected.push(entry);
-      seenFamilies.add(family);
-      usedCharacters += cost;
-    }
-    return selected;
-  }
-
-  function selectRecommendationEvidence(scoredSubject, characterBudget = 108) {
-    const roleLabels = {
-      director: "导演",
-      studio: "制作",
-      creator: "原作",
-      series: "构成",
-      script: "脚本",
-      music: "音乐",
-    };
-    const creditsByAlias = new Map(
-      extractInfoboxCredits(scoredSubject?.subject?.infobox).map((credit) => [creditAlias(credit.label), credit]),
-    );
-    const genericPreferenceLabels = new Set(["tv", "日本", "动画", "動畫", "anime", "アニメ"]);
-    const reasons = [...(scoredSubject?.positiveReasons || [])]
-      .filter((entry) => Number(entry.value || 0) > 0)
-      .map((entry) => {
-        if (entry.role !== "tag" && entry.role !== "meta") return entry;
-        const credit = creditsByAlias.get(creditAlias(entry.label));
-        return credit
-          ? { ...entry, role: credit.role, roleLabel: roleLabels[credit.role] || entry.roleLabel, label: credit.label }
-          : entry;
-      })
-      .filter((entry) =>
-        (entry.role !== "tag" && entry.role !== "meta") ||
-        !genericPreferenceLabels.has(normalizeText(entry.label)),
-      )
-      .sort((a, b) => b.value - a.value);
-    const strongestReason = Number(reasons[0]?.value || 0);
-    const candidates = [];
-    const creativeRoles = new Set(["director", "studio", "creator", "series", "script", "music", "cv"]);
-    const creativeGroups = new Map();
-    for (const reason of reasons.filter((entry) => creativeRoles.has(entry.role))) {
-      if (!creativeGroups.has(reason.role)) creativeGroups.set(reason.role, []);
-      creativeGroups.get(reason.role).push(reason);
-    }
-    for (const [role, entries] of creativeGroups.entries()) {
-      if (strongestReason && entries[0].value < strongestReason * 0.5) continue;
-      const selected = selectByEvidenceCoverage(entries, 22, 0.76, 0.45);
-      if (!selected.length) continue;
-      candidates.push({
-        kind: "creative",
-        role,
-        roleLabel: selected[0].roleLabel,
-        reasons: selected,
-        strength: selected.reduce((sum, entry) => sum + entry.value, 0) / strongestReason,
-        cost: 16 + selected.reduce((sum, entry) => sum + [...entry.label].length, 0),
-      });
-    }
-
-    const personalMean = Number(scoredSubject?.personalMean || 0);
-    const positiveSimilarWorks = (scoredSubject?.similarWorks || [])
-      .filter((entry) =>
-        Number(entry.residual || 0) > 0 &&
-        Number(entry.rate || 0) > 0 &&
-        (!personalMean || Number(entry.rate) >= Math.ceil(personalMean)),
-      )
-      .sort((a, b) => b.similarity - a.similarity);
-    const strongestSimilarity = Number(positiveSimilarWorks[0]?.similarity || 0);
-    if (strongestSimilarity >= 0.065) {
-      const similarityCutoff = Math.max(0.065, strongestSimilarity * 0.72);
-      const works = [];
-      let usedCharacters = 0;
-      for (const work of positiveSimilarWorks) {
-        const workLength = [...String(work.name || "")].length + 4;
-        if (work.similarity < similarityCutoff) break;
-        if (works.length && usedCharacters + workLength > 46) break;
-        works.push(work);
-        usedCharacters += workLength;
-      }
-      if (works.length) {
-        candidates.push({
-          kind: "similarity",
-          works,
-          strength: 0.3 + strongestSimilarity / 0.2,
-          cost: 14 + usedCharacters,
-        });
-      }
-    }
-
-    if (!candidates.length) return [{ kind: "quality", strength: 1, cost: 24 }];
-
-    const selected = [];
-    let remaining = Math.max(40, Number(characterBudget) || 108);
-    for (const originalCandidate of [...candidates].sort((a, b) => b.strength - a.strength)) {
-      let candidate = originalCandidate;
-      if (candidate.kind === "similarity" && candidate.cost > remaining && candidate.works.length > 1) {
-        const works = [...candidate.works];
-        let cost = candidate.cost;
-        while (works.length > 1 && cost > remaining) {
-          const removed = works.pop();
-          cost -= [...String(removed.name || "")].length + 4;
-        }
-        candidate = { ...candidate, works, cost };
-      }
-      if (candidate.cost > remaining && selected.length) continue;
-      selected.push(candidate);
-      remaining -= candidate.cost;
-    }
-    const order = { similarity: 0, creative: 1, quality: 2 };
-    return selected.sort((a, b) => order[a.kind] - order[b.kind]);
-  }
-
-  function scoreSubject(subjectInput, profile, mode = "balanced") {
-    const subject = normalizeSubject(subjectInput);
-    const vector = buildFeatureVector(subject);
-    const similarityVector = similarityFromVector(vector);
-    const contributions = Object.entries(vector.features)
-      .map(([token, magnitude]) => ({
-        token,
-        value: magnitude * Number(profile.featureWeights[token] || 0),
-        support: Number(profile.featureSupport[token] || 0),
-        ...describeToken(token, { ...profile.featureLabels, ...vector.labels }),
-      }))
-      .filter((entry) => entry.value !== 0)
-      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-
-    const featureMass = Object.values(vector.features).reduce((sum, value) => sum + Math.abs(value), 0);
-    const contentRaw = contributions.reduce((sum, entry) => sum + entry.value, 0) /
-      Math.sqrt(Math.max(1, featureMass));
-    const content = Math.tanh(contentRaw * 2.2);
-
-    const seenFamilies = new Set();
-    const neighborCandidates = profile.anchors
-      .map((anchor) => {
-        const anchorFeatures = anchor.similarityFeatures || anchor.features;
-        const sharedContentCount = Object.keys(similarityVector.features)
-          .filter((token) => Number(anchorFeatures[token] || 0) > 0)
-          .length;
-        return {
-          anchor,
-          sharedContentCount,
-          similarity: sharedContentCount >= 2
-            ? weightedJaccard(similarityVector.features, anchorFeatures)
-            : 0,
-        };
-      })
-      .filter((entry) => entry.similarity >= 0.04)
-      .sort((a, b) => b.similarity - a.similarity)
-      .filter((entry) => {
-        const familyKey = entry.anchor.familyKey || `subject:${entry.anchor.subjectId}`;
-        if (seenFamilies.has(familyKey)) return false;
-        seenFamilies.add(familyKey);
-        return true;
-      })
-      .slice(0, 6);
-    const similarityMass = neighborCandidates.reduce((sum, entry) => sum + entry.similarity, 0);
-    const rawNeighbor = similarityMass
-      ? neighborCandidates.reduce(
-          (sum, entry) => sum + entry.similarity * entry.anchor.residual,
-          0,
-        ) / similarityMass
-      : 0;
-    const neighborReliability = similarityMass
-      ? (similarityMass / (similarityMass + 0.75)) * Math.min(1, neighborCandidates.length / 3)
-      : 0;
-    const neighbor = rawNeighbor * neighborReliability;
-
-    const bayes = bayesianScore(subject, profile.baseline.globalMean);
-    const quality = clamp((bayes - 6.5) / 2.5, -1, 1);
-    // Nearest titles remain available as human-readable evidence, but no
-    // longer affect ranking. The global profile already aggregates the full
-    // collection and proved more robust than a second, six-title correction.
-    const weights = { content: 0.8, neighbor: 0, quality: 0.2 };
-    const normalizedScore =
-      weights.content * content + weights.neighbor * neighbor + weights.quality * quality;
-    const predicted = clamp(profile.baseline.userMean + normalizedScore * 2.1, 1, 10);
-
-    const positiveReasons = contributions.filter((entry) => entry.value > 0);
-    const negativeReasons = contributions.filter((entry) => entry.value < 0).slice(0, 1);
-    const similarWorks = neighborCandidates.map((entry) => ({
-      subjectId: entry.anchor.subjectId,
-      name: entry.anchor.name,
-      rate: entry.anchor.rate,
-      residual: entry.anchor.residual,
-      similarity: entry.similarity,
-    }));
-    const nearest = similarWorks[0] || null;
-    const confidenceReasons = positiveReasons.slice(0, 3);
-    const reasonSupport = confidenceReasons.length
-      ? mean(confidenceReasons.map((entry) => entry.support))
-      : 0;
-    const confidenceBreakdown = {
-      featureSupport: clamp(reasonSupport / 12, 0, 0.5),
-      neighborEvidence: clamp((nearest?.similarity || 0) / 0.6, 0, 0.3),
-      ratingEvidence: clamp(Math.log10(subject.rating.total + 1) / 12, 0, 0.2),
-    };
-    const confidenceScore = Object.values(confidenceBreakdown).reduce((sum, value) => sum + value, 0);
-    const confidence = confidenceScore >= 0.68 ? "高" : confidenceScore >= 0.4 ? "中" : "探索";
-
-    return {
-      subject,
-      personalMean: profile.baseline.userMean,
       predicted,
-      normalizedScore,
-      bayesianScore: bayes,
-      contentScore: content,
-      neighborScore: 0,
-      rawNeighborScore: rawNeighbor,
-      neighborReliability,
-      qualityScore: quality,
-      positiveReasons,
-      negativeReasons,
-      similarWorks,
-      nearest,
-      confidence,
-      confidenceScore,
-      confidenceBreakdown,
-      features: vector.features,
-      similarityFeatures: similarityVector.features,
-      diversityFeatures: similarityVector.features,
+      reasons: Array.isArray(row.reasons) ? row.reasons.map(String).filter(Boolean).slice(0, 3) : [],
+      collaborativeLift: Number(row.collaborativeLift) || 0,
     };
   }
 
-  function blendSupplementalScore(baseScore, supplementalScore, supplementalWeight = 0.2) {
-    const weight = clamp(supplementalWeight, 0, 1);
-    const baseWeight = 1 - weight;
-    const blend = (key) =>
-      baseWeight * Number(baseScore?.[key] || 0) + weight * Number(supplementalScore?.[key] || 0);
-    const normalizedScore = blend("normalizedScore");
-    const personalMean = Number(baseScore?.personalMean || supplementalScore?.personalMean || 7);
-    return {
-      ...supplementalScore,
-      personalMean,
-      predicted: clamp(personalMean + normalizedScore * 2.1, 1, 10),
-      normalizedScore,
-      contentScore: blend("contentScore"),
-      neighborScore: blend("neighborScore"),
-      qualityScore: blend("qualityScore"),
-      similarityFeatures: baseScore?.similarityFeatures || supplementalScore?.similarityFeatures || {},
-      diversityFeatures: baseScore?.diversityFeatures || baseScore?.similarityFeatures || baseScore?.features
-        || supplementalScore?.diversityFeatures || supplementalScore?.similarityFeatures || supplementalScore?.features || {},
-    };
-  }
-
-  function seededNoise(subjectId, salt = "") {
-    const input = `${subjectId}:${salt}`;
-    let hash = 2166136261;
-    for (let index = 0; index < input.length; index += 1) {
-      hash ^= input.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
+  function parseFeed(raw) {
+    if (raw?.schema !== SCHEMA_VERSION || raw?.owner !== OWNER ||
+        !Number.isFinite(Date.parse(raw.generatedAt)) || !Array.isArray(raw.candidates)) {
+      throw new Error("推荐数据版本不兼容，请稍后更新组件。");
     }
-    return ((hash >>> 0) % 10000) / 10000;
+    const seen = new Set();
+    const candidates = [];
+    for (const row of raw.candidates.slice(0, 2000)) {
+      const item = normalizeCandidate(row);
+      if (!item || seen.has(item.subject.id)) continue;
+      seen.add(item.subject.id);
+      candidates.push(item);
+    }
+    if (candidates.length < 5) throw new Error("推荐数据暂时不足，请稍后再试。");
+    candidates.sort((left, right) => right.predicted - left.predicted || left.subject.id - right.subject.id);
+    return {
+      generatedAt: raw.generatedAt,
+      peerCount: Math.max(0, Number(raw.peerCount) || 0),
+      neighborCount: Math.max(0, Number(raw.neighborCount) || 0),
+      ratedCount: Math.max(0, Number(raw.ratedCount) || 0),
+      model: raw.model === "joint" ? "joint" : "content",
+      candidates,
+    };
   }
 
-  function diversify(scoredInputs, count = 5, mode = "balanced", salt = "") {
-    const penalty = { stable: 0.12, balanced: 0.24, explore: 0.38 }[mode] ?? 0.24;
-    const scores = scoredInputs.map((item) => Number(item.normalizedScore || 0));
-    const highestScore = scores.length ? Math.max(...scores) : 0;
-    const lowestScore = scores.length ? Math.min(...scores) : 0;
-    const scoreRange = highestScore - lowestScore;
-    const remaining = scoredInputs.map((item) => ({
-      item,
-      maxSimilarity: 0,
-    }));
-    const selected = [];
-    while (selected.length < count && remaining.length) {
-      let bestIndex = -1;
-      let bestValue = -Infinity;
-      for (let index = 0; index < remaining.length; index += 1) {
-        const entry = remaining[index];
-        const candidate = entry.item;
-        const relevance = scoreRange > 1e-9
-          ? (Number(candidate.normalizedScore || 0) - lowestScore) / scoreRange
-          : 1;
-        const explorationJitter = mode === "explore" ? (seededNoise(candidate.subject.id, salt) - 0.5) * 0.08 : 0;
-        const adjusted =
-          relevance -
-          penalty * entry.maxSimilarity -
-          explorationJitter;
-        if (adjusted > bestValue) {
-          bestValue = adjusted;
-          bestIndex = index;
+  function unmarkedCandidates(feed, collectionRows) {
+    const marked = new Set((Array.isArray(collectionRows) ? collectionRows : [])
+      .map((row) => Number(row.subject_id || row.subjectId))
+      .filter(Number.isSafeInteger));
+    return feed.candidates.filter((row) => !marked.has(row.subject.id));
+  }
+
+  const api = { SCHEMA_VERSION, OWNER, parseFeed, unmarkedCandidates };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  globalObject.BangumiRecommendationFeed = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+
+
+globalThis.BangumiInitialRecommendationFeed = {
+  "schema": 1,
+  "owner": "wylt",
+  "generatedAt": "2026-09-28T01:17:35.106785+00:00",
+  "peerCount": 100,
+  "neighborCount": 40,
+  "ratedCount": 1326,
+  "model": "content",
+  "candidates": [
+    {
+      "subject": {
+        "id": 253,
+        "type": 2,
+        "name": "カウボーイビバップ",
+        "nameCn": "星际牛仔",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c2/4c/253_jJJj9.jpg",
+        "tags": [
+          "渡边信一郎",
+          "菅野洋子",
+          "星际牛仔",
+          "科幻",
+          "经典",
+          "sunrise",
+          "神作",
+          "神配乐",
+          "tv",
+          "1998",
+          "原创",
+          "cowboybebop"
+        ],
+        "rating": {
+          "score": 9.1,
+          "total": 19639
         }
-      }
-      const [chosen] = remaining.splice(bestIndex, 1);
-      selected.push(chosen.item);
-      const chosenFeatures = chosen.item.diversityFeatures || chosen.item.features || {};
-      for (const entry of remaining) {
-        const candidateFeatures = entry.item.diversityFeatures || entry.item.features || {};
-        entry.maxSimilarity = Math.max(
-          entry.maxSimilarity,
-          weightedJaccard(candidateFeatures, chosenFeatures),
-        );
-      }
-    }
-    return selected;
-  }
-
-  function recommendationSalt(date = new Date()) {
-    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
-  }
-
-  function collectionFingerprint(collectionInputs) {
-    const rows = collectionInputs
-      .map(normalizeCollection)
-      .map((item) =>
-        [
-          item.subjectId,
-          item.type,
-          item.rate,
-          item.tags.slice().sort().join(","),
-          item.comment,
-          item.updatedAt,
-        ].join("|"),
-      )
-      .sort();
-    let hash = 2166136261;
-    const value = rows.join("\n");
-    for (let index = 0; index < value.length; index += 1) {
-      hash ^= value.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return (hash >>> 0).toString(16).padStart(8, "0");
-  }
-
-  function influentialSubjectIds(collectionInputs, profile, positiveCount = 12, negativeCount = 8) {
-    const residuals = new Map(profile.anchors.map((anchor) => [anchor.subjectId, anchor.residual]));
-    const candidates = collectionInputs
-      .map(normalizeCollection)
-      .filter((item) => residuals.has(item.subjectId))
-      .map((item) => ({ id: item.subjectId, residual: residuals.get(item.subjectId) }));
-    const positives = candidates
-      .filter((item) => item.residual > 0)
-      .sort((a, b) => b.residual - a.residual)
-      .slice(0, positiveCount);
-    const negatives = candidates
-      .filter((item) => item.residual < 0)
-      .sort((a, b) => a.residual - b.residual)
-      .slice(0, negativeCount);
-    return [...new Set([...positives, ...negatives].map((item) => item.id))];
-  }
-
-  function topRetrievalTags(profile, count = 6) {
-    return profile.topFeatures
-      .filter((entry) => entry.weight > 0 && entry.token.startsWith("tag:"))
-      .filter((entry) => !TEMPORAL_TAG.test(entry.label))
-      .filter((entry) => !GENERIC_TAGS.has(normalizeText(entry.label)))
-      .filter((entry) => CONTENT_TAG_PATTERN.test(entry.label))
-      .slice(0, count)
-      .map((entry) => entry.label);
-  }
-
-  function candidateTagSearchQuery(subjectType, tag, pageIndex) {
-    const pageSize = 20; // Bangumi search currently caps each response at 20.
-    return {
-      path: `/v0/search/subjects?limit=${pageSize}&offset=${pageIndex * pageSize}`,
-      body: {
-        keyword: "",
-        sort: "heat",
-        filter: { type: [subjectType], tag: [tag] },
       },
-    };
-  }
-
-  const Core = Object.freeze({
-    SUBJECT_TYPES,
-    COLLECTION_STATUS,
-    ROLE_WEIGHTS,
-    ADULT_RECOMMENDATION_TAGS,
-    clamp,
-    normalizeText,
-    normalizeTagList,
-    subjectHasTag,
-    collectionHasTag,
-    candidateExclusion,
-    isAdultRecommendationCandidate,
-    normalizeInfoboxEntries,
-    normalizeSubject,
-    classifyJapaneseOrigin,
-    normalizeCollection,
-    normalizeRole,
-    normalizeInfoboxRole,
-    splitCreditNames,
-    extractInfoboxCredits,
-    subjectCreativeAliases,
-    withoutCreativeContributors,
-    seriesFamilyKey,
-    buildFeatureVector,
-    buildSimilarityVector,
-    calculateRatingBaseline,
-    trainProfile,
-    weightedJaccard,
-    bayesianScore,
-    describeToken,
-    selectContentTags,
-    selectRecommendationEvidence,
-    scoreSubject,
-    blendSupplementalScore,
-    diversify,
-    recommendationSalt,
-    collectionFingerprint,
-    influentialSubjectIds,
-    topRetrievalTags,
-    candidateTagSearchQuery,
-  });
-
-  if (typeof module !== "undefined" && module.exports) module.exports = Core;
-  globalObject.BangumiRecommenderCore = Core;
-})(typeof globalThis !== "undefined" ? globalThis : window);
-
+      "predicted": 9.524,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2907,
+        "type": 2,
+        "name": "銀河英雄伝説",
+        "nameCn": "银河英雄传说",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c7/55/2907_8xX82.jpg",
+        "tags": [
+          "银河英雄传说",
+          "田中芳树",
+          "科幻",
+          "经典",
+          "ova",
+          "小说改",
+          "1989",
+          "补旧番",
+          "银英",
+          "tv",
+          "皆杀的田中",
+          "世界观"
+        ],
+        "rating": {
+          "score": 8.8,
+          "total": 2955
+        }
+      },
+      "predicted": 9,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、sf”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 11577,
+        "type": 2,
+        "name": "THE IDOLM@STER",
+        "nameCn": "偶像大师",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a8/6a/11577_5U5G1.jpg",
+        "tags": [
+          "偶像大师",
+          "a-1pictures",
+          "偶像",
+          "tv",
+          "2011年7月",
+          "游戏改",
+          "励志",
+          "锦织敦史",
+          "2011",
+          "神前暁",
+          "骗钱大师",
+          "音乐"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 8828
+        }
+      },
+      "predicted": 8.885,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、a-1pictures”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 25961,
+        "type": 2,
+        "name": "Tom and Jerry",
+        "nameCn": "猫和老鼠（1965年电视版）",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fd/60/25961_WDKz6.jpg",
+        "tags": [
+          "童年",
+          "欧美",
+          "搞笑",
+          "童年的经典",
+          "经典",
+          "神作",
+          "tom&jerry",
+          "tv",
+          "美国",
+          "原创",
+          "爆笑",
+          "汤姆杰瑞好基友"
+        ],
+        "rating": {
+          "score": 9.1,
+          "total": 14203
+        }
+      },
+      "predicted": 8.844,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 848,
+        "type": 2,
+        "name": "ハチミツとクローバー II",
+        "nameCn": "蜂蜜与四叶草II",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/36/2e/848_RC9L8.jpg",
+        "tags": [
+          "青春",
+          "j.c.staff",
+          "蜂蜜与四叶草ii",
+          "校园",
+          "羽海野千花",
+          "治愈",
+          "tv",
+          "2006",
+          "noitamina",
+          "人生",
+          "治愈系",
+          "大学"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 4507
+        }
+      },
+      "predicted": 8.831,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1015,
+        "type": 2,
+        "name": "機動戦士ガンダム0080 ポケットの中の戦争",
+        "nameCn": "机动战士高达0080 口袋里的战争",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/29/89/1015_Z2xoh.jpg",
+        "tags": [
+          "高达",
+          "ova",
+          "sunrise",
+          "战争",
+          "0080",
+          "1989",
+          "萝卜",
+          "原创",
+          "美树本晴彦",
+          "科幻",
+          "高山文彦",
+          "是爷们就开扎古"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 6053
+        }
+      },
+      "predicted": 8.806,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1728,
+        "type": 2,
+        "name": "るろうに剣心 -明治剣客浪漫譚- 追憶編",
+        "nameCn": "浪客剑心 追忆篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/71/37/1728_HLsCr.jpg",
+        "tags": [
+          "ova",
+          "剑心",
+          "浪客剑心",
+          "追忆篇",
+          "雪代巴",
+          "1999",
+          "悲剧",
+          "十字伤",
+          "studiodeen",
+          "漫画改",
+          "古桥一浩",
+          "明治维新"
+        ],
+        "rating": {
+          "score": 8.9,
+          "total": 9697
+        }
+      },
+      "predicted": 8.804,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“恋爱、催泪”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 28205,
+        "type": 2,
+        "name": "日常 Eテレ版",
+        "nameCn": "日常 ETV版",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/19/6b/28205_AAqG1.jpg",
+        "tags": [
+          "日常",
+          "京阿尼",
+          "搞笑",
+          "2012年1月",
+          "tv",
+          "爆笑",
+          "电波",
+          "吐槽向",
+          "重制版",
+          "石原立也",
+          "2012",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 2585
+        }
+      },
+      "predicted": 8.766,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 9622,
+        "type": 2,
+        "name": "機動戦士Ζガンダム",
+        "nameCn": "机动战士Z高达",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/97/c8/9622_2P229.jpg",
+        "tags": [
+          "高达",
+          "富野由悠季",
+          "sunrise",
+          "tv",
+          "gundam",
+          "1985",
+          "原创",
+          "时代的眼泪",
+          "科幻",
+          "高达z",
+          "机战",
+          "萝卜"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 5381
+        }
+      },
+      "predicted": 8.757,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 4583,
+        "type": 2,
+        "name": "機動戦士ガンダム 逆襲のシャア",
+        "nameCn": "机动战士高达 逆袭的夏亚",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/33/80/4583_RvVeE.jpg",
+        "tags": [
+          "高达",
+          "剧场版",
+          "富野由悠季",
+          "sunrise",
+          "1988",
+          "gundam",
+          "原创",
+          "萝卜",
+          "科幻",
+          "机战",
+          "14年的基情",
+          "nt大战"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 5214
+        }
+      },
+      "predicted": 8.745,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1453,
+        "type": 2,
+        "name": "少女革命ウテナ",
+        "nameCn": "少女革命",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/53/6a/1453_iZIOZ.jpg",
+        "tags": [
+          "j.c.staff",
+          "百合",
+          "幾原邦彥",
+          "tv",
+          "少女革命",
+          "几原邦彦",
+          "原创",
+          "1997",
+          "内涵",
+          "象徵手法",
+          "神作",
+          "少女革命ウテナ"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 5756
+        }
+      },
+      "predicted": 8.743,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 64172,
+        "type": 2,
+        "name": "THE IDOLM@STER MOVIE 輝きの向こう側へ！",
+        "nameCn": "偶像大师 剧场版 向着光辉的彼岸！",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f8/45/64172_8MujB.jpg",
+        "tags": [
+          "剧场版",
+          "a-1pictures",
+          "偶像大师",
+          "偶像",
+          "2014",
+          "锦织敦史",
+          "游戏改",
+          "im@s",
+          "音乐",
+          "2014年1月",
+          "輝きの向こう側へ！",
+          "錦織敦史"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 4259
+        }
+      },
+      "predicted": 8.738,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、a-1_pictures”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 847,
+        "type": 2,
+        "name": "ハチミツとクローバー",
+        "nameCn": "蜂蜜与四叶草",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f4/55/847_xHHqh.jpg",
+        "tags": [
+          "青春",
+          "蜂蜜与四叶草",
+          "j.c.staff",
+          "校园",
+          "治愈系",
+          "羽海野千花",
+          "tv",
+          "治愈",
+          "2005",
+          "noitamina",
+          "大学",
+          "尋找自我"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 5811
+        }
+      },
+      "predicted": 8.735,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 37183,
+        "type": 2,
+        "name": "太陽の牙ダグラム",
+        "nameCn": "太阳之牙达格拉姆",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
+        "tags": [
+          "sunrise",
+          "tv",
+          "原创",
+          "1981",
+          "萝卜",
+          "高桥良辅",
+          "科幻",
+          "神田武幸",
+          "真实系",
+          "政治",
+          "高橋良輔",
+          "机战"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 293
+        }
+      },
+      "predicted": 8.734,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 860,
+        "type": 2,
+        "name": "カウボーイビバップ 天国の扉",
+        "nameCn": "星际牛仔 天国之扉",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
+        "tags": [
+          "剧场版",
+          "渡边信一郎",
+          "星际牛仔",
+          "sunrise",
+          "菅野よう子",
+          "bones",
+          "2001",
+          "原创",
+          "科幻",
+          "菅野洋子",
+          "cowboy",
+          "cowboy_bebop"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 7227
+        }
+      },
+      "predicted": 8.715,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 40003,
+        "type": 2,
+        "name": "うる星やつら2 ビューティフル・ドリーマー",
+        "nameCn": "福星小子2 绮丽梦中人",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/51/54/40003_d2Egm.jpg",
+        "tags": [
+          "押井守",
+          "剧场版",
+          "1984",
+          "studiopierrot",
+          "高桥留美子",
+          "漫画改",
+          "福星小子",
+          "漫改",
+          "奇幻",
+          "搞笑",
+          "西村纯二",
+          "电影"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 1563
+        }
+      },
+      "predicted": 8.709,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1428,
+        "type": 2,
+        "name": "鋼の錬金術師 FULLMETAL ALCHEMIST",
+        "nameCn": "钢之炼金术师 FULLMETAL ALCHEMIST",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/06/63/1428_xwkMI.jpg",
+        "tags": [
+          "钢之炼金术师",
+          "bones",
+          "骨头社",
+          "热血",
+          "漫画改",
+          "等价交换",
+          "钢炼",
+          "tv",
+          "2009年4月",
+          "2009",
+          "战斗",
+          "fa"
+        ],
+        "rating": {
+          "score": 8.8,
+          "total": 25135
+        }
+      },
+      "predicted": 8.699,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 338,
+        "type": 2,
+        "name": "フルメタル・パニック? ふもっふ",
+        "nameCn": "全金属狂潮 校园篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
+        "tags": [
+          "京阿尼",
+          "全金属狂潮",
+          "搞笑",
+          "爆笑",
+          "tv",
+          "校园",
+          "贺东招二",
+          "2003",
+          "校园篇",
+          "bon太君",
+          "轻小说改",
+          "全金属狂潮2"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6521
+        }
+      },
+      "predicted": 8.698,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、京阿尼”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 495562,
+        "type": 2,
+        "name": "デッドデッドデーモンズデデデデデストラクション",
+        "nameCn": "DDDD 恶魔的破坏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f5/85/495562_onpMR.jpg",
+        "tags": [
+          "科幻",
+          "漫画改",
+          "production+h.",
+          "末世",
+          "2024",
+          "2024年4月",
+          "日常",
+          "tv",
+          "web",
+          "漫改",
+          "日本",
+          "剧情"
+        ],
+        "rating": {
+          "score": 7.6,
+          "total": 3502
+        }
+      },
+      "predicted": 8.679,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 14878,
+        "type": 2,
+        "name": "おジャ魔女どれみドッカ～ン!",
+        "nameCn": "小魔女DoReMi 大合奏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0e/e8/14878_1hWbu.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "魔法少女",
+          "原创",
+          "五十岚卓哉",
+          "东映",
+          "童年",
+          "東映アニメーション",
+          "细田守",
+          "tvb",
+          "马越嘉彦",
+          "doremi"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 402
+        }
+      },
+      "predicted": 8.666,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 93377,
+        "type": 2,
+        "name": "Rick and Morty Season 1",
+        "nameCn": "瑞克和莫蒂 第一季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/db/e4/93377_TEzAK.jpg",
+        "tags": [
+          "科幻",
+          "美国",
+          "脑洞",
+          "欧美",
+          "搞笑",
+          "tv",
+          "原创",
+          "2013",
+          "rick_and_morty",
+          "神转折",
+          "奇诡万变",
+          "2013年12月"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 6348
+        }
+      },
+      "predicted": 8.662,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1270,
+        "type": 2,
+        "name": "ARIA The ORIGINATION",
+        "nameCn": "水星领航员 第三季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c8/50/1270_Yo7p2.jpg",
+        "tags": [
+          "治愈",
+          "aria",
+          "水星领航员",
+          "tv",
+          "治愈系神作",
+          "2008",
+          "漫画改",
+          "2008年1月",
+          "halfilmmaker",
+          "治愈系",
+          "日常",
+          "科幻"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 2954
+        }
+      },
+      "predicted": 8.657,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3553,
+        "type": 2,
+        "name": "∀ガンダム",
+        "nameCn": "∀高达",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/50/3553_FIw4I.jpg",
+        "tags": [
+          "高达",
+          "富野由悠季",
+          "sunrise",
+          "∀高达",
+          "tv",
+          "菅野洋子",
+          "1999",
+          "原创",
+          "gundam",
+          "科幻",
+          "萝卜",
+          "胡子"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 2831
+        }
+      },
+      "predicted": 8.649,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 340,
+        "type": 2,
+        "name": "蟲師",
+        "nameCn": "虫师",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/40/00/340_J14Mj.jpg",
+        "tags": [
+          "治愈",
+          "虫师",
+          "奇幻",
+          "神音乐",
+          "空灵",
+          "内涵系",
+          "tv",
+          "2005",
+          "治愈系",
+          "人生",
+          "水墨",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 11896
+        }
+      },
+      "predicted": 8.603,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1029,
+        "type": 2,
+        "name": "ef - a tale of melodies.",
+        "nameCn": "悠久之翼2",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
+        "tags": [
+          "新房昭之",
+          "大沼心",
+          "ef",
+          "shaft",
+          "gal改",
+          "催泪",
+          "tv",
+          "minori",
+          "天门",
+          "2008年10月",
+          "ef_a_tale_of_melodies.",
+          "2008"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6054
+        }
+      },
+      "predicted": 8.602,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“致郁、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 23304,
+        "type": 2,
+        "name": "伝説巨神イデオン 発動篇",
+        "nameCn": "传说巨神伊迪安 发动篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
+        "tags": [
+          "富野由悠季",
+          "剧场版",
+          "sunrise",
+          "1982",
+          "萝卜",
+          "原创",
+          "科幻",
+          "全灭",
+          "传说巨神伊迪安",
+          "机战",
+          "裸漂",
+          "日本"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 1011
+        }
+      },
+      "predicted": 8.6,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 254,
+        "type": 2,
+        "name": "サムライチャンプルー",
+        "nameCn": "混沌武士",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
+        "tags": [
+          "渡边信一郎",
+          "混沌武士",
+          "tv",
+          "manglobe",
+          "原创",
+          "2004",
+          "武士",
+          "动作",
+          "hiphop",
+          "神作",
+          "战斗",
+          "向日葵味道"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 11398
+        }
+      },
+      "predicted": 8.594,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“原创、音乐”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 207195,
+        "type": 2,
+        "name": "ゆるキャン△",
+        "nameCn": "摇曳露营△",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/18/bc/207195_2Cp3o.jpg",
+        "tags": [
+          "芳文社",
+          "治愈",
+          "百合",
+          "日常",
+          "2018年1月",
+          "漫画改",
+          "tv",
+          "摇曳露营△",
+          "c-station",
+          "露营",
+          "2018",
+          "轻百合"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 17683
+        }
+      },
+      "predicted": 8.593,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1608,
+        "type": 2,
+        "name": "スラムダンク",
+        "nameCn": "灌篮高手",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fa/af/1608_3I59P.jpg",
+        "tags": [
+          "灌篮高手",
+          "热血",
+          "教练我想打篮球",
+          "经典",
+          "slam_dunk",
+          "童年",
+          "体育",
+          "樱木花道",
+          "tv",
+          "篮球",
+          "1993",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 9433
+        }
+      },
+      "predicted": 8.579,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、jump”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 93739,
+        "type": 2,
+        "name": "ピンポン THE ANIMATION",
+        "nameCn": "乒乓",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1e/63/93739_TZ9dS.jpg",
+        "tags": [
+          "汤浅政明",
+          "乒乓",
+          "运动",
+          "漫画改",
+          "tv",
+          "2014年4月",
+          "龙之子production",
+          "松本大洋",
+          "热血",
+          "2014",
+          "漫改",
+          "noitamina"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 17644
+        }
+      },
+      "predicted": 8.579,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、noitamina”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 518519,
+        "type": 2,
+        "name": "ONE PIECE FAN LETTER",
+        "nameCn": "航海王：粉丝来信",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/be/42/518519_DMDo8.jpg",
+        "tags": [
+          "海贼王",
+          "ova",
+          "2024",
+          "番外",
+          "东映动画",
+          "短片",
+          "tv",
+          "小说改",
+          "日本",
+          "2024年10月",
+          "东映",
+          "热血"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 4304
+        }
+      },
+      "predicted": 8.56,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、催泪”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1891,
+        "type": 2,
+        "name": "少女革命ウテナ アドゥレセンス黙示録",
+        "nameCn": "少女革命 思春期默示录",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/13/16/1891_qDgl0.jpg",
+        "tags": [
+          "剧场版",
+          "j.c.staff",
+          "几原邦彦",
+          "百合",
+          "1999",
+          "原创",
+          "少女革命",
+          "幾原邦彦",
+          "榎戸洋司",
+          "少女革命ウテナ",
+          "神作",
+          "光宗信吉"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 3137
+        }
+      },
+      "predicted": 8.552,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1333,
+        "type": 2,
+        "name": "劇場版 空の境界 第五章 矛盾螺旋",
+        "nameCn": "剧场版 空之境界 第五章 矛盾螺旋",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/ff/49/1333_0Dn08.jpg",
+        "tags": [
+          "空之境界",
+          "type-moon",
+          "剧场版",
+          "ufotable",
+          "两仪式",
+          "奈须きのこ",
+          "矛盾螺旋",
+          "2008",
+          "空の境界",
+          "坂本真绫",
+          "奇幻",
+          "战斗"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 12526
+        }
+      },
+      "predicted": 8.55,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、梶浦由记”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 296659,
+        "type": 2,
+        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会",
+        "nameCn": "Love Live! 虹咲学园校园偶像同好会",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a7/35/296659_o709D.jpg",
+        "tags": [
+          "偶像",
+          "百合",
+          "sunrise",
+          "原创",
+          "lovelive",
+          "2020年10月",
+          "tv",
+          "音乐",
+          "校园",
+          "2020",
+          "扭曲",
+          "河村智之"
+        ],
+        "rating": {
+          "score": 7.5,
+          "total": 6082
+        }
+      },
+      "predicted": 8.545,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 623179,
+        "type": 2,
+        "name": "「ray 超かぐや姫！Version」MV",
+        "nameCn": "",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/6f/da/623179_ww0Wi.jpg",
+        "tags": [
+          "短片",
+          "mv",
+          "百合",
+          "原创",
+          "2026",
+          "studiocolorido",
+          "山下清悟",
+          "web",
+          "日本",
+          "studiochromato",
+          "音乐",
+          "2026年1月"
+        ],
+        "rating": {
+          "score": 7.8,
+          "total": 1143
+        }
+      },
+      "predicted": 8.529,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 262897,
+        "type": 2,
+        "name": "ゆるキャン△ SEASON 2",
+        "nameCn": "摇曳露营△ 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0f/50/262897_d3555.jpg",
+        "tags": [
+          "芳文社",
+          "日常",
+          "治愈",
+          "2021年1月",
+          "漫画改",
+          "轻百合",
+          "tv",
+          "百合",
+          "摇曳露营δ",
+          "c-station",
+          "2021",
+          "露营"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 12570
+        }
+      },
+      "predicted": 8.523,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 146457,
+        "type": 2,
+        "name": "Rick and Morty Season 3",
+        "nameCn": "瑞克和莫蒂 第三季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c0/a7/146457_G7nNG.jpg",
+        "tags": [
+          "科幻",
+          "欧美",
+          "脑洞",
+          "搞笑",
+          "美国",
+          "tv",
+          "原创",
+          "2017",
+          "2017年4月",
+          "rick",
+          "morty",
+          "猎奇"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 5416
+        }
+      },
+      "predicted": 8.502,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3324,
+        "type": 2,
+        "name": "マインド・ゲーム",
+        "nameCn": "心灵游戏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3c/e6/3324_y2yg1.jpg",
+        "tags": [
+          "汤浅政明",
+          "剧场版",
+          "studio4℃",
+          "2004",
+          "原创",
+          "湯浅政明",
+          "想像力",
+          "人生",
+          "渡辺信一郎",
+          "菅野洋子",
+          "渡边信一郎",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 2346
+        }
+      },
+      "predicted": 8.491,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 141530,
+        "type": 2,
+        "name": "Rick and Morty Season 2",
+        "nameCn": "瑞克和莫蒂 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/63/28/141530_HCCpE.jpg",
+        "tags": [
+          "科幻",
+          "美国",
+          "脑洞",
+          "欧美",
+          "tv",
+          "2015",
+          "搞笑",
+          "原创",
+          "猎奇",
+          "rick_and_morty",
+          "美国动画",
+          "adult-swim"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 5199
+        }
+      },
+      "predicted": 8.468,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 106207,
+        "type": 2,
+        "name": "蟲師 続章 第2クール",
+        "nameCn": "虫师 续章 第2部分",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/9c/c7/106207_z8288.jpg",
+        "tags": [
+          "治愈",
+          "蟲師",
+          "tv",
+          "2014年10月",
+          "漫画改",
+          "奇幻",
+          "漆原友紀",
+          "artland",
+          "2014",
+          "虫师",
+          "増田俊郎",
+          "漫改"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 4413
+        }
+      },
+      "predicted": 8.467,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3172,
+        "type": 2,
+        "name": "超時空要塞マクロス 愛・おぼえていますか",
+        "nameCn": "超时空要塞 可曾记得爱",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/5c/3172_F4mZ6.jpg",
+        "tags": [
+          "剧场版",
+          "超時空要塞",
+          "可曾记得爱",
+          "河森正治",
+          "1984",
+          "林明美",
+          "macross",
+          "原创",
+          "科幻",
+          "萝卜",
+          "美樹本晴彦",
+          "经典"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 2459
+        }
+      },
+      "predicted": 8.457,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 770,
+        "type": 2,
+        "name": "天元突破グレンラガン",
+        "nameCn": "天元突破 红莲螺岩",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/4e/a0/770_EvrMq.jpg",
+        "tags": [
+          "热血",
+          "gainax",
+          "今石洋之",
+          "燃",
+          "天元突破グレンラガン",
+          "钻头",
+          "原创",
+          "tv",
+          "萝卜",
+          "超级系",
+          "2007",
+          "神作"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 16704
+        }
+      },
+      "predicted": 8.455,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 18692,
+        "type": 2,
+        "name": "ドラえもん",
+        "nameCn": "哆啦A梦",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b4/4f/18692_Gilpl.jpg",
+        "tags": [
+          "童年",
+          "哆啦a梦",
+          "经典",
+          "藤子・f・不二雄",
+          "tv",
+          "2005",
+          "童年回憶",
+          "漫画改",
+          "没看完",
+          "沒看全",
+          "搞笑",
+          "我的童年不是喜羊羊實在太好了"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 6175
+        }
+      },
+      "predicted": 8.448,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 5694,
+        "type": 2,
+        "name": "プリンセスチュチュ",
+        "nameCn": "萩萩公主",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_MdZo5.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "原创",
+          "童话",
+          "佐藤顺一",
+          "halfilmmaker",
+          "岡崎律子",
+          "芭蕾舞",
+          "萩萩公主",
+          "少女系",
+          "古典音乐",
+          "奇幻"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 715
+        }
+      },
+      "predicted": 8.446,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 292,
+        "type": 2,
+        "name": "DARKER THAN BLACK -黒の契約者-",
+        "nameCn": "DARKER THAN BLACK -黑之契约者-",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/17/00/292_86ZrF.jpg",
+        "tags": [
+          "bones",
+          "黑之契约者",
+          "骨头社",
+          "超能力",
+          "原创",
+          "tv",
+          "2007",
+          "菅野洋子",
+          "银",
+          "黒の契約者",
+          "战斗",
+          "2007年4月"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 10024
+        }
+      },
+      "predicted": 8.443,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 4124,
+        "type": 2,
+        "name": "ハートキャッチプリキュア!",
+        "nameCn": "Heart Catch 光之美少女！",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/7d/c3/4124_pPP9r.jpg",
+        "tags": [
+          "光之美少女",
+          "tv",
+          "东映",
+          "2010",
+          "原创",
+          "抓心",
+          "東映アニメーション",
+          "水樹奈々",
+          "プリキュア",
+          "precure",
+          "百合",
+          "子供向"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 1411
+        }
+      },
+      "predicted": 8.442,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3128,
+        "type": 2,
+        "name": "デジモンアドベンチャー",
+        "nameCn": "数码宝贝大冒险",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/df/f8/3128_4QNAH.jpg",
+        "tags": [
+          "童年",
+          "数码暴龙",
+          "永远的回忆",
+          "tv",
+          "1999",
+          "热血",
+          "butterfly神曲",
+          "无限大的梦想",
+          "数码宝贝",
+          "原创",
+          "东映",
+          "butterfly"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 8587
+        }
+      },
+      "predicted": 8.44,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 243429,
+        "type": 2,
+        "name": "機動戦士ガンダム 閃光のハサウェイ",
+        "nameCn": "机动战士高达 闪光的哈萨维",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/46/243429_l49P7.jpg",
+        "tags": [
+          "剧场版",
+          "高达",
+          "sunrise",
+          "2021",
+          "富野由悠季",
+          "小说改",
+          "闪光的哈萨维",
+          "科幻",
+          "机战",
+          "萝卜",
+          "uc",
+          "村濑修功"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 5834
+        }
+      },
+      "predicted": 8.44,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3423,
+        "type": 2,
+        "name": "劇場版 空の境界 第七章 殺人考察(後)",
+        "nameCn": "剧场版 空之境界 第七章 杀人考察（后）",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3d/32/3423_ZNaov.jpg",
+        "tags": [
+          "空之境界",
+          "剧场版",
+          "type-moon",
+          "ufotable",
+          "梶浦由記",
+          "奈须きのこ",
+          "两仪式",
+          "2009",
+          "空の境界",
+          "奇幻",
+          "小说改",
+          "坂本真绫"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 9951
+        }
+      },
+      "predicted": 8.439,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“恋爱、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 100501,
+        "type": 2,
+        "name": "スペース☆ダンディ シーズン2",
+        "nameCn": "太空丹迪 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/8e/30/100501_M7o32.jpg",
+        "tags": [
+          "bones",
+          "渡边信一郎",
+          "原创",
+          "tv",
+          "科幻",
+          "2014年7月",
+          "2014",
+          "菅野洋子",
+          "搞笑",
+          "space☆dandy",
+          "夏目真悟",
+          "渡辺信一郎"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 3821
+        }
+      },
+      "predicted": 8.435,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    }
+  ]
+};
 
 (function attachBangumiPersonalStatsCore(globalObject) {
   "use strict";
@@ -1652,7 +2175,7 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.8";
+  const APP_VERSION = "0.11.0";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2226,1178 +2749,268 @@
 (function bootstrapBangumiPersonalRecommender() {
   "use strict";
 
-  const Core = globalThis.BangumiRecommenderCore;
-  if (!Core || document.getElementById("bgmpr-host")) return;
+  const Feed = globalThis.BangumiRecommendationFeed;
+  if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.10.8";
-  const DEFAULT_USER = "wylt";
-  const API_BASE = "https://api.bgm.tv";
-  const COLLECTION_TTL = 24 * 60 * 60 * 1000;
-  const CANDIDATE_TTL = 3 * 24 * 60 * 60 * 1000;
-  const ENTITY_TTL = 30 * 24 * 60 * 60 * 1000;
-  const CONFIG_KEY = "bgmpr:config:v1";
-  const RECOMMENDATION_MODEL_VERSION = "31";
-  const RECOMMENDATION_PAGE_SIZE = 5;
-  const CANDIDATE_TAG_COUNT = 12;
-  const CANDIDATE_TAG_PAGES = 2;
-  const CANDIDATE_RANK_PAGES = 10;
-
-  const RECOMMENDATION_TYPES = Object.freeze([
-    { id: "2", label: "动画", subjectType: 2 },
-    {
-      id: "anime_hentai",
-      label: "里番",
-      subjectType: 2,
-      profileTags: Core.ADULT_RECOMMENDATION_TAGS.profile,
-      directCandidateTags: Core.ADULT_RECOMMENDATION_TAGS.direct,
-      supplementalCandidateTags: Core.ADULT_RECOMMENDATION_TAGS.supplemental,
-    },
-    { id: "1", label: "书籍", subjectType: 1 },
-    { id: "4", label: "游戏", subjectType: 4 },
-    { id: "3", label: "音乐", subjectType: 3 },
-    { id: "6", label: "三次元", subjectType: 6 },
-  ]);
-  const RECOMMENDATION_MODE = "balanced";
-
-  function recommendationType(value) {
-    return RECOMMENDATION_TYPES.find((entry) => entry.id === String(value)) || RECOMMENDATION_TYPES[0];
-  }
-
-  const ICONS = Object.freeze({
-    spark: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.45 5.05L18.5 8.5l-5.05 1.45L12 15l-1.45-5.05L5.5 8.5l5.05-1.45L12 2Zm6 11 .9 3.1L22 17l-3.1.9L18 21l-.9-3.1L14 17l3.1-.9L18 13Z"/></svg>`,
-    discover: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.25"/><path d="m15.55 8.45-2.18 4.92-4.92 2.18 2.18-4.92 4.92-2.18Z"/><circle cx="12" cy="12" r="1.15"/></svg>`,
-    launchArrow: `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 4.75 5.25 5.25-5.25 5.25"/></svg>`,
-    layers: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 8 4-8 4-8-4 8-4Z"/><path d="m4 12 8 4 8-4M4 16.5l8 4 8-4"/></svg>`,
-    close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>`,
-    refresh: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.75 10h-2.1A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h8V3l-3.35 3.35Z"/></svg>`,
-    arrow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 5-1.4 1.4 4.6 4.6H5v2h11.2l-4.6 4.6L13 19l7-7-7-7Z"/></svg>`,
-    hide: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.7 5.1 10 5.5l.9 1.5-.9 1.5c-.15.2-1.3 1.65-3.2 3L17.35 15A12.7 12.7 0 0 0 20 12c-1.18-1.55-4.28-5-8-5-.76 0-1.48.14-2.16.37L8.27 5.8A9.8 9.8 0 0 1 12 5Zm-8.7-.7 16.4 16.4-1.4 1.4-3.08-3.08A9.8 9.8 0 0 1 12 19c-5.5 0-9.7-5.1-10-5.5L1.1 12l.9-1.5a17.1 17.1 0 0 1 3.1-3.43L1.9 3.7l1.4-1.4ZM6.5 8.5A13.4 13.4 0 0 0 4 12c1.18 1.55 4.28 5 8 5 .56 0 1.1-.08 1.61-.22l-1.7-1.7A3.1 3.1 0 0 1 8.9 12l-2.4-3.5Zm4.35 1.03A3 3 0 0 1 14.47 13l-3.62-3.47Z"/></svg>`,
-    info: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 10h2v7h-2v-7Zm0-3h2v2h-2V7Zm1-5a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z"/></svg>`,
-    chevron: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.4 8.6 4.6 4.6 4.6-4.6L18 10l-6 6-6-6 1.4-1.4Z"/></svg>`,
-    pagePrevious: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.6 6-6 6 6 6 1.4-1.4-4.6-4.6 4.6-4.6L14.6 6Z"/></svg>`,
-    pageNext: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.4 18 6-6-6-6L8 7.4l4.6 4.6L8 16.6 9.4 18Z"/></svg>`,
-  });
+  const APP_VERSION = "0.11.0";
+  const OWNER = Feed.OWNER;
+  const PAGE_SIZE = 5;
+  const CACHE_TTL = 6 * 60 * 60 * 1000;
+  const FEED_URL = "https://raw.githubusercontent.com/wylt-bupt/bangumi-personal-recommender/main/public/recommendations.json";
 
   function escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   }
 
-  function safeImageUrl(value) {
+  function imageUrl(value) {
     try {
-      const url = new URL(String(value || ""), location.origin);
+      const url = new URL(value, location.origin);
       return ["http:", "https:"].includes(url.protocol) ? url.href : "";
-    } catch {
-      return "";
-    }
+    } catch { return ""; }
   }
 
-  function sleep(milliseconds) {
-    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+  function cached(key) {
+    try { return JSON.parse(localStorage.getItem(`bgmpr:v2:${key}`) || "null"); }
+    catch { return null; }
   }
 
-  function loadJson(key, fallback) {
+  function cache(key, value) {
+    try { localStorage.setItem(`bgmpr:v2:${key}`, JSON.stringify({ storedAt: Date.now(), value })); }
+    catch { /* Storage may be unavailable in private mode. */ }
+  }
+
+  async function requestJson(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 18000);
     try {
-      const parsed = JSON.parse(localStorage.getItem(key) || "null");
-      return parsed ?? fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
-  function saveJson(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
-  }
-
-  function concurrentMap(values, limit, mapper) {
-    const results = new Array(values.length);
-    let cursor = 0;
-    async function worker() {
-      while (cursor < values.length) {
-        const index = cursor;
-        cursor += 1;
-        results[index] = await mapper(values[index], index);
-      }
-    }
-    return Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker)).then(() => results);
-  }
-
-  class KeyValueStore {
-    constructor() {
-      this.databasePromise = null;
-    }
-
-    open() {
-      if (this.databasePromise) return this.databasePromise;
-      this.databasePromise = new Promise((resolve, reject) => {
-        const request = indexedDB.open("bgmpr", 1);
-        request.onupgradeneeded = () => {
-          if (!request.result.objectStoreNames.contains("kv")) request.result.createObjectStore("kv");
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      return this.databasePromise;
-    }
-
-    async get(key) {
-      const database = await this.open();
-      return new Promise((resolve, reject) => {
-        const request = database.transaction("kv", "readonly").objectStore("kv").get(key);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    }
-
-    async set(key, value) {
-      const database = await this.open();
-      return new Promise((resolve, reject) => {
-        const transaction = database.transaction("kv", "readwrite");
-        transaction.objectStore("kv").put(value, key);
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-      });
-    }
-
-    async deletePrefix(prefix) {
-      const database = await this.open();
-      return new Promise((resolve, reject) => {
-        const transaction = database.transaction("kv", "readwrite");
-        const store = transaction.objectStore("kv");
-        const request = store.openCursor();
-        request.onsuccess = () => {
-          const cursor = request.result;
-          if (!cursor) return;
-          if (String(cursor.key).startsWith(prefix)) cursor.delete();
-          cursor.continue();
-        };
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-      });
-    }
-  }
-
-  class BangumiDataClient {
-    constructor(store, username, onProgress) {
-      this.store = store;
-      this.username = username;
-      this.onProgress = onProgress;
-      this.apiAvailable = true;
-      this.apiFailures = 0;
-      this.apiRetryAfter = 0;
-    }
-
-    progress(message, current = 0, total = 0) {
-      this.onProgress?.(message, current, total);
-    }
-
-    async cached(key, ttl, loader, force = false) {
-      if (!force) {
-        const cached = await this.store.get(key);
-        if (cached && Date.now() - cached.storedAt < ttl) return cached.value;
-      }
-      const value = await loader();
-      await this.store.set(key, { storedAt: Date.now(), value });
-      return value;
-    }
-
-    async request(url, options = {}, retries = 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 16000);
-      try {
-        const response = await fetch(url, {
-          ...options,
-          signal: controller.signal,
-          credentials: url.startsWith(location.origin) ? "same-origin" : "omit",
-          headers: {
-            Accept: "application/json",
-            ...(options.body ? { "Content-Type": "application/json" } : {}),
-            ...(options.headers || {}),
-          },
-        });
-        if (!response.ok) {
-          if (retries && (response.status === 429 || response.status >= 500)) {
-            await sleep(650);
-            return this.request(url, options, retries - 1);
-          }
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return response;
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
-
-    async requestJson(path, options = {}) {
-      // Network blips no longer condemn the API for the whole session: only
-      // consecutive transport failures trip the breaker, and it retries after
-      // a five-minute cooldown instead of staying off until reload.
-      if (!this.apiAvailable && Date.now() < this.apiRetryAfter) throw new Error("API unavailable");
-      try {
-        const response = await this.request(`${API_BASE}${path}`, options);
-        const data = await response.json();
-        this.apiFailures = 0;
-        this.apiAvailable = true;
-        return data;
-      } catch (error) {
-        if (error?.name === "TypeError" || error?.name === "AbortError" || /blocked|failed|network/i.test(error?.message || "")) {
-          this.apiFailures += 1;
-          if (this.apiFailures >= 2) {
-            this.apiAvailable = false;
-            this.apiRetryAfter = Date.now() + 5 * 60 * 1000;
-          }
-        }
-        throw error;
-      }
-    }
-
-    async getCollections(subjectType, force = false) {
-      const key = `collections:${this.username}:${subjectType}`;
-      return this.cached(
-        key,
-        COLLECTION_TTL,
-        async () => {
-          try {
-            this.progress("正在同步收藏数据…", 0, 1);
-            const data = [];
-            let offset = 0;
-            let total = Infinity;
-            while (offset < total) {
-              const page = await this.requestJson(
-                `/v0/users/${encodeURIComponent(this.username)}/collections?subject_type=${subjectType}&limit=100&offset=${offset}`,
-              );
-              total = Number(page.total || 0);
-              const rows = Array.isArray(page.data) ? page.data : [];
-              data.push(...rows);
-              offset += rows.length;
-              this.progress("正在同步收藏数据…", Math.min(offset, total), total);
-              if (!rows.length) break;
-            }
-            return data.map(Core.normalizeCollection);
-          } catch (error) {
-            this.progress("API 不可用，正在从站内收藏页读取…", 0, 1);
-            return this.getCollectionsFromSite(subjectType);
-          }
-        },
-        force,
-      );
-    }
-
-    async getHtmlDocument(url) {
-      const response = await this.request(url, { headers: { Accept: "text/html" } }, 0);
-      const html = await response.text();
-      return new DOMParser().parseFromString(html, "text/html");
-    }
-
-    maxPage(documentNode) {
-      return Math.max(
-        1,
-        ...[...documentNode.querySelectorAll('a[href*="page="]')].map((link) => {
-          try {
-            return Number(new URL(link.href, location.origin).searchParams.get("page")) || 1;
-          } catch {
-            return 1;
-          }
-        }),
-      );
-    }
-
-    parseListItems(documentNode, subjectType, collectionType = 0, sourceTag = "") {
-      return [...documentNode.querySelectorAll("#browserItemList > li, #browserItemList li.item")]
-        .map((item) => {
-          const link = item.querySelector('h3 a[href*="/subject/"]');
-          const match = link?.getAttribute("href")?.match(/\/subject\/(\d+)/);
-          if (!match) return null;
-          const id = Number(match[1]);
-          const text = item.innerText || item.textContent || "";
-          const tagMatch = text.match(/标签[:：]\s*([^\n]+)/);
-          const tags = tagMatch ? tagMatch[1].split(/\s+/).filter(Boolean) : [];
-          if (sourceTag) tags.push(sourceTag);
-          const personalStars = item.querySelector(".starlight")?.className?.match(/stars(\d+)/);
-          const scoreText = item.querySelector(".rateInfo .fade, .rateInfo .number")?.textContent || "";
-          const totalText = item.querySelector(".rateInfo .tip_j")?.textContent || "";
-          const image = item.querySelector("img")?.getAttribute("src") || "";
-          const info = item.querySelector(".info")?.textContent || "";
-          const date = info.match(/(?:19|20)\d{2}[-年]\d{1,2}(?:[-月]\d{1,2})?/)?.[0] || "";
-          return Core.normalizeCollection({
-            subject_id: id,
-            type: collectionType,
-            rate: personalStars ? Number(personalStars[1]) : 0,
-            tags,
-            subject: {
-              id,
-              type: subjectType,
-              name: link.textContent?.trim() || "",
-              name_cn: link.textContent?.trim() || "",
-              date,
-              images: { common: image },
-              tags: tags.map((name) => ({ name })),
-              rating: {
-                score: Number.parseFloat(scoreText) || 0,
-                total: Number((totalText.match(/[\d,]+/)?.[0] || "0").replaceAll(",", "")),
-              },
-              sourceUrl: `${location.origin}/subject/${id}`,
-            },
-          });
-        })
-        .filter(Boolean);
-    }
-
-    async getCollectionsFromSite(subjectType) {
-      const type = Core.SUBJECT_TYPES[subjectType];
-      if (!type) throw new Error("不支持的条目类型");
-      const statuses = [
-        ["wish", 1],
-        ["collect", 2],
-        ["do", 3],
-        ["on_hold", 4],
-        ["dropped", 5],
-      ];
-      const collections = [];
-      let completedPages = 0;
-      for (const [status, collectionType] of statuses) {
-        const base = `${location.origin}/${type.slug}/list/${encodeURIComponent(this.username)}/${status}`;
-        const first = await this.getHtmlDocument(base);
-        const pages = this.maxPage(first);
-        collections.push(...this.parseListItems(first, subjectType, collectionType));
-        completedPages += 1;
-        this.progress(`正在读取${type.label}收藏页…`, completedPages, completedPages + pages - 1);
-        for (let page = 2; page <= pages; page += 1) {
-          await sleep(260);
-          const documentNode = await this.getHtmlDocument(`${base}?page=${page}`);
-          collections.push(...this.parseListItems(documentNode, subjectType, collectionType));
-          completedPages += 1;
-          this.progress(`正在读取${type.label}收藏页…`, completedPages, completedPages + pages - page);
-        }
-      }
-      return collections;
-    }
-
-    async getCandidates(subjectType, profile, force = false, options = {}) {
-      if (options.directCandidateTags?.length) {
-        return this.getSpecialCandidates(subjectType, options, force);
-      }
-      const tags = Core.topRetrievalTags(profile, CANDIDATE_TAG_COUNT);
-      const signature = tags.map(Core.normalizeText).sort().join("|");
-      const key = `candidates:v4:${subjectType}:${signature}`;
-      return this.cached(
-        key,
-        CANDIDATE_TTL,
-        async () => {
-          try {
-            const pools = [];
-            const rankOffsets = Array.from({ length: CANDIDATE_RANK_PAGES }, (_, index) => index * 100);
-            const tagQueries = tags.flatMap((tag) =>
-              Array.from({ length: CANDIDATE_TAG_PAGES }, (_, index) => ({ tag, pageIndex: index })),
-            );
-            const totalRequests = rankOffsets.length + tagQueries.length;
-            let completed = 0;
-            this.progress("正在建立候选池…", completed, totalRequests);
-            for (const offset of rankOffsets) {
-              const page = await this.requestJson(
-                `/v0/subjects?type=${subjectType}&sort=rank&limit=100&offset=${offset}`,
-              );
-              pools.push(...(page.data || []));
-              completed += 1;
-              this.progress("正在建立候选池…", completed, totalRequests);
-            }
-            const searched = await concurrentMap(tagQueries, 3, async ({ tag, pageIndex }) => {
-              const query = Core.candidateTagSearchQuery(subjectType, tag, pageIndex);
-              const page = await this.requestJson(
-                query.path,
-                {
-                  method: "POST",
-                  body: JSON.stringify(query.body),
-                },
-              );
-              completed += 1;
-              this.progress("正在按偏好召回候选…", completed, totalRequests);
-              return page.data || [];
-            });
-            pools.push(...searched.flat());
-            return this.dedupeSubjects(pools);
-          } catch (error) {
-            this.progress(
-              "API 候选不可用，正在使用站内标签页…",
-              0,
-              tags.length * CANDIDATE_TAG_PAGES + CANDIDATE_RANK_PAGES,
-            );
-            return this.getCandidatesFromSite(subjectType, tags);
-          }
-        },
-        force,
-      );
-    }
-
-    async getSpecialCandidates(subjectType, options, force = false) {
-      const directTags = [...options.directCandidateTags];
-      const supplementalTags = [...(options.supplementalCandidateTags || [])];
-      const allTags = [...new Set([...directTags, ...supplementalTags].map(Core.normalizeText))];
-      const key = `candidates:special:v5:${options.id || subjectType}:${allTags.sort().join("|")}`;
-      return this.cached(
-        key,
-        CANDIDATE_TTL,
-        async () => {
-          const pools = [];
-          for (const tag of allTags) {
-            try {
-              pools.push(...await this.getTaggedCandidatesFromApi(subjectType, tag));
-            } catch {
-              this.progress(`“${tag}”API 索引不可用，继续读取站内标签池…`, 0, 0);
-            }
-          }
-          for (const tag of directTags) {
-            try {
-              pools.push(...await this.getTaggedCandidatesFromSite(subjectType, tag));
-            } catch {
-              this.progress(`“${tag}”站内标签页不可用，保留其余候选来源…`, 0, 0);
-            }
-          }
-          const candidates = this.dedupeSubjects(pools, true)
-            .filter((subject) => Core.isAdultRecommendationCandidate(subject, true));
-          if (!candidates.length) throw new Error("没有读取到可确认的里番候选条目。");
-          return candidates;
-        },
-        force,
-      );
-    }
-
-    async getTaggedCandidatesFromApi(subjectType, tag) {
-      const fetchPage = (offset) => this.requestJson(
-        `/v0/search/subjects?limit=20&offset=${offset}`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            keyword: "",
-            sort: "heat",
-            filter: { type: [subjectType], tag: [tag] },
-          }),
-        },
-      );
-      this.progress(`正在补充“${tag}”API 候选…`, 0, 1);
-      const first = await fetchPage(0);
-      const withVerifiedEvidence = (rows) => (Array.isArray(rows) ? rows : []).map((row) => {
-        const subject = Core.normalizeSubject(row);
-        const adultTagCount = Math.max(
-          0,
-          ...Core.ADULT_RECOMMENDATION_TAGS.profile.map(
-            (adultTag) => Number(subject.tagCounts[Core.normalizeText(adultTag)] || 0),
-          ),
-        );
-        return {
-          ...row,
-          adultVerificationPriority:
-            (Core.isAdultRecommendationCandidate(subject) ? 10000 : 0) + adultTagCount,
-        };
-      });
-      const firstRows = withVerifiedEvidence(first.data);
-      const pageSize = Math.max(1, firstRows.length || 20);
-      const total = Math.max(firstRows.length, Number(first.total || 0));
-      const offsets = Array.from(
-        { length: Math.max(0, Math.ceil(total / pageSize) - 1) },
-        (_, index) => (index + 1) * pageSize,
-      );
-      let completed = 1;
-      const totalRequests = offsets.length + 1;
-      this.progress(`正在补充“${tag}”API 候选…`, completed, totalRequests);
-      const remaining = await concurrentMap(offsets, 3, async (offset) => {
-        const page = await fetchPage(offset);
-        completed += 1;
-        this.progress(`正在补充“${tag}”API 候选…`, completed, totalRequests);
-        return withVerifiedEvidence(page.data);
-      });
-      return this.dedupeSubjects([...firstRows, ...remaining.flat()]);
-    }
-
-    dedupeSubjects(subjects, mergeTags = false) {
-      const map = new Map();
-      for (const raw of subjects) {
-        const subject = Core.normalizeSubject(raw);
-        if (!subject.id) continue;
-        const previous = map.get(subject.id) || {};
-        map.set(subject.id, mergeTags
-          ? {
-              ...previous,
-              ...subject,
-              name: subject.name || previous.name || "",
-              nameCn: subject.nameCn || previous.nameCn || "",
-              date: subject.date || previous.date || "",
-              image: subject.image || previous.image || "",
-              tags: [...new Set([...(previous.tags || []), ...subject.tags])],
-              metaTags: [...new Set([...(previous.metaTags || []), ...subject.metaTags])],
-              rating: Number(subject.rating?.total || 0) >= Number(previous.rating?.total || 0)
-                ? subject.rating
-                : previous.rating,
-              rank: subject.rank || previous.rank || 0,
-              infobox: subject.infobox?.length ? subject.infobox : (previous.infobox || []),
-              summary: subject.summary || previous.summary || "",
-              persons: subject.persons?.length ? subject.persons : (previous.persons || []),
-              characters: subject.characters?.length ? subject.characters : (previous.characters || []),
-              relation: subject.relation || previous.relation || "",
-              sourceUrl: subject.sourceUrl || previous.sourceUrl || "",
-              adultEvidenceVerified: Boolean(
-                previous.adultEvidenceVerified || subject.adultEvidenceVerified,
-              ),
-              adultVerificationPriority: Math.max(
-                Number(previous.adultVerificationPriority || 0),
-                Number(subject.adultVerificationPriority || 0),
-              ),
-            }
-          : { ...previous, ...subject });
-      }
-      return [...map.values()];
-    }
-
-    async getCandidatesFromSite(subjectType, tags) {
-      const type = Core.SUBJECT_TYPES[subjectType];
-      const pools = [];
-      let done = 0;
-      const totalRequests = tags.length * CANDIDATE_TAG_PAGES + CANDIDATE_RANK_PAGES;
-      for (const tag of tags.slice(0, CANDIDATE_TAG_COUNT)) {
-        for (let page = 1; page <= CANDIDATE_TAG_PAGES; page += 1) {
-          const url = `${location.origin}/${type.slug}/tag/${encodeURIComponent(tag)}?sort=collects&page=${page}`;
-          const documentNode = await this.getHtmlDocument(url);
-          pools.push(...this.parseListItems(documentNode, subjectType, 0, tag).map((item) => item.subject));
-          done += 1;
-          this.progress("正在按偏好读取候选…", done, totalRequests);
-          await sleep(220);
-        }
-      }
-      for (let page = 1; page <= CANDIDATE_RANK_PAGES; page += 1) {
-        const url = `${location.origin}/${type.slug}/browser?sort=rank&page=${page}`;
-        const documentNode = await this.getHtmlDocument(url);
-        pools.push(...this.parseListItems(documentNode, subjectType, 0).map((item) => item.subject));
-        done += 1;
-        this.progress("正在补充高质量候选…", done, totalRequests);
-        await sleep(220);
-      }
-      return this.dedupeSubjects(pools);
-    }
-
-    async getTaggedCandidatesFromSite(subjectType, tag) {
-      const type = Core.SUBJECT_TYPES[subjectType];
-      if (!type) throw new Error("不支持的条目类型");
-      const base = `${location.origin}/${type.slug}/tag/${encodeURIComponent(tag)}?sort=collects`;
-      const first = await this.getHtmlDocument(`${base}&page=1`);
-      const pages = this.maxPage(first);
-      const pools = this.parseListItems(first, subjectType, 0, tag).map((item) => item.subject);
-      this.progress(`正在读取“${tag}”完整标签页…`, 1, pages);
-      for (let page = 2; page <= pages; page += 1) {
-        await sleep(220);
-        const documentNode = await this.getHtmlDocument(`${base}&page=${page}`);
-        pools.push(...this.parseListItems(documentNode, subjectType, 0, tag).map((item) => item.subject));
-        this.progress(`正在读取“${tag}”完整标签页…`, page, pages);
-      }
-      return this.dedupeSubjects(pools).filter((subject) => Core.subjectHasTag(subject, tag));
-    }
-
-    async getPersons(subjectId) {
-      if (!this.apiAvailable) return [];
-      return this.cached(
-        `persons:${subjectId}`,
-        ENTITY_TTL,
-        () => this.requestJson(`/v0/subjects/${subjectId}/persons`).catch(() => []),
-      );
-    }
-
-    async getCharacters(subjectId) {
-      if (!this.apiAvailable) return [];
-      return this.cached(
-        `characters:${subjectId}`,
-        ENTITY_TTL,
-        () => this.requestJson(`/v0/subjects/${subjectId}/characters`).catch(() => []),
-      );
-    }
-
-    async getSubjectDetails(subjectId) {
-      if (!this.apiAvailable) return null;
-      try {
-        return await this.cached(
-          `subject-details:v2:${subjectId}`,
-          ENTITY_TTL,
-          () => this.requestJson(`/v0/subjects/${subjectId}`),
-        );
-      } catch {
-        return null;
-      }
-    }
-
-    async enrichOriginMetadata(subjects, subjectIds, limit = 180) {
-      if (!this.apiAvailable || !subjectIds.length) return new Map();
-      const uniqueIds = [...new Set(subjectIds)].slice(0, limit);
-      const subjectsById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
-      let completed = 0;
-      const rows = await concurrentMap(uniqueIds, 4, async (subjectId) => {
-        const details = await this.getSubjectDetails(subjectId);
-        completed += 1;
-        this.progress("正在确认候选作品来源…", completed, uniqueIds.length);
-        const base = subjectsById.get(Number(subjectId));
-        return base
-          ? [subjectId, {
-              ...Core.normalizeSubject(details || base),
-              adultEvidenceVerified: Boolean(details),
-            }]
-          : null;
-      });
-      return new Map(rows.filter(Boolean));
-    }
-
-    async enrichSubjects(subjects, subjectIds) {
-      if (!this.apiAvailable || !subjectIds.length) return new Map();
-      const uniqueIds = [...new Set(subjectIds)].slice(0, 36);
-      const subjectsById = new Map(subjects.map((subject) => [Number(subject.id), subject]));
-      let completed = 0;
-      const rows = await concurrentMap(uniqueIds, 3, async (subjectId) => {
-        const [persons, characters] = await Promise.all([
-          this.getPersons(subjectId),
-          this.getCharacters(subjectId),
-        ]);
-        completed += 1;
-        this.progress("正在补充导演、制作与声优信息…", completed, uniqueIds.length);
-        const base = subjectsById.get(Number(subjectId));
-        return base ? [subjectId, { ...base, persons, characters }] : null;
-      });
-      return new Map(rows.filter(Boolean));
-    }
+      const response = await fetch(url, { signal: controller.signal, cache: "no-cache", credentials: "omit" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    } finally { clearTimeout(timer); }
   }
 
   class RecommenderApp {
     constructor() {
-      this.store = new KeyValueStore();
-      this.config = {
-        username: DEFAULT_USER,
-        subjectType: "2",
-        ...loadJson(CONFIG_KEY, {}),
-      };
-      delete this.config.mode;
-      this.client = new BangumiDataClient(
-        this.store,
-        this.config.username,
-        (message, current, total) => this.setProgress(message, current, total),
-      );
       this.state = {
-        open: false,
-        busy: false,
-        baseProfile: null,
-        profile: null,
-        candidates: [],
-        scoredPool: [],
-        pageOrder: [],
-        current: [],
-        currentPage: 1,
-        collections: [],
-        eligibleCandidateCount: 0,
-        lastSync: null,
-        currentSummary: {},
+        open: false, busy: false, pageOrder: [], current: [], currentPage: 1,
+        collections: [], feed: null, profile: null, eligibleCandidateCount: 0,
       };
-      this.lastFocused = null;
-      this.previousPageOverflow = "";
       this.excludedBatch = new Set();
-      this.pageByType = new Map();
+      this.toastTimer = null;
     }
 
     mount() {
       this.host = globalThis.BangumiProfileUI?.mount("bgmpr-host", 20);
       if (!this.host) return;
-      this.host.dataset.theme = this.detectTheme();
+      this.host.dataset.theme = globalThis.BangumiProfileUI.theme();
       this.shadow = this.host.attachShadow({ mode: "open" });
-      this.shadow.innerHTML = `${this.styles()}${this.shell()}`;
+      this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmpr-title">
+        <header class="module-head"><h2 id="bgmpr-title">个性推荐 · 动画</h2><button class="refresh-data" type="button" title="同步最新收藏与推荐数据">更新</button></header>
+        <div class="progress" role="status" hidden></div>
+        <div class="welcome"><p>根据你的评分与公开用户的共同观看轨迹，寻找还未标记的作品。</p><button class="start" type="button">看看推荐</button></div>
+        <div class="results" hidden><p class="summary"></p><div class="recommendation-list"></div><nav class="pagination" aria-label="推荐结果分页"></nav></div>
+        <div class="error" hidden><p class="error-message"></p><button class="retry" type="button">重试</button></div>
+        <div class="toast" role="status" hidden><span></span><button type="button">撤销</button></div>
+      </section>`;
       this.bindEvents();
-      this.watchTheme();
+      const updateTheme = () => { this.host.dataset.theme = globalThis.BangumiProfileUI.theme(); };
+      new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+      matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", updateTheme);
       globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
     }
 
-    detectTheme() { return globalThis.BangumiProfileUI.theme(); }
-
-    watchTheme() {
-      const update = () => {
-        this.host.dataset.theme = this.detectTheme();
-      };
-      new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
-      matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", update);
-    }
-
-    shell() {
-      const selectedType = recommendationType(this.config.subjectType);
-      const options = RECOMMENDATION_TYPES.map(type => `<option value="${type.id}" ${type.id === selectedType.id ? "selected" : ""}>${type.label}</option>`).join("");
-      return `<section class="module" aria-labelledby="bgmpr-title">
-        <header class="module-head"><h2 id="bgmpr-title">个性推荐</h2><select data-role="type-select" aria-label="推荐类型">${options}</select><button class="refresh-data" type="button" title="根据最新收藏重新推荐">更新</button></header>
-        <div class="progress-region" aria-live="polite" hidden><div class="progress-copy"><span data-role="progress-text">正在寻找你可能喜欢的作品…</span><span data-role="progress-count"></span></div><div class="progress-track" role="progressbar" aria-label="推荐加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div></div>
-        <div class="content">
-          <div class="welcome" data-role="welcome"><p>从喜欢的作品，遇见下一部。</p><button class="start" type="button">看看推荐</button></div>
-          <div class="results" data-role="results" hidden></div>
-          <div class="error" data-role="error" hidden><p data-role="error-message"></p><button class="retry" type="button">重试</button></div>
-        </div>
-        <div class="toast" role="status" hidden><span></span><button type="button">撤销</button></div>
-      </section>`;
-    }
+    $(selector) { return this.shadow.querySelector(selector); }
 
     bindEvents() {
-      this.$(".start").addEventListener("click", () => this.ensureRecommendations({ force: true }));
-      this.$(".retry").addEventListener("click", () => this.ensureRecommendations({ force: true }));
-      this.$(".refresh-data").addEventListener("click", () => this.ensureRecommendations({ force: true }));
-      this.$('[data-role="type-select"]').addEventListener("change", (event) => {
-        this.config.subjectType = event.target.value;
-        this.persistConfig();
-        this.resetViewForType();
-        this.loadCachedResult().then(loaded => { if (!loaded) this.ensureRecommendations({ force: false }); });
-      });
+      for (const selector of [".start", ".retry", ".refresh-data"]) {
+        this.$(selector).addEventListener("click", () => this.ensureRecommendations({ force: true }));
+      }
       this.shadow.addEventListener("click", (event) => {
-        const dismiss = event.composedPath().find(
-          (element) => element instanceof Element && element.matches?.("[data-dismiss-id]"),
-        );
-        if (dismiss) {
-          this.dismiss(Number(dismiss.dataset.dismissId));
-          return;
-        }
-        const pageButton = event.composedPath().find(
-          (element) => element instanceof Element && element.matches?.("[data-page-direction]"),
-        );
-        if (pageButton) this.changePage(this.state.currentPage + Number(pageButton.dataset.pageDirection), "button");
+        const target = event.target.closest?.("[data-dismiss-id], [data-page-direction], .toast button");
+        if (!target) return;
+        if (target.matches("[data-dismiss-id]")) this.dismiss(Number(target.dataset.dismissId));
+        else if (target.matches("[data-page-direction]")) this.changePage(this.state.currentPage + Number(target.dataset.pageDirection));
+        else if (target.matches(".toast button")) this.undoDismiss();
       });
       this.shadow.addEventListener("change", (event) => {
-        const pageSelect = event.composedPath().find(
-          (element) => element instanceof Element && element.matches?.("[data-page-select]"),
-        );
-        if (pageSelect) this.changePage(Number(pageSelect.value), "select");
+        if (event.target.matches?.("[data-page-select]")) this.changePage(Number(event.target.value));
       });
-      this.shadow.addEventListener(
-        "error",
-        (event) => {
-          const image = event.target.closest?.("img[data-cover]");
-          if (!image) return;
-          image.hidden = true;
-          const placeholder = image.nextElementSibling;
-          if (placeholder) placeholder.hidden = false;
-        },
-        true,
-      );
-      this.shadow.addEventListener("keydown", (event) => this.onKeyDown(event));
-    }
-
-    $(selector) {
-      return this.shadow.querySelector(selector);
-    }
-
-    persistConfig() {
-      saveJson(CONFIG_KEY, this.config);
+      this.shadow.addEventListener("error", (event) => {
+        if (!event.target.matches?.("img[data-cover]")) return;
+        event.target.hidden = true;
+        event.target.nextElementSibling.hidden = false;
+      }, true);
     }
 
     async open() {
       if (this.state.open) return;
       this.state.open = true;
-      const loaded = await this.loadCachedResult();
-      if (!loaded && !this.state.busy) this.ensureRecommendations({ force: false });
+      await this.ensureRecommendations();
     }
 
-    close() {}
-    onKeyDown() {}
-
-    resetViewForType() {
-      this.state.baseProfile = null;
-      this.state.profile = null;
-      this.state.candidates = [];
-      this.state.scoredPool = [];
-      this.state.pageOrder = [];
-      this.state.current = [];
-      this.state.currentPage = this.pageByType.get(recommendationType(this.config.subjectType).id) || 1;
-      this.excludedBatch.clear();
-      this.$('[data-role="results"]').hidden = true;
-      this.$('[data-role="error"]').hidden = true;
-      this.$('[data-role="welcome"]').hidden = false;
+    setBusy(value, message = "") {
+      this.state.busy = value;
+      for (const selector of [".start", ".retry", ".refresh-data"]) this.$(selector).disabled = value;
+      this.$(".progress").hidden = !value;
+      this.$(".progress").textContent = message;
+      this.$(".module").setAttribute("aria-busy", String(value));
     }
 
-    cacheKey() {
-      const type = recommendationType(this.config.subjectType);
-      return `result:v${RECOMMENDATION_MODEL_VERSION}:${this.config.username}:${type.id}:${RECOMMENDATION_MODE}`;
-    }
-
-    async loadCachedResult() {
-      const key = this.cacheKey();
-      const cached = await this.store.get(key).catch(() => null);
-      if (key !== this.cacheKey()) return true;
-      if (!cached?.value?.pageOrder?.length && !cached?.value?.recommendations?.length) return false;
-      const value = cached.value;
-      this.state.lastSync = value.generatedAt;
-      this.state.pageOrder = value.pageOrder || value.recommendations;
-      this.state.scoredPool = this.state.pageOrder;
-      const typeId = recommendationType(this.config.subjectType).id;
-      this.state.currentPage = this.pageByType.get(typeId) || 1;
-      this.state.currentSummary = value.summary || {};
-      this.renderFromPool();
-      this.updateSyncLabel();
-      if (Date.now() - cached.storedAt > COLLECTION_TTL) {
-        this.setProgress("本地结果已显示；点“更新”可同步最新收藏。", 0, 0);
+    async getFeed(force) {
+      const saved = cached("feed");
+      if (!force && saved && Date.now() - saved.storedAt < CACHE_TTL) {
+        this.feedSource = "cache";
+        return Feed.parseFeed(saved.value);
       }
-      return true;
-    }
-
-    setProgress(message, current = 0, total = 0) {
-      const text = this.$('[data-role="progress-text"]');
-      const count = this.$('[data-role="progress-count"]');
-      const bar = this.$(".progress-track");
-      const fill = bar.querySelector("span");
-      text.textContent = message;
-      const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-      count.textContent = total > 0 ? `${current}/${total}` : "";
-      bar.setAttribute("aria-valuenow", String(percent));
-      bar.classList.toggle("active", total > 0 && current < total);
-      fill.style.transform = `scaleX(${total > 0 ? clamp01(current / total) : 0})`;
-    }
-
-    setBusy(busy) {
-      this.state.busy = busy;
-      for (const selector of [".start", ".retry", ".refresh-data", '[data-role="type-select"]']) {
-        const control = this.$(selector);
-        if (control) control.disabled = busy;
+      try {
+        const raw = await requestJson(FEED_URL);
+        const parsed = Feed.parseFeed(raw);
+        cache("feed", raw);
+        this.feedSource = "remote";
+        return parsed;
+      } catch (error) {
+        if (saved?.value) {
+          this.feedSource = "cache";
+          return Feed.parseFeed(saved.value);
+        }
+        if (globalThis.BangumiInitialRecommendationFeed) {
+          this.feedSource = "bundle";
+          return Feed.parseFeed(globalThis.BangumiInitialRecommendationFeed);
+        }
+        throw new Error(`推荐数据读取失败：${error.message}`);
       }
-      this.shadow.querySelectorAll("[data-page-direction], [data-page-select]").forEach((control) => {
-        control.disabled = busy || control.dataset.pageBoundary === "true";
-      });
-      this.$(".refresh-data").classList.toggle("spinning", busy);
-      this.$(".progress-region").hidden = !busy;
-      this.$(".content").setAttribute("aria-busy", String(busy));
+    }
+
+    async getCollections(force) {
+      const saved = cached("collections");
+      if (!force && saved && Date.now() - saved.storedAt < CACHE_TTL) {
+        this.collectionCheckedAt = saved.storedAt;
+        return saved.value;
+      }
+      try {
+        const rows = [];
+        let total = Infinity;
+        for (let offset = 0; offset < total; offset += 50) {
+          const page = await requestJson(`https://api.bgm.tv/v0/users/${OWNER}/collections?subject_type=2&limit=50&offset=${offset}`);
+          const batch = Array.isArray(page.data) ? page.data : [];
+          total = Number(page.total);
+          if (!Number.isFinite(total)) throw new Error("收藏分页信息无效");
+          rows.push(...batch.map((row) => ({ subject_id: Number(row.subject_id), rate: Number(row.rate) || 0 })));
+          this.$(".progress").textContent = `正在核对已标记动画… ${Math.min(rows.length, total)}/${total}`;
+          if (!batch.length) break;
+          if (offset + batch.length < total) await new Promise((resolve) => setTimeout(resolve, 180));
+        }
+        if (!rows.length) throw new Error("没有读取到公开收藏");
+        cache("collections", rows);
+        this.collectionCheckedAt = Date.now();
+        return rows;
+      } catch (error) {
+        if (!force && saved?.value?.length) {
+          this.collectionCheckedAt = saved.storedAt;
+          return saved.value;
+        }
+        throw new Error(`收藏读取失败：${error.message}`);
+      }
     }
 
     async ensureRecommendations({ force = false } = {}) {
       if (this.state.busy) return;
-      if (force) {
-        const typeId = recommendationType(this.config.subjectType).id;
-        this.pageByType.set(typeId, 1);
-        this.state.currentPage = 1;
-      }
-      this.setBusy(true);
-      this.$('[data-role="welcome"]').hidden = true;
-      this.$('[data-role="error"]').hidden = true;
+      this.setBusy(true, "正在读取推荐数据…");
+      this.$(".error").hidden = true;
       try {
-        const selectedType = recommendationType(this.config.subjectType);
-        const type = selectedType.subjectType;
-        const allCollections = await this.client.getCollections(type, force);
-        const collections = selectedType.profileTags?.length
-          ? allCollections.filter((item) => selectedType.profileTags.some((tag) => Core.collectionHasTag(item, tag)))
-          : allCollections;
-        if (!collections.length) throw new Error("没有读取到该类型的收藏数据。请确认账号公开收藏或稍后重试。");
+        const [feed, collections] = await Promise.all([this.getFeed(force), this.getCollections(force)]);
+        this.state.feed = feed;
         this.state.collections = collections;
-        this.state.requireAdultEvidence = selectedType.id === "anime_hentai";
-        this.state.baseProfile = Core.trainProfile(collections);
-        this.state.profile = this.state.baseProfile;
-        if (this.state.profile.ratedCount < 5) throw new Error("已评分样本不足 5 个，暂时无法建立可靠画像。");
-
-        const candidates = await this.client.getCandidates(type, this.state.profile, force, selectedType);
-        const marked = new Set(allCollections.map((item) => Number(item.subjectId)));
-        this.state.candidates = candidates
-          .filter((subject) => !marked.has(Number(subject.id)))
-          .filter((subject) => selectedType.id !== "2" || !Core.candidateExclusion(subject));
-        if (this.state.candidates.length < 5) throw new Error("未标记候选不足 5 个，请稍后刷新候选池。");
-
-        this.recompute({ enforceJapanese: false, render: false });
-        this.setProgress("基础排序已完成，正在确认日本作品…", 0, 0);
-
-        if (this.client.apiAvailable) {
-          await this.enhanceWithPeople();
-        }
-        if (this.state.requireAdultEvidence) {
-          this.state.candidates = this.state.candidates.filter((subject) => {
-            const evidence = subject.originMetadata?.adultEvidenceVerified === true
-              ? subject.originMetadata
-              : null;
-            return evidence && Core.isAdultRecommendationCandidate(evidence);
-          });
-        }
-        this.recompute({ enforceJapanese: true, render: true });
-
-        this.state.lastSync = new Date().toISOString();
-        this.updateSyncLabel();
-        await this.saveCurrentResult();
-        this.setProgress(
-          `完成：分析 ${collections.length} 个收藏，保留 ${this.state.eligibleCandidateCount} 个已确认日本候选。`,
-          1,
-          1,
-        );
+        this.state.profile = { collectionCount: collections.length, ratedCount: collections.filter((row) => row.rate > 0).length };
+        this.state.pageOrder = Feed.unmarkedCandidates(feed, collections);
+        this.state.eligibleCandidateCount = this.state.pageOrder.length;
+        if (!this.state.pageOrder.length) throw new Error("暂时没有未标记的候选动画。");
+        this.excludedBatch.clear();
+        this.state.currentPage = 1;
+        this.renderFromPool();
       } catch (error) {
-        this.showError(error);
-      } finally {
-        this.setBusy(false);
-      }
-    }
-
-    async enhanceWithPeople() {
-      const influential = Core.influentialSubjectIds(this.state.collections, this.state.profile, 10, 6);
-      const originLimit = this.state.requireAdultEvidence ? 360 : 180;
-      const scoredPreview = this.state.scoredPool
-        .slice(0, this.state.requireAdultEvidence ? 180 : originLimit)
-        .map((item) => item.subject.id);
-      const adultPriorityPreview = this.state.requireAdultEvidence
-        ? [...this.state.candidates]
-            .filter((subject) => subject.adultVerificationPriority > 0)
-            .sort((left, right) => right.adultVerificationPriority - left.adultVerificationPriority)
-            .slice(0, 180)
-            .map((subject) => subject.id)
-        : [];
-      const originPreview = [...new Set([...adultPriorityPreview, ...scoredPreview])].slice(0, originLimit);
-      let allSubjects = [
-        ...this.state.collections.map((item) => item.subject),
-        ...this.state.candidates,
-      ];
-      const origins = await this.client.enrichOriginMetadata(allSubjects, originPreview, originLimit);
-      if (origins.size) {
-        this.state.candidates = this.state.candidates.map((item) => {
-          if (!origins.has(item.id)) return item;
-          const details = origins.get(item.id);
-          return {
-            ...item,
-            ...details,
-            tags: details.tags?.length ? details.tags : (item.tags || []),
-            metaTags: details.metaTags?.length ? details.metaTags : (item.metaTags || []),
-            originMetadata: details,
-          };
-        });
-      }
-      if (recommendationType(this.config.subjectType).id === "2") {
-        this.state.candidates = this.state.candidates.filter((subject) => !Core.candidateExclusion(subject));
-      }
-
-      const candidatePreview = this.state.scoredPool.slice(0, 16).map((item) => item.subject.id);
-      allSubjects = [
-        ...this.state.collections.map((item) => item.subject),
-        ...this.state.candidates,
-      ];
-      const enriched = await this.client.enrichSubjects(allSubjects, [...influential, ...candidatePreview]);
-      if (!enriched.size) return;
-      this.state.collections = this.state.collections.map((item) =>
-        enriched.has(item.subjectId) ? { ...item, subject: enriched.get(item.subjectId) } : item,
-      );
-      this.state.candidates = this.state.candidates.map((item) => enriched.get(item.id) || item);
-      this.state.profile = Core.trainProfile(this.state.collections);
-    }
-
-    recompute({ enforceJapanese = true, render = true } = {}) {
-      const scored = this.state.candidates
-        .map((subject) => {
-          const supplementalScore = Core.scoreSubject(subject, this.state.profile, RECOMMENDATION_MODE);
-          const scoredSubject = this.state.baseProfile !== this.state.profile
-            ? Core.blendSupplementalScore(
-                Core.scoreSubject(
-                  Core.withoutCreativeContributors(subject),
-                  this.state.baseProfile,
-                  RECOMMENDATION_MODE,
-                ),
-                supplementalScore,
-              )
-            : supplementalScore;
-          return {
-            ...scoredSubject,
-            origin: enforceJapanese ? Core.classifyJapaneseOrigin(subject) : null,
-          };
-        })
-        .filter((item) => !enforceJapanese || item.origin?.status === "japanese")
-        .filter((item) => !enforceJapanese || !this.state.requireAdultEvidence
-          || (item.subject.adultEvidenceVerified !== false
-            && Core.isAdultRecommendationCandidate(item.subject)))
-        .sort((a, b) => b.normalizedScore - a.normalizedScore);
-      this.state.eligibleCandidateCount = enforceJapanese ? scored.length : 0;
-      if (enforceJapanese && scored.length < 5) {
-        throw new Error(`只能确认 ${scored.length} 个日本候选，无法在不混入其他国家作品的前提下生成 5 个推荐。`);
-      }
-      const poolLimit = !enforceJapanese && this.state.requireAdultEvidence ? 360 : 180;
-      this.state.scoredPool = scored.slice(0, poolLimit);
-      this.state.pageOrder = this.buildPageOrder(this.state.scoredPool);
-      this.excludedBatch.clear();
-      if (render) this.renderFromPool();
-    }
-
-    buildPageOrder(scoredPool) {
-      return Core.diversify(
-        scoredPool,
-        scoredPool.length,
-        RECOMMENDATION_MODE,
-        `${Core.recommendationSalt()}:full-pool`,
-      );
+        this.$(".results").hidden = true;
+        this.$(".welcome").hidden = true;
+        this.$(".error").hidden = false;
+        this.$(".error-message").textContent = `${error.message}。可稍后重试；组件不会修改你的 Bangumi 数据。`;
+      } finally { this.setBusy(false); }
     }
 
     renderFromPool() {
-      if (!this.state.pageOrder.length && this.state.scoredPool.length) {
-        this.state.pageOrder = this.buildPageOrder(this.state.scoredPool);
-      }
-      const available = this.state.pageOrder.filter((item) => !this.excludedBatch.has(Number(item.subject.id)));
-      const pageCount = Math.max(1, Math.ceil(available.length / RECOMMENDATION_PAGE_SIZE));
-      const typeId = recommendationType(this.config.subjectType).id;
-      const requestedPage = this.pageByType.get(typeId) || this.state.currentPage || 1;
-      const currentPage = Math.min(pageCount, Math.max(1, requestedPage));
-      const startIndex = (currentPage - 1) * RECOMMENDATION_PAGE_SIZE;
-      const selected = available.slice(startIndex, startIndex + RECOMMENDATION_PAGE_SIZE);
-      this.state.currentPage = currentPage;
-      this.pageByType.set(typeId, currentPage);
-      this.state.current = selected;
-      this.renderRecommendations(selected, {
-        collectionCount: this.state.profile?.collectionCount || this.state.currentSummary.collectionCount,
-        ratedCount: this.state.profile?.ratedCount || this.state.currentSummary.ratedCount,
-        candidateCount: this.state.eligibleCandidateCount || this.state.currentSummary.candidateCount,
-      }, {
-        page: currentPage,
-        pageCount,
-        total: available.length,
-        startIndex,
-      });
+      const available = this.state.pageOrder.filter((item) => !this.excludedBatch.has(item.subject.id));
+      const pages = Math.max(1, Math.ceil(available.length / PAGE_SIZE));
+      const page = Math.min(pages, Math.max(1, this.state.currentPage));
+      const start = (page - 1) * PAGE_SIZE;
+      this.state.currentPage = page;
+      this.state.current = available.slice(start, start + PAGE_SIZE);
+      this.$(".welcome").hidden = true;
+      this.$(".error").hidden = true;
+      this.$(".results").hidden = false;
+      const feed = this.state.feed;
+      const date = feed?.generatedAt ? new Date(feed.generatedAt).toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" }) : "本地预览";
+      const model = feed?.model === "joint" ? "协同评分与内容偏好" : "内容偏好；公开评分用于发现候选";
+      const checked = this.collectionCheckedAt
+        ? new Date(this.collectionCheckedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+        : "本地预览";
+      const fallback = this.feedSource === "bundle" ? " · 使用内置 50 条快照" : "";
+      const neighbor = feed?.neighborCount ? `（${feed.neighborCount} 位近邻召回）` : "";
+      this.$(".summary").textContent = `分析 ${feed?.ratedCount || this.state.profile?.ratedCount || 0} 条个人评分、${feed?.peerCount || 0} 位公开用户${neighbor} · ${model} · 数据 ${date} · 收藏核对 ${checked}${fallback}`;
+      this.$(".recommendation-list").innerHTML = this.state.current.map((item) => this.card(item)).join("");
+      const options = Array.from({ length: pages }, (_, index) => `<option value="${index + 1}" ${index + 1 === page ? "selected" : ""}>${index + 1}</option>`).join("");
+      this.$(".pagination").innerHTML = `<button type="button" data-page-direction="-1" ${page === 1 ? "disabled" : ""}>上一页</button><label>第 <select data-page-select aria-label="跳转到推荐页">${options}</select> / ${pages} 页</label><button type="button" data-page-direction="1" ${page === pages ? "disabled" : ""}>下一页</button>`;
     }
 
-    changePage(page, focusTarget = "button") {
-      if (!this.state.pageOrder.length) {
-        this.ensureRecommendations({ force: false });
-        return;
-      }
-      const availableCount = this.state.pageOrder.length - this.excludedBatch.size;
-      const pageCount = Math.max(1, Math.ceil(availableCount / RECOMMENDATION_PAGE_SIZE));
-      const nextPage = Math.min(pageCount, Math.max(1, Math.trunc(Number(page) || 1)));
-      if (nextPage === this.state.currentPage) return;
-      const direction = nextPage > this.state.currentPage ? 1 : -1;
-      this.pageByType.set(recommendationType(this.config.subjectType).id, nextPage);
-      this.renderFromPool();
-      requestAnimationFrame(() => {
-        const selector = focusTarget === "select"
-          ? "[data-page-select]"
-          : `[data-page-direction="${direction}"]`;
-        this.$(selector)?.focus();
-      });
-    }
-
-    dismiss(subjectId) {
-      const previous = new Set(this.excludedBatch);
-      const previousPage = this.state.currentPage;
-      this.excludedBatch.add(Number(subjectId));
-      this.renderFromPool();
-      this.showToast("已从推荐结果中暂时隐藏。", () => {
-        this.excludedBatch.clear();
-        for (const id of previous) this.excludedBatch.add(id);
-        this.pageByType.set(recommendationType(this.config.subjectType).id, previousPage);
-        this.renderFromPool();
-      });
-    }
-
-    showToast(message, undo) {
-      const toast = this.$(".toast");
-      toast.querySelector("span").textContent = message;
-      const button = toast.querySelector("button");
-      button.onclick = () => {
-        undo?.();
-        toast.hidden = true;
-      };
-      toast.hidden = false;
-      clearTimeout(this.toastTimer);
-      this.toastTimer = setTimeout(() => {
-        toast.hidden = true;
-      }, 5000);
-    }
-
-    recommendationCard(item, index) {
+    card(item) {
       const subject = item.subject;
       const title = subject.nameCn || subject.name || `条目 ${subject.id}`;
-      const image = safeImageUrl(subject.image);
-      const tags = Core.selectContentTags(subject, item.positiveReasons).slice(0, 3);
-      const evidence = Core.selectRecommendationEvidence(item);
-      const similar = evidence.find(entry => entry.kind === "similarity")?.works || [];
-      const creative = evidence.find(entry => entry.kind === "creative");
-      const brief = similar.length ? `与你喜欢的《${similar[0].name}》相近`
-        : creative?.reasons?.length ? `你偏爱的${creative.roleLabel || "创作者"}：${creative.reasons.map(r => r.label).join("、")}`
-        : tags.length ? `也许合你口味的${tags.slice(0, 2).map(t => t.label).join("、")}作品` : "从你的收藏偏好中发现";
-      const rows = evidence.map(entry => {
-        if (entry.kind === "similarity") return `<p>与你看过的${entry.works.map(work => `《${escapeHtml(work.name)}》${Number(work.rate) ? `（${Number(work.rate)} 分）` : ""}`).join("、")}特征接近。</p>`;
-        if (entry.kind === "creative") return `<p>${escapeHtml(entry.roleLabel || "创作人员")}：${entry.reasons.map(reason => escapeHtml(reason.label)).join("、")}，在你的历史评分中表现较好。</p>`;
-        return '<p>结合你的收藏偏好与作品口碑推荐。</p>';
-      }).join("");
+      const image = imageUrl(subject.image);
       const url = `${location.origin}/subject/${subject.id}`;
+      const reasons = item.reasons.length ? item.reasons : ["结合你的历史评分与作品口碑排序。"];
       return `<article class="recommendation-card">
-        <a class="cover" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">
-          ${image ? `<img data-cover src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy" width="140" height="196"><span class="cover-placeholder" hidden>暂无封面</span>` : '<span class="cover-placeholder">暂无封面</span>'}
-        </a>
+        <a class="cover" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">${image ? `<img data-cover src="${escapeHtml(image)}" alt="${escapeHtml(title)}" loading="lazy" width="140" height="196"><span class="cover-placeholder" hidden>暂无封面</span>` : '<span class="cover-placeholder">暂无封面</span>'}</a>
         <h3><a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
-        <div class="content-tags">${tags.map(tag => `<span>${escapeHtml(tag.label)}</span>`).join("")}</div>
-        <p class="brief">${escapeHtml(brief)}</p>
-        <details class="evidence-panel"><summary>推荐理由</summary><div class="evidence-body">${rows}<p class="evidence-score">预计评分 ${Number(item.predicted).toFixed(1)} · 站点评分 ${Number(subject.rating?.score || 0).toFixed(1)}</p><button type="button" data-dismiss-id="${subject.id}" aria-label="暂时隐藏《${escapeHtml(title)}》">暂时隐藏</button></div></details>
+        <div class="content-tags">${subject.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>
+        <p class="brief">${escapeHtml(reasons[0])}</p>
+        <details class="evidence-panel"><summary>推荐依据</summary><div class="evidence-body">${reasons.map((reason) => `<p>${escapeHtml(reason)}</p>`).join("")}<p class="evidence-score">预测评分 ${item.predicted.toFixed(1)} / 10 · 站点评分 ${subject.rating.score ? subject.rating.score.toFixed(1) : "暂无"}</p><button type="button" data-dismiss-id="${subject.id}">暂时隐藏</button></div></details>
       </article>`;
     }
 
-    paginationMarkup({ page = 1, pageCount = 1, total = 0 } = {}) {
-      const options = Array.from({ length: pageCount }, (_, index) => {
-        const value = index + 1;
-        return `<option value="${value}" ${value === page ? "selected" : ""}>${value}</option>`;
-      }).join("");
-      return `
-        <nav class="pagination" aria-label="推荐结果分页">
-          <button class="page-button page-previous" type="button" data-page-direction="-1" data-page-boundary="${page <= 1}" ${page <= 1 ? "disabled" : ""} aria-label="上一页，第 ${Math.max(1, page - 1)} 页">
-            ${ICONS.pagePrevious}<span>上一页</span>
-          </button>
-          <div class="page-status" aria-live="polite">
-            <label><span>第</span><span class="page-select-shell"><select data-page-select aria-label="跳转到推荐页">${options}</select><span class="page-select-arrow">${ICONS.chevron}</span></span><span>/ ${pageCount} 页</span></label>
-          </div>
-          <button class="page-button page-next" type="button" data-page-direction="1" data-page-boundary="${page >= pageCount}" ${page >= pageCount ? "disabled" : ""} aria-label="下一页，第 ${Math.min(pageCount, page + 1)} 页">
-            <span>下一页</span>${ICONS.pageNext}
-          </button>
-        </nav>`;
+    changePage(value) {
+      this.state.currentPage = Number.isFinite(value) ? Math.trunc(value) : 1;
+      this.renderFromPool();
     }
 
-    renderRecommendations(recommendations, summary = {}, pagination = {}) {
-      this.state.currentSummary = summary;
-      const results = this.$('[data-role="results"]');
-      this.$('[data-role="welcome"]').hidden = true;
-      this.$('[data-role="error"]').hidden = true;
-      results.hidden = false;
-      results.innerHTML = `<div class="recommendation-list">${recommendations.map((item, index) => this.recommendationCard(item, Number(pagination.startIndex || 0) + index)).join("")}</div>${this.paginationMarkup(pagination)}`;
+    dismiss(id) {
+      this.previousDismiss = new Set(this.excludedBatch);
+      this.excludedBatch.add(id);
+      this.renderFromPool();
+      this.$(".toast span").textContent = "已暂时隐藏，可撤销。";
+      this.$(".toast").hidden = false;
+      clearTimeout(this.toastTimer);
+      this.toastTimer = setTimeout(() => { this.$(".toast").hidden = true; }, 5000);
     }
 
-    showError(error) {
-      const errorBox = this.$('[data-role="error"]');
-      this.$('[data-role="welcome"]').hidden = true;
-      this.$('[data-role="results"]').hidden = true;
-      errorBox.hidden = false;
-      errorBox.querySelector('[data-role="error-message"]').textContent =
-        `${error?.message || "未知错误"} 组件不会修改你的 Bangumi 数据，可以安全重试。`;
-      this.setProgress("生成失败", 0, 0);
-    }
-
-    updateSyncLabel() {
-      if (this.state.lastSync) this.$(".refresh-data").title = `根据最新收藏重新推荐；上次更新：${new Date(this.state.lastSync).toLocaleString("zh-CN", { hour12: false })}`;
-    }
-
-    async saveCurrentResult() {
-      await this.store.set(this.cacheKey(), {
-        storedAt: Date.now(),
-        value: {
-          generatedAt: this.state.lastSync,
-          recommendations: this.state.current,
-          pageOrder: this.state.pageOrder,
-          summary: {
-            collectionCount: this.state.profile.collectionCount,
-            ratedCount: this.state.profile.ratedCount,
-            candidateCount: this.state.eligibleCandidateCount,
-          },
-        },
-      });
+    undoDismiss() {
+      this.excludedBatch = this.previousDismiss || new Set();
+      this.$(".toast").hidden = true;
+      this.renderFromPool();
     }
 
     styles() {
       return `<style>${globalThis.BangumiProfileUI.css}
-        .module-head select{font-size:12px;border:0;background:var(--soft);padding:4px 24px 4px 9px}.module-head .refresh-data{font-size:12px}
-        .welcome{padding:28px 0;color:var(--muted);text-align:center}
+        .welcome{padding:28px 0;text-align:center;color:var(--muted)}.summary{color:var(--muted);font-size:11px;margin:0 0 15px}
         .recommendation-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;align-items:start}
-        .recommendation-card{min-width:0}.cover{display:block;aspect-ratio:5/7;background:var(--soft);overflow:hidden;border-radius:7px}.cover img{display:block;width:100%;height:100%;object-fit:cover;transition:opacity .18s}.cover:hover img{opacity:.88}.cover-placeholder{display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:var(--muted)}
+        .recommendation-card{min-width:0}.cover{display:block;aspect-ratio:5/7;background:var(--soft);overflow:hidden;border-radius:7px}.cover img{display:block;width:100%;height:100%;object-fit:cover}.cover-placeholder{display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:var(--muted)}
         .recommendation-card h3{margin-top:9px;font-size:13px;line-height:1.5}.recommendation-card h3 a{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}
         .content-tags{display:flex;flex-wrap:wrap;gap:4px 7px;margin:5px 0;color:var(--link);font-size:11px;min-height:18px}.brief{font-size:12px;line-height:1.6;color:var(--muted);margin:6px 0 8px}
-        .evidence-panel{font-size:12px}.evidence-panel summary{color:var(--site-link);width:fit-content;border-radius:4px;list-style:none}.evidence-panel summary::after{content:" ›"}.evidence-panel[open] summary::after{content:" ‹"}.evidence-body{padding-top:8px;line-height:1.75;overflow-wrap:anywhere}.evidence-body p{margin-bottom:8px}.evidence-score{color:var(--muted);font-size:11px}.evidence-body button{color:var(--muted);padding-left:0}
-        .pagination{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.page-button{display:flex;align-items:center;gap:3px}.page-button svg{fill:currentColor;width:14px;height:14px}.page-status label{display:flex;align-items:center;gap:5px}.page-select-shell select{border:0;padding:3px 4px;background:var(--soft);font-size:12px}.page-select-arrow{display:none}
+        .evidence-panel{font-size:12px}.evidence-panel summary{color:var(--site-link);width:fit-content;border-radius:4px;list-style:none}.evidence-body{padding-top:8px;line-height:1.75;overflow-wrap:anywhere}.evidence-body p{margin-bottom:8px}.evidence-score{color:var(--muted);font-size:11px}.evidence-body button{padding-left:0}
+        .pagination{display:flex;align-items:center;justify-content:center;gap:15px;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.pagination label{display:flex;align-items:center;gap:5px}.pagination select{padding:3px 4px;font-size:12px}
         .toast{margin-top:12px;padding:8px 12px;background:var(--pink-soft);border-radius:6px;color:var(--link);font-size:12px}.toast button{margin-left:8px;color:var(--link)}
-        @container(max-width:620px){.recommendation-list{gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}}
-        @container(max-width:400px){.recommendation-list{gap:20px 14px;grid-template-columns:repeat(2,minmax(0,1fr))}.pagination{gap:9px}.page-button{padding:5px}.module-head select{font-size:16px}}
+        @container(max-width:620px){.recommendation-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}}
+        @container(max-width:400px){.recommendation-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 14px}.pagination{gap:9px}}
       </style>`;
     }
-  }
-
-  function clamp01(value) {
-    return Math.min(1, Math.max(0, Number(value) || 0));
   }
 
   function start() {

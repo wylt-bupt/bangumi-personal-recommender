@@ -31,31 +31,18 @@
             nameCn: `分页测试作品 ${index + 1}`,
             image: "invalid:",
             rating: { score: 8.4 - index * 0.08, total: 1200 - index * 25 },
-            tags: [
-              { name: labels[index % labels.length], count: 100 - index },
-              { name: "日本动画", count: 80 - index },
-            ],
-            persons: [],
-            characters: [],
+            tags: [labels[index % labels.length], "日本动画"],
           },
           predicted: 8.7 - index * 0.06,
-          normalizedScore: 0.9 - index * 0.03,
-          confidence: index < 5 ? "高" : "中",
-          confidenceScore: index < 5 ? 0.82 : 0.67,
-          confidenceBreakdown: { featureSupport: 0.42, neighborEvidence: 0.2, ratingEvidence: 0.18 },
-          positiveReasons: [{ type: "tag", label: labels[index % labels.length], weight: 0.8 }],
-          negativeReasons: [],
-          similarWorks: [],
-          nearest: [],
-          features: { [`tag:${labels[index % labels.length]}`]: 1 },
+          reasons: [`你对“${labels[index % labels.length]}”相关作品的历史评分较高。`],
+          collaborativeLift: 0.1,
         }));
-        app.open();
+        app.state.open = true;
         setTimeout(() => {
           try {
             app.state.profile = { collectionCount: 240, ratedCount: 168 };
             app.state.eligibleCandidateCount = 180;
             app.state.pageOrder = pageOrder;
-            app.state.scoredPool = pageOrder.slice();
             app.renderFromPool();
             const pageStatus = app.shadow.querySelector(".page-status")?.innerText || "分页缺失";
             document.title = `分页测试：${app.state.current.length} 个｜${pageStatus.replace(/\s+/g, " ")}`;
