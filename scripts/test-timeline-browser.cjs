@@ -100,6 +100,12 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
     assert.equal(await page.locator('.hm-chart-area i').count(), 4);
     assert.match(await page.locator('.hm-cell').last().locator('title').textContent(), /\d{4}-\d{2}-\d{2}: \d+ 集/);
+    const monthLabelBoxes = await page.locator('.hm-month-label').evaluateAll(labels => labels.map(label => {
+      const box = label.getBBox(); return { text: label.textContent, x: box.x, right: box.x + box.width };
+    }));
+    for (let index = 1; index < monthLabelBoxes.length; index++) {
+      assert.ok(monthLabelBoxes[index - 1].right <= monthLabelBoxes[index].x, `month labels overlap: ${JSON.stringify(monthLabelBoxes)}`);
+    }
     const firstDay = core.dayKey(now - core.DAY);
     assert.ok((await page.locator('.hm-cell title').allTextContents()).includes(`${firstDay}: 1 集`), 'a collection on the same day must not add another episode');
     assert.match(await page.locator('.hm-chart-area').textContent(), /近1年活跃率:\s*0\.8%\s*·\s*近30天活跃:\s*3\s*天少多/);

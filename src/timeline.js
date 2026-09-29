@@ -109,10 +109,11 @@
     const firstOffset = (allCols - cols) * 7;
     const width = padL + cols * (cell + gap) + padR;
     const height = padT + rows * (cell + gap) + 4;
-    const labels = ['一', '', '三', '', '五', '', '日'];
+    const weekdays = ['一', '', '三', '', '五', '', '日'];
     const monthDrawn = Object.create(null);
+    const monthLabels = [];
     let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block" role="img" aria-label="每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
-    labels.forEach((label, row) => {
+    weekdays.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
     for (let offset = firstOffset; offset <= daysDiff; offset++) {
@@ -124,12 +125,27 @@
         const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
         if (!monthDrawn[mon] && col > 0 && col < cols) {
           monthDrawn[mon] = true;
-          svg += `<text x="${col * (cell + gap)}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${mon}</text>`;
+          monthLabels.push({ x: col * (cell + gap), text: mon });
         }
       }
       const fill = count === 0 ? 'var(--hm-cell-empty)' : count <= 3 ? 'var(--hm-cell-l1)' : count <= 9 ? 'var(--hm-cell-l2)' : 'var(--hm-cell-l3)';
       svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 集</title></rect>`;
     }
+    const measureCanvas = document.createElement('canvas').getContext('2d');
+    if (measureCanvas) measureCanvas.font = '600 9px Arial, "Microsoft YaHei", sans-serif';
+    const labelWidth = text => measureCanvas ? measureCanvas.measureText(text).width : [...text].length * 9;
+    let nextLabelX = Infinity;
+    const visibleMonths = [];
+    for (let index = monthLabels.length - 1; index >= 0; index--) {
+      const label = monthLabels[index];
+      if (label.x + labelWidth(label.text) + 4 <= nextLabelX) {
+        visibleMonths.push(label);
+        nextLabelX = label.x;
+      }
+    }
+    visibleMonths.reverse().forEach(label => {
+      svg += `<text class="hm-month-label" x="${label.x}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${label.text}</text>`;
+    });
     svg += '</g></svg>';
     const active = data.days.filter(day => day.count > 0).length;
     const activeRate = (active / data.days.length * 100).toFixed(1);

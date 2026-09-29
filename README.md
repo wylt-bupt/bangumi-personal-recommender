@@ -12,7 +12,7 @@
 ## 当前版本
 
 - 推荐与回顾组件：`0.11.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；开发者本人可使用未审核版本。
-- 独立活跃度热力图：`1.0.11`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
+- 独立活跃度热力图：`1.0.12`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
 
 ## 0.11.0：从零重建动画推荐
@@ -48,6 +48,10 @@
 - `src/series-family.cjs` 与 `scripts/family-folds.cjs`：离线评测系列分组，不依赖旧推荐核心。
 - `legacy/src/`、`legacy/tests/`、`legacy/backups/`：旧源码、历史测试和原始备份，不混入当前源码目录。
 - [旧版说明与版本历史](docs/legacy-readme-through-0.10.8.md)。
+
+## 1.0.12：避免月份标签相互覆盖
+
+- 月份标签根据实际文字宽度避让；位置不足时省略较早月份标签，保留较新的月份。
 
 ## 1.0.11：热力图按组件宽度显示历史
 
