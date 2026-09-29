@@ -92,7 +92,8 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(maxInflight, 1, 'only one tab may sync at a time');
     assert.ok(requests.every(value => new URL(value).searchParams.get('type') !== 'subject'), 'collection activities are no longer fetched');
     const cellCount = await page.locator('.hm-cell').count();
-    assert.ok(cellCount >= 365 && cellCount <= 371, `expected a complete aligned year, got ${cellCount} cells`);
+    assert.ok(cellCount >= 7 && cellCount <= 371, `expected visible days from aligned weeks, got ${cellCount} cells`);
+    assert.ok(await page.locator('.hm-cell title').allTextContents().then(titles => titles.some(title => title.startsWith(core.dayKey(now)))), 'the current day must remain visible');
     assert.equal(await page.locator('button,nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap');
     assert.equal(await page.locator('h2').textContent(), '活跃度热力图');
     assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-label'), '活跃度热力图');
@@ -114,8 +115,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(style.cellWidth, '9.5');
     const heatColors = await page.locator('#hm-dashboard').evaluate(element => ['empty', 'l1', 'l2', 'l3'].map(level => getComputedStyle(element).getPropertyValue(`--hm-cell-${level}`).trim()));
     assert.deepEqual(heatColors, ['#f2f2f2', '#f8cdd4', '#ed7790', '#c83d64']);
-    await page.waitForTimeout(1300);
-    assert.ok(await page.locator('.hm-scroll').evaluate(element => element.scrollWidth <= element.clientWidth || (element.scrollLeft > 0 && element.scrollLeft + element.clientWidth >= element.scrollWidth - 2)));
+    assert.ok(await page.locator('.hm-scroll').evaluate(element => element.scrollWidth <= element.clientWidth), 'the heatmap must fit without horizontal scrolling');
     await peer.close();
 
     const parserResult = await page.evaluate(({ html }) => {
@@ -131,13 +131,20 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(parserResult.count, 3); assert.equal(parserResult.source, 'API');
     assert.ok(!parserResult.text.includes('封面')); assert.deepEqual(parserResult.rejects, [true, true, true]);
 
+    const visibleWeeks = {}, oldestVisibleDays = {};
     for (const [width, height, theme] of [[1200, 900, 'light'], [375, 812, 'light'], [667, 375, 'light'], [1200, 900, 'dark']]) {
       await page.setViewportSize({ width, height });
       await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
+      await page.waitForFunction(() => document.querySelector('#bgmtl-personal')?.shadowRoot?.querySelector('svg')?.getAttribute('width') && document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-scroll').scrollWidth <= document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-scroll').clientWidth);
+      await page.waitForFunction(() => [...document.querySelector('#bgmtl-personal').shadowRoot.querySelectorAll('.hm-cell')].every(cell => getComputedStyle(cell).opacity === '1'));
+      visibleWeeks[width] = await page.locator('.hm-cell').evaluateAll(cells => new Set(cells.map(cell => cell.getAttribute('x'))).size);
+      oldestVisibleDays[width] = await page.locator('.hm-cell title').first().textContent();
       assert.ok(await page.locator('#hm-dashboard').isVisible());
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px ${theme} page overflow`);
       await page.screenshot({ path: `artifacts/timeline-heatmap-${width}-${theme}.png`, fullPage: true });
     }
+    assert.ok(visibleWeeks[1200] > visibleWeeks[375], `wide layout should show more history: ${JSON.stringify(visibleWeeks)}`);
+    assert.ok(oldestVisibleDays[1200] < oldestVisibleDays[375], 'a wider layout should reveal earlier dates');
 
     // A cached heatmap renders immediately and does not refetch history while fresh.
     const beforeReload = requests.length;
@@ -149,7 +156,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     extra = true; await prepareRefresh(); await load(page);
     await page.waitForFunction(() => /近1年活跃率:\s*1\.1%/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent), null, { timeout: 30000 });
     const updated = await readState();
-    assert.ok(updated.events.length >= 5, 'new progress records added incrementally');
+    assert.ok(updated.events.some(event => event.id === '210'), 'new progress record added incrementally');
 
     // Rate limiting stores a cooldown but never replaces the cached chart with an error panel.
     fail = true; await prepareRefresh(); const beforeFailure = requests.length; await load(page);
@@ -165,6 +172,6 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     await load(page); await page.locator('.hm-cell').first().waitFor();
     assert.equal(await page.locator('.hm-cell').first().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);
-    console.log('PASS: original heatmap-only UI, parsing protection, aligned annual coverage, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
+    console.log('PASS: adaptive heatmap width without scrolling, parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

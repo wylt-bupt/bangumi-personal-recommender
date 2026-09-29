@@ -8,7 +8,7 @@
   if (!home && !profile && !demo) return;
 
   let db, host, shadow, state = C.freshState(USER), busy = false, channel, timer;
-  let aborted = false, storageBlocked = false, message = '', drawnSignature = '';
+  let aborted = false, storageBlocked = false, message = '', drawnSignature = '', drawnWidth = -1, chartData = null;
   // Idle streams only need attention every 15 minutes. Remembering the next
   // due time lets the 30-second poll skip the full IndexedDB read meanwhile.
   let idleUntil = 0;
@@ -44,11 +44,7 @@
     :host([data-theme=dark]){--hm-text:#999;--hm-text-dim:#777;--hm-text-strong:#ccc;--hm-border:rgba(255,255,255,.08);--hm-cell-empty:rgba(255,255,255,.08);--hm-cell-l1:rgba(240,145,153,.32);--hm-cell-l2:rgba(240,112,137,.66);--hm-cell-l3:#ef6889;--hm-panel-bg:rgba(255,255,255,.03);--hm-panel-border:rgba(240,145,153,.12)}
     *{box-sizing:border-box}
     #hm-dashboard{border-radius:10px;padding:12px 15px;margin-bottom:20px;background:var(--hm-panel-bg);border:1px solid var(--hm-panel-border);color:var(--hm-text);font:12px/1.5 Arial,"Microsoft YaHei",sans-serif;overflow:hidden}
-    #hm-dashboard .hm-scroll{overflow-x:auto;padding:4px 0 10px 0;scrollbar-width:thin;scrollbar-color:transparent transparent}
-    #hm-dashboard .hm-scroll::-webkit-scrollbar{height:7px}
-    #hm-dashboard .hm-scroll::-webkit-scrollbar-track,#hm-dashboard .hm-scroll::-webkit-scrollbar-thumb,#hm-dashboard .hm-scroll::-webkit-scrollbar-corner{background:transparent}
-    #hm-dashboard .hm-scroll:hover{scrollbar-color:rgba(240,145,153,.3) transparent}
-    #hm-dashboard .hm-scroll:hover::-webkit-scrollbar-thumb{background:rgba(240,145,153,.3);border-radius:4px}
+    #hm-dashboard .hm-scroll{overflow:hidden;padding:4px 0}
     #hm-dashboard .hm-cell{transition:transform .15s,filter .15s;transform-box:fill-box;transform-origin:center}
     #hm-dashboard .hm-cell:hover{transform:scale(1.4);filter:drop-shadow(0 0 4px rgba(240,145,153,.5))}
     #hm-dashboard .hm-loading{height:112px;display:flex;align-items:center;justify-content:center;color:var(--hm-text-dim);font-size:11px}
@@ -87,13 +83,17 @@
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
     shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></section>`;
+    new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width || 0;
+      if (chartData && Math.abs(width - drawnWidth) > 0.5) drawHeatmap(chartData, false);
+    }).observe(shadow.querySelector('.hm-chart-area'));
     theme();
     new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
     return true;
   }
 
-  function drawHeatmap(data) {
+  function drawHeatmap(data, animate = true) {
     const area = shadow.querySelector('.hm-chart-area');
     const counts = new Map(data.days.map(day => [day.key, day.count]));
     const cell = 9.5, gap = 2, padL = 30, padT = 20, padR = 12, rows = 7;
@@ -103,19 +103,22 @@
     const startDay = start.getUTCDay();
     start.setUTCDate(start.getUTCDate() - (startDay === 0 ? 6 : startDay - 1));
     const daysDiff = Math.floor((today - start) / C.DAY);
-    const cols = Math.ceil((daysDiff + 1) / 7);
+    const allCols = Math.ceil((daysDiff + 1) / 7);
+    const availableWidth = area.clientWidth;
+    const cols = Math.max(1, Math.min(allCols, Math.floor((availableWidth - padL - padR) / (cell + gap))));
+    const firstOffset = (allCols - cols) * 7;
     const width = padL + cols * (cell + gap) + padR;
     const height = padT + rows * (cell + gap) + 4;
     const labels = ['一', '', '三', '', '五', '', '日'];
     const monthDrawn = Object.create(null);
-    let svg = `<svg viewBox="0 0 ${width} ${height}" style="display:block;min-width:${width}px" role="img" aria-label="近一年每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
+    let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block" role="img" aria-label="每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
     labels.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
-    for (let offset = 0; offset <= daysDiff; offset++) {
+    for (let offset = firstOffset; offset <= daysDiff; offset++) {
       const cursor = new Date(start);
       cursor.setUTCDate(cursor.getUTCDate() + offset);
-      const col = Math.floor(offset / 7), row = offset % 7;
+      const col = Math.floor((offset - firstOffset) / 7), row = offset % 7;
       const key = cursor.toISOString().slice(0, 10), count = counts.get(key) || 0;
       if (row === 0) {
         const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
@@ -132,9 +135,8 @@
     const activeRate = (active / data.days.length * 100).toFixed(1);
     const recentActive = data.days.slice(-30).filter(day => day.count > 0).length;
     area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;"><span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span></span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
-    const wrap = area.querySelector('.hm-scroll');
-    setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    drawnWidth = area.clientWidth;
+    if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) {
       area.querySelectorAll('.hm-cell').forEach(rect => { rect.style.opacity = '1'; });
     } else {
       [...area.querySelectorAll('.hm-cell')].reverse().forEach((rect, index) => {
@@ -148,11 +150,13 @@
     const signature = data.days.map(day => day.count).join(',');
     if (signature !== drawnSignature && (data.total || data.complete)) {
       drawnSignature = signature;
+      chartData = data;
       drawHeatmap(data);
     } else if (!data.total && !data.complete && message) {
       shadow.querySelector('.hm-loading').textContent = `加载失败：${message}`;
     } else if (!data.total && data.complete) {
       drawnSignature = signature;
+      chartData = data;
       drawHeatmap(data);
     }
   }
