@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.13
+// @version      1.0.14
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -154,6 +154,7 @@
   if (!C || (!demo && !/^(bgm\.tv|bangumi\.tv|chii\.in)$/.test(location.hostname))) return;
   const home = location.pathname === '/', profile = /^\/user\/wylt\/?$/.test(location.pathname);
   if (!home && !profile && !demo) return;
+  const homeLayout = home || demo;
 
   let db, host, shadow, state = C.freshState(USER), busy = false, channel, timer;
   let aborted = false, storageBlocked = false, message = '', drawnSignature = '', drawnWidth = -1, chartData = null;
@@ -192,7 +193,12 @@
     :host([data-theme=dark]){--hm-text:#999;--hm-text-dim:#777;--hm-text-strong:#ccc;--hm-border:rgba(255,255,255,.08);--hm-cell-empty:rgba(255,255,255,.08);--hm-cell-l1:rgba(240,145,153,.32);--hm-cell-l2:rgba(240,112,137,.66);--hm-cell-l3:#ef6889;--hm-panel-bg:rgba(255,255,255,.03);--hm-panel-border:rgba(240,145,153,.12)}
     *{box-sizing:border-box}
     #hm-dashboard{border-radius:10px;padding:12px 15px;margin-bottom:20px;background:var(--hm-panel-bg);border:1px solid var(--hm-panel-border);color:var(--hm-text);font:12px/1.5 Arial,"Microsoft YaHei",sans-serif;overflow:hidden}
-    #hm-dashboard .hm-scroll{overflow:hidden;padding:4px 0}
+    #hm-dashboard.home-layout .hm-scroll{overflow:hidden;padding:4px 0}
+    #hm-dashboard.profile-layout .hm-scroll{overflow-x:auto;padding:4px 0 10px;scrollbar-width:thin;scrollbar-color:transparent transparent}
+    #hm-dashboard.profile-layout .hm-scroll::-webkit-scrollbar{height:7px}
+    #hm-dashboard.profile-layout .hm-scroll::-webkit-scrollbar-track,#hm-dashboard.profile-layout .hm-scroll::-webkit-scrollbar-thumb,#hm-dashboard.profile-layout .hm-scroll::-webkit-scrollbar-corner{background:transparent}
+    #hm-dashboard.profile-layout .hm-scroll:hover{scrollbar-color:rgba(240,145,153,.3) transparent}
+    #hm-dashboard.profile-layout .hm-scroll:hover::-webkit-scrollbar-thumb{background:rgba(240,145,153,.3);border-radius:4px}
     #hm-dashboard .hm-cell{transition:transform .15s,filter .15s;transform-box:fill-box;transform-origin:center}
     #hm-dashboard .hm-cell:hover{transform:scale(1.4);filter:drop-shadow(0 0 4px rgba(240,145,153,.5))}
     #hm-dashboard .hm-loading{height:112px;display:flex;align-items:center;justify-content:center;color:var(--hm-text-dim);font-size:11px}
@@ -230,8 +236,8 @@
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></section>`;
-    new ResizeObserver(entries => {
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems ${homeLayout ? 'home-layout' : 'profile-layout'}" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></section>`;
+    if (homeLayout) new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width || 0;
       if (chartData && Math.abs(width - drawnWidth) > 0.5) drawHeatmap(chartData, false);
     }).observe(shadow.querySelector('.hm-chart-area'));
@@ -253,13 +259,15 @@
     const daysDiff = Math.floor((today - start) / C.DAY);
     const allCols = Math.ceil((daysDiff + 1) / 7);
     const availableWidth = area.clientWidth;
-    const cols = Math.max(1, Math.min(allCols, Math.floor((availableWidth - padL - padR) / (cell + gap))));
-    const firstOffset = (allCols - cols) * 7;
+    const cols = homeLayout ? Math.max(1, Math.min(allCols, Math.floor((availableWidth - padL - padR) / (cell + gap)))) : allCols;
+    const firstOffset = homeLayout ? (allCols - cols) * 7 : 0;
     const width = padL + cols * (cell + gap) + padR;
     const height = padT + rows * (cell + gap) + 4;
     const weekdays = ['一', '', '三', '', '五', '', '日'];
+    const monthDrawn = Object.create(null);
     const monthLabels = [];
-    let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block" role="img" aria-label="每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
+    const svgAttrs = homeLayout ? `width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"` : `viewBox="0 0 ${width} ${height}"`;
+    let svg = `<svg ${svgAttrs} style="display:block${homeLayout ? '' : `;min-width:${width}px`}" role="img" aria-label="${homeLayout ? '每日观看集数' : '近一年每日观看集数'}热力图"><g transform="translate(${padL} ${padT})">`;
     weekdays.forEach((label, row) => {
       if (label) svg += `<text x="-8" y="${row * (cell + gap) + 8}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${label}</text>`;
     });
@@ -268,34 +276,46 @@
       cursor.setUTCDate(cursor.getUTCDate() + offset);
       const col = Math.floor((offset - firstOffset) / 7), row = offset % 7;
       const key = cursor.toISOString().slice(0, 10), count = counts.get(key) || 0;
-      if (cursor.getUTCDate() === 1) {
+      if (homeLayout && cursor.getUTCDate() === 1) {
         const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
         monthLabels.push({ x: col * (cell + gap), text: mon, date: key });
+      } else if (!homeLayout && row === 0) {
+        const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
+        if (!monthDrawn[mon] && col > 0 && col < cols) {
+          monthDrawn[mon] = true;
+          svg += `<text x="${col * (cell + gap)}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${mon}</text>`;
+        }
       }
       const fill = count === 0 ? 'var(--hm-cell-empty)' : count <= 3 ? 'var(--hm-cell-l1)' : count <= 9 ? 'var(--hm-cell-l2)' : 'var(--hm-cell-l3)';
       svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 集</title></rect>`;
     }
-    const measureCanvas = document.createElement('canvas').getContext('2d');
-    if (measureCanvas) measureCanvas.font = '600 9px Arial, "Microsoft YaHei", sans-serif';
-    const labelWidth = text => measureCanvas ? measureCanvas.measureText(text).width : [...text].length * 9;
-    let nextLabelX = Infinity;
-    const visibleMonths = [];
-    for (let index = monthLabels.length - 1; index >= 0; index--) {
-      const label = monthLabels[index];
-      if (label.x + labelWidth(label.text) + 4 <= nextLabelX) {
-        visibleMonths.push(label);
-        nextLabelX = label.x;
+    if (homeLayout) {
+      const measureCanvas = document.createElement('canvas').getContext('2d');
+      if (measureCanvas) measureCanvas.font = '600 9px Arial, "Microsoft YaHei", sans-serif';
+      const labelWidth = text => measureCanvas ? measureCanvas.measureText(text).width : [...text].length * 9;
+      let nextLabelX = Infinity;
+      const visibleMonths = [];
+      for (let index = monthLabels.length - 1; index >= 0; index--) {
+        const label = monthLabels[index];
+        if (label.x + labelWidth(label.text) + 4 <= nextLabelX) {
+          visibleMonths.push(label);
+          nextLabelX = label.x;
+        }
       }
+      visibleMonths.reverse().forEach(label => {
+        svg += `<text class="hm-month-label" data-date="${label.date}" x="${label.x}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${label.text}</text>`;
+      });
     }
-    visibleMonths.reverse().forEach(label => {
-      svg += `<text class="hm-month-label" data-date="${label.date}" x="${label.x}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${label.text}</text>`;
-    });
     svg += '</g></svg>';
     const active = data.days.filter(day => day.count > 0).length;
     const activeRate = (active / data.days.length * 100).toFixed(1);
     const recentActive = data.days.slice(-30).filter(day => day.count > 0).length;
     area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;"><span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span></span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
     drawnWidth = area.clientWidth;
+    if (!homeLayout) {
+      const wrap = area.querySelector('.hm-scroll');
+      setTimeout(() => { wrap.scrollLeft = wrap.scrollWidth; }, 0);
+    }
     if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) {
       area.querySelectorAll('.hm-cell').forEach(rect => { rect.style.opacity = '1'; });
     } else {

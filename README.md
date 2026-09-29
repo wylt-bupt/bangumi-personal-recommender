@@ -12,7 +12,7 @@
 ## 当前版本
 
 - 推荐与回顾组件：`0.11.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；开发者本人可使用未审核版本。
-- 独立活跃度热力图：`1.0.13`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
+- 独立活跃度热力图：`1.0.14`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
 
 ## 0.11.0：从零重建动画推荐
@@ -48,6 +48,11 @@
 - `src/series-family.cjs` 与 `scripts/family-folds.cjs`：离线评测系列分组，不依赖旧推荐核心。
 - `legacy/src/`、`legacy/tests/`、`legacy/backups/`：旧源码、历史测试和原始备份，不混入当前源码目录。
 - [旧版说明与版本历史](docs/legacy-readme-through-0.10.8.md)。
+
+## 1.0.14：首页与个人主页使用各自的热力图布局
+
+- Bangumi 首页保留按容器宽度自适应周数、无横向滚动条、月份显示在 1 号所在列上方的布局。
+- `wylt` 个人主页恢复全年热力图与横向滚动，月份标签恢复原先的周列位置。
 
 ## 1.0.13：月份标签对齐到 1 号
 

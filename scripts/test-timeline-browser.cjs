@@ -35,6 +35,7 @@ function fixture(type, page, extra = false) {
 }
 
 const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fafafa}#columnHomeB{width:min(100%,820px);margin:auto}</style><div id="dock"><a href="https://bgm.tv/user/wylt" title="时光机">wylt</a></div><div id="columnHomeB" class="column"></div></html>';
+const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fafafa}#user_home{width:min(100%,820px);margin:auto}#blog{height:20px}</style><div id="dock"><a href="https://bgm.tv/user/wylt" title="时光机">wylt</a></div><div id="user_home"><div id="blog"></div></div></html>';
 
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -47,6 +48,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     requests.push(url.href);
     if (url.origin !== 'https://bgm.tv') throw new Error(`Unexpected external request: ${url.href}`);
     if (url.pathname === '/') return route.fulfill({ status: 200, contentType: 'text/html', body: rootHTML });
+    if (url.pathname === '/user/wylt') return route.fulfill({ status: 200, contentType: 'text/html', body: profileHTML });
     assert.equal(url.pathname, '/user/wylt/timeline');
     inflight++; maxInflight = Math.max(maxInflight, inflight);
     await new Promise(resolve => setTimeout(resolve, 30));
@@ -55,7 +57,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
   });
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
-  const load = async target => { await target.goto('https://bgm.tv/'); await target.addScriptTag({ content: code }); await target.locator('#bgmtl-personal').waitFor(); };
+  const load = async (target, url = 'https://bgm.tv/') => { await target.goto(url); await target.addScriptTag({ content: code }); await target.locator('#bgmtl-personal').waitFor(); };
   const prepareRefresh = () => page.evaluate(() => new Promise((resolve, reject) => {
     const req = indexedDB.open('bangumi-personal-timeline', 1);
     req.onerror = () => reject(req.error);
@@ -122,6 +124,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(style.padding, '12px 15px'); assert.equal(style.radius, '10px');
     assert.equal(style.titleSize, '14px'); assert.equal(style.titleColor, 'rgb(240, 145, 153)');
     assert.equal(style.cellWidth, '9.5');
+    assert.ok(await page.locator('#hm-dashboard').evaluate(element => element.classList.contains('home-layout')));
     const heatColors = await page.locator('#hm-dashboard').evaluate(element => ['empty', 'l1', 'l2', 'l3'].map(level => getComputedStyle(element).getPropertyValue(`--hm-cell-${level}`).trim()));
     assert.deepEqual(heatColors, ['#f2f2f2', '#f8cdd4', '#ed7790', '#c83d64']);
     assert.ok(await page.locator('.hm-scroll').evaluate(element => element.scrollWidth <= element.clientWidth), 'the heatmap must fit without horizontal scrolling');
@@ -155,6 +158,26 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.ok(visibleWeeks[1200] > visibleWeeks[375], `wide layout should show more history: ${JSON.stringify(visibleWeeks)}`);
     assert.ok(oldestVisibleDays[1200] < oldestVisibleDays[375], 'a wider layout should reveal earlier dates');
 
+    // The profile keeps the original full-year, horizontally scrollable chart.
+    const profilePage = await context.newPage();
+    profilePage.on('pageerror', error => errors.push(error.message));
+    await profilePage.setViewportSize({ width: 375, height: 812 });
+    await load(profilePage, 'https://bgm.tv/user/wylt');
+    await profilePage.locator('.hm-cell').first().waitFor({ state: 'visible', timeout: 30000 });
+    assert.ok(await profilePage.locator('#hm-dashboard').evaluate(element => element.classList.contains('profile-layout')));
+    assert.equal(await profilePage.locator('.hm-cell').count(), cellCount, 'profile shows the same full-year day range');
+    assert.equal(await profilePage.locator('.hm-month-label').count(), 0, 'profile retains the original week-based month labels');
+    const profileScroll = profilePage.locator('.hm-scroll');
+    assert.equal(await profileScroll.evaluate(element => getComputedStyle(element).overflowX), 'auto');
+    assert.ok(await profileScroll.evaluate(element => element.scrollWidth > element.clientWidth), 'profile retains horizontal scrolling on narrow screens');
+    assert.ok(await profileScroll.locator('svg').evaluate(element => Number.parseFloat(element.style.minWidth) > 500), 'profile retains the full-year SVG width');
+    await profilePage.waitForFunction(() => {
+      const element = document.querySelector('#bgmtl-personal')?.shadowRoot?.querySelector('.hm-scroll');
+      return element && element.scrollLeft + element.clientWidth >= element.scrollWidth - 2;
+    });
+    assert.deepEqual(errors, []);
+    await profilePage.close();
+
     // A cached heatmap renders immediately and does not refetch history while fresh.
     const beforeReload = requests.length;
     await load(page); await page.locator('.hm-cell').first().waitFor();
@@ -181,6 +204,6 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     await load(page); await page.locator('.hm-cell').first().waitFor();
     assert.equal(await page.locator('.hm-cell').first().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);
-    console.log('PASS: adaptive heatmap width without scrolling, parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
+    console.log('PASS: homepage adaptive heatmap without scrolling; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
