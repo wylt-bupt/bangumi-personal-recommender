@@ -1,7 +1,7 @@
 // Read-only, reproducible profile snapshot. Raw collections stay ignored by Git.
 const fs = require('node:fs');
 const path = require('node:path');
-const Core = require('../../src/core.cjs');
+const Core = require('../../legacy/src/core.cjs');
 
 const ROOT = __dirname;
 const SUBJECT_TYPES = [2, 1, 4, 3, 6];

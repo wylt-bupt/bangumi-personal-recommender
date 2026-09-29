@@ -2,6 +2,13 @@
 
 面向 `wylt` 个人主页的动画回顾与推荐组件。推荐只读公开的 Bangumi 收藏与评分；独立的“活跃度热力图”组件保持原有观看集数口径，不随推荐算法更新。
 
+## 项目文档入口
+
+- [开发设计与协作准则](AGENTS.md)：用户六条原则完整正文、执行与交付要求；后续开发首先阅读。
+- [开发维护说明](docs/development.md)：目录、模块、验证、数据刷新与发布。
+- [实验索引](experiments/README.md)：区分当前重建依据与已被取代的旧模型试验。
+- [历史实现说明](legacy/README.md)与[旧版本记录](docs/legacy-readme-through-0.10.8.md)：仅供追溯，不是当前需求。
+
 ## 当前版本
 
 - 推荐与回顾组件：`0.11.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；开发者本人可使用未审核版本。
@@ -29,7 +36,7 @@
 
 ## 构建与验证
 
-在仓库根目录执行 `npm run verify`，会重建两个组件、检查语法并运行测试。浏览器级预览使用 `demo/profile.html`；推荐页测试应覆盖桌面/窄屏、暗色、分页、展开理由、隐藏/撤销和网络回退。发布产物为 `dist/bangumi-personal-recommender.user.js`；同目录 `.bgm.txt` 与它逐字相同，可直接粘贴到 Bangumi 开发者平台。热力图产物为 `dist/bangumi-personal-timeline.user.js`。
+在仓库根目录执行 `npm run verify`，会重建两个组件、检查语法，并分别运行当前测试和历史兼容测试。`npm test` 只验证当前实现，`npm run test:legacy` 单独验证归档源码。浏览器预览从 `demo/index.html` 导航至 `demo/profile.html` 等页面；验收应覆盖桌面/窄屏、暗色、分页、展开理由、隐藏/撤销和网络回退。发布产物为 `dist/bangumi-personal-recommender.user.js`；同目录 `.bgm.txt` 与它逐字相同，可粘贴到 Bangumi。热力图产物为 `dist/bangumi-personal-timeline.user.js`。浏览器验收条件详见开发维护说明，`npm run verify` 不自动启动浏览器。
 
 首次生成或月度刷新聚合数据：`node scripts/refresh-recommendations.cjs`。需要 Node.js 22、Python 3.12 与 NumPy 2.x，且会持续读取大量公开 API 页面；不要在普通页面加载时运行。测试原始数据放在 `scripts/.cache/`，已被 Git 忽略。
 
@@ -38,7 +45,10 @@
 - `src/recommendation-feed.cjs`：清单校验、归一化、已标记过滤。
 - `src/recommender-v2.js`：页面加载与展示；`src/stats*.js` / `src/stats*.cjs`：独立动画回顾。
 - `scripts/build-recommendations.py` 与 `scripts/refresh-recommendations.cjs`：月度训练及公开数据更新。
-- `src/core.cjs`、`src/component.js`：旧版推荐的历史源码，不再进入构建；其旧测试仍留作历史行为记录。
+- `src/series-family.cjs` 与 `scripts/family-folds.cjs`：离线评测系列分组，不依赖旧推荐核心。
+- `legacy/src/`、`legacy/tests/`、`legacy/backups/`：旧源码、历史测试和原始备份，不混入当前源码目录。
 - [旧版说明与版本历史](docs/legacy-readme-through-0.10.8.md)。
+
+2026-09-29 文档与目录整理：完整落实用户设计原则，隔离历史实现，更新预览/发布辅助入口与实验导航；不改变组件发布版本或推荐数据。
 
 本项目只读取公开收藏与评分；推荐分数是统计预测，不代表 Bangumi 官方结论。组件不改动个人收藏、评分或标签，也不会把他人的逐条评分发布到仓库。

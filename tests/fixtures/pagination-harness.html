@@ -13,11 +13,18 @@
     <script>
       document.title = "分页测试：载入中";
       document.querySelectorAll("#bgmpr-host, #bgmstats-host").forEach((element) => element.remove());
+      // A fixture must not read real collections or the remote feed.
+      window.fetch = async (input) => {
+        if (String(input).includes("/collections")) {
+          return new Response(JSON.stringify({ total: 0, data: [] }), { status: 200 });
+        }
+        throw new Error("分页夹具禁止外部请求");
+      };
     </script>
     <script src="/dist/bangumi-personal-recommender.user.js"></script>
     <script>
       document.title = "分页测试：脚本已载入";
-      setTimeout(() => {
+      document.addEventListener("DOMContentLoaded", () => {
         const app = window.BangumiPersonalRecommender;
         if (!app) {
           document.title = "分页测试：组件未挂载";
@@ -38,19 +45,17 @@
           collaborativeLift: 0.1,
         }));
         app.state.open = true;
-        setTimeout(() => {
-          try {
-            app.state.profile = { collectionCount: 240, ratedCount: 168 };
-            app.state.eligibleCandidateCount = 180;
-            app.state.pageOrder = pageOrder;
-            app.renderFromPool();
-            const pageStatus = app.shadow.querySelector(".page-status")?.innerText || "分页缺失";
-            document.title = `分页测试：${app.state.current.length} 个｜${pageStatus.replace(/\s+/g, " ")}`;
-          } catch (error) {
-            document.title = `分页测试错误：${error.message}`;
-          }
-        }, 800);
-      }, 200);
+        try {
+          app.state.profile = { collectionCount: 240, ratedCount: 168 };
+          app.state.eligibleCandidateCount = 180;
+          app.state.pageOrder = pageOrder;
+          app.renderFromPool();
+          const pageSelect = app.shadow.querySelector("[data-page-select]");
+          document.title = `分页测试：${app.state.current.length} 个｜第 ${pageSelect.value} / ${pageSelect.options.length} 页`;
+        } catch (error) {
+          document.title = `分页测试错误：${error.message}`;
+        }
+      });
     </script>
   </body>
 </html>

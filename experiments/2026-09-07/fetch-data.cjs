@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const Core = require('../../src/core.cjs');
+const Core = require('../../legacy/src/core.cjs');
 const root = __dirname;
 const cache = path.join(root, 'data');
 fs.mkdirSync(cache, {recursive:true});

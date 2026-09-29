@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const Core = require('../../src/core.cjs');
+const Core = require('../../legacy/src/core.cjs');
 
 const snapshot = JSON.parse(fs.readFileSync(path.join(__dirname, '../2026-09-27/snapshot.json'), 'utf8'));
 const own = snapshot.collections[2].filter(row => row.rate > 0);

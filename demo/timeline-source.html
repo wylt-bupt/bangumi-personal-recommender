@@ -1,1 +1,10 @@
-<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>个人时光机发布源码</title><h1>个人时光机 1.0.6</h1><textarea aria-label="构建源码" style="width:95vw;height:75vh" readonly></textarea><script>fetch('../dist/bangumi-personal-timeline.user.js').then(r=>r.text()).then(s=>document.querySelector('textarea').value=s);</script></html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>活跃度热力图发布源码</title>
+<style>body{max-width:900px;margin:28px auto;padding:0 18px;font:14px/1.6 system-ui,sans-serif;color:#333}textarea{display:block;width:100%;height:70vh;font:11px/1.45 monospace}p{color:#666}</style></head>
+<body><h1>活跃度热力图 · 发布脚本</h1><p id="status">正在载入本地构建产物…</p><textarea id="script" aria-label="可复制的完整组件脚本" readonly></textarea>
+<script>
+fetch('../dist/bangumi-personal-timeline.user.js',{cache:'no-cache'})
+  .then(response=>{if(!response.ok)throw new Error(`HTTP ${response.status}`);return response.text()})
+  .then(text=>{document.getElementById('script').value=text;const version=text.match(/^\/\/ @version\s+(\S+)/m)?.[1]||'未知';document.getElementById('status').textContent=`版本 ${version} · ${text.length} 个字符。点入文本框后全选复制。`})
+  .catch(error=>{document.getElementById('status').textContent=`读取失败：${error.message}`});
+</script></body></html>

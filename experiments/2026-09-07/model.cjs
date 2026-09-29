@@ -1,5 +1,5 @@
 // Experimental main-score variants. Production modules are only imported, never edited.
-const Core=require('../../src/core.cjs');
+const Core=require('../../legacy/src/core.cjs');
 const clamp=Core.clamp;
 const sum=xs=>xs.reduce((a,b)=>a+b,0);
 const mean=xs=>xs.length?sum(xs)/xs.length:0;

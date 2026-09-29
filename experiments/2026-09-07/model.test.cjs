@@ -1,7 +1,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const M=require('./model.cjs');
-const Core=require('../../src/core.cjs');
+const Core=require('../../legacy/src/core.cjs');
 function fixture(){
   const collections=Array.from({length:12},(_,i)=>Core.normalizeCollection({subject_id:i+1,type:2,rate:5+i%5,tags:[],subject:{id:i+1,type:2,name:'test'+i,tags:['校园',i%2?'恋爱':'科幻'],rating:{score:7,total:500}}}));
   const candidates=[Core.normalizeSubject({id:100,type:2,tags:['校园','恋爱'],rating:{score:7,total:500}})];

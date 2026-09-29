@@ -2,7 +2,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const assert=require('node:assert/strict');
 const crypto=require('node:crypto');
-const Core=require('../../src/core.cjs');
+const Core=require('../../legacy/src/core.cjs');
 const M=require('./model.cjs');
 const {mean,sum}=M;
 const root=__dirname;
@@ -118,7 +118,7 @@ for(const v of ['A','D']){
 const familySizes=new Map();p.rated.forEach(r=>familySizes.set(r.group,(familySizes.get(r.group)||0)+1));
 const uncertainty=Object.fromEntries(['B','C','D'].map(v=>[v,pairedInterval(observations.A,observations[v])]));
 if(observations.E)uncertainty.E=pairedInterval(observations.D.filter(r=>gender.get(r.id)?.ratio!==null&&gender.get(r.id)?.ratio!==undefined),observations.E);
-const result={createdAt:new Date().toISOString(),snapshotAt:snapshot.at,sourceHash:hash(fs.readFileSync(path.join(root,'../../src/core.cjs'),'utf8')),scope:'Frozen public API snapshot, current main scorer before structured-credits blend; identical Japanese-only unmarked candidate pool. MMR unchanged. No production edits.',data:{collections:snapshot.collections.length,rated:p.rated.length,candidates:snapshot.candidates.length,families:familySizes.size,relationErrors:snapshot.relations.filter(r=>r.error).length,largestFamilies:[...familySizes].sort((a,b)=>b[1]-a[1]).slice(0,10)},labels:label,evaluation,uncertainty,influence,retrieval,gender:{sampling:genderData?.sampling,fit:genderFit,knownTraining:p.rated.filter(r=>gender.get(r.subjectId)?.ratio!==null&&gender.get(r.subjectId)?.ratio!==undefined).length,knownCandidates:snapshot.candidates.filter(s=>gender.get(s.id)?.ratio!==null&&gender.get(s.id)?.ratio!==undefined).length,errors:genderData?.characters.filter(c=>c.error).length||0},rankings,observations};
+const result={createdAt:new Date().toISOString(),snapshotAt:snapshot.at,sourceHash:hash(fs.readFileSync(path.join(root,'../../legacy/src/core.cjs'),'utf8')),scope:'Frozen public API snapshot, current main scorer before structured-credits blend; identical Japanese-only unmarked candidate pool. MMR unchanged. No production edits.',data:{collections:snapshot.collections.length,rated:p.rated.length,candidates:snapshot.candidates.length,families:familySizes.size,relationErrors:snapshot.relations.filter(r=>r.error).length,largestFamilies:[...familySizes].sort((a,b)=>b[1]-a[1]).slice(0,10)},labels:label,evaluation,uncertainty,influence,retrieval,gender:{sampling:genderData?.sampling,fit:genderFit,knownTraining:p.rated.filter(r=>gender.get(r.subjectId)?.ratio!==null&&gender.get(r.subjectId)?.ratio!==undefined).length,knownCandidates:snapshot.candidates.filter(s=>gender.get(s.id)?.ratio!==null&&gender.get(s.id)?.ratio!==undefined).length,errors:genderData?.characters.filter(c=>c.error).length||0},rankings,observations};
 fs.writeFileSync(path.join(root,'results.json'),JSON.stringify(result,null,2));
 const round=n=>Number(n).toFixed(4);
 const csv=['variant,stage,rank,id,name,predicted,gender_adjustment',...Object.entries(rankings).flatMap(([v,stages])=>Object.entries(stages).flatMap(([stage,rows])=>rows.map((r,i)=>[v,stage,i+1,r.id,JSON.stringify(r.name),round(r.predicted),round(r.genderAdjustment)].join(','))))].join('\n');

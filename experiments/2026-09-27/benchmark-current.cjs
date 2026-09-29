@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const Core = require('../../src/core.cjs');
+const Core = require('../../legacy/src/core.cjs');
 
 const root = __dirname;
 const snapshot = JSON.parse(fs.readFileSync(path.join(root, 'snapshot.json'), 'utf8'));

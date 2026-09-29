@@ -2,7 +2,7 @@
 // real predictive information for wylt, compared on identical held-out titles.
 const fs = require('node:fs');
 const path = require('node:path');
-const Core = require('../../src/core.cjs');
+const Core = require('../../legacy/src/core.cjs');
 
 const snapshot = JSON.parse(fs.readFileSync(path.join(__dirname, '../2026-09-27/snapshot.json'), 'utf8'));
 const pilot = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/peers.json'), 'utf8'));

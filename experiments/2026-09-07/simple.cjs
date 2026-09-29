@@ -1,7 +1,7 @@
 // Deliberately small model: BGM/user ratings plus recurring content tags only.
 const fs=require('node:fs');
 const path=require('node:path');
-const Core=require('../../src/core.cjs');
+const Core=require('../../legacy/src/core.cjs');
 const M=require('./model.cjs');
 const root=__dirname;
 const snapshot=JSON.parse(fs.readFileSync(path.join(root,'snapshot.json'),'utf8'));

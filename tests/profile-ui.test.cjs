@@ -28,5 +28,5 @@ test('profile UI has no floating drawers, redundant headline statistics or decor
 });
 test('both widgets share profile mounting and appearance; algorithm stays independent',()=>{
   for(const file of ['src/recommender-v2.js','src/stats.js'])assert.match(fs.readFileSync(file,'utf8'),/BangumiProfileUI\?\.mount/);
-  assert.ok(!fs.readFileSync('src/core.cjs','utf8').includes('BangumiProfileUI'));
+  for(const file of ['src/recommendation-feed.cjs','src/series-family.cjs'])assert.ok(!fs.readFileSync(file,'utf8').includes('BangumiProfileUI'));
 });

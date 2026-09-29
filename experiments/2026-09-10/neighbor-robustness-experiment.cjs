@@ -2,7 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const Core = require("../../src/core.cjs");
+const Core = require("../../legacy/src/core.cjs");
 const Existing = require("./run.cjs");
 
 const ROOT = path.resolve(__dirname, "../..");
