@@ -30,7 +30,7 @@ assert.equal(episodeAggregate.total, 12);
 function fixture(type, page, extra = false) {
   const base = type === 'subject' ? 100 : 200;
   const rows = page === 1 ? [0, 1, 2].map(i => ({ id: base + i, time: now - (i + 1) * 86400000 })) : [{ id: base + 4, time: now - 400 * 86400000 }];
-  if (extra && page === 1) rows.unshift({ id: base + 10, time: now - 3600000 });
+  if (extra && page === 1) rows.unshift({ id: base + 10, time: now - 1000 });
   return `<html><a href="/user/wylt">wylt</a><div id="timeline"><ul>${rows.map((event, i) => `<li id="tml_${event.id}"><span class="info_full">${type === 'progress' ? `看过 <a href="/subject/ep/${i + 1}">ep.${i + 1}</a>` : '收藏了'} <a href="/subject/${i + 1}">作品 &lt;img onerror=alert(1)&gt;</a><div class="card"><img src="https://never-request.invalid/cover.jpg"><a href="/subject/${i + 1}">封面</a></div><div class="date"><span title="${stamp(event.time)}">昨天</span> · ${i % 2 ? '<a href="/dev/app/1">API</a>' : 'web'}</div></span></li>`).join('')}</ul></div>${page === 1 ? `<a href="/user/wylt/timeline?type=${type}&page=2">下一页 ››</a>` : ''}</html>`;
 }
 
@@ -101,8 +101,11 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     assert.equal(await page.locator('.hm-chart-area i').count(), 4);
     assert.match(await page.locator('.hm-cell').last().locator('title').textContent(), /\d{4}-\d{2}-\d{2}: \d+ 集/);
     const monthLabelBoxes = await page.locator('.hm-month-label').evaluateAll(labels => labels.map(label => {
-      const box = label.getBBox(); return { text: label.textContent, x: box.x, right: box.x + box.width };
+      const box = label.getBBox(), date = label.getAttribute('data-date');
+      const dayCell = [...label.ownerSVGElement.querySelectorAll('.hm-cell')].find(cell => cell.querySelector('title')?.textContent.startsWith(`${date}:`));
+      return { text: label.textContent, date, x: box.x, right: box.x + box.width, labelX: label.getAttribute('x'), dayX: dayCell?.getAttribute('x') };
     }));
+    assert.ok(monthLabelBoxes.every(label => label.date.endsWith('-01') && label.labelX === label.dayX), `month labels should align with day 1 columns: ${JSON.stringify(monthLabelBoxes)}`);
     for (let index = 1; index < monthLabelBoxes.length; index++) {
       assert.ok(monthLabelBoxes[index - 1].right <= monthLabelBoxes[index].x, `month labels overlap: ${JSON.stringify(monthLabelBoxes)}`);
     }
@@ -156,7 +159,7 @@ const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta cha
     const beforeReload = requests.length;
     await load(page); await page.locator('.hm-cell').first().waitFor();
     const reloadRequests = requests.slice(beforeReload).map(value => new URL(value));
-    assert.ok(reloadRequests.every(url => url.pathname === '/' || url.searchParams.get('page') === '1'), 'cached reload must not refetch historical pages');
+    assert.ok(reloadRequests.every(url => url.pathname === '/' || url.searchParams.get('page') === '1'), `cached reload must not refetch historical pages: ${reloadRequests.map(url => url.href).join(', ')}`);
 
     // Stale cursors refresh automatically; there is no sync control in the UI.
     extra = true; await prepareRefresh(); await load(page);

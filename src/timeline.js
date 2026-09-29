@@ -110,7 +110,6 @@
     const width = padL + cols * (cell + gap) + padR;
     const height = padT + rows * (cell + gap) + 4;
     const weekdays = ['一', '', '三', '', '五', '', '日'];
-    const monthDrawn = Object.create(null);
     const monthLabels = [];
     let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block" role="img" aria-label="每日观看集数热力图"><g transform="translate(${padL} ${padT})">`;
     weekdays.forEach((label, row) => {
@@ -121,12 +120,9 @@
       cursor.setUTCDate(cursor.getUTCDate() + offset);
       const col = Math.floor((offset - firstOffset) / 7), row = offset % 7;
       const key = cursor.toISOString().slice(0, 10), count = counts.get(key) || 0;
-      if (row === 0) {
+      if (cursor.getUTCDate() === 1) {
         const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
-        if (!monthDrawn[mon] && col > 0 && col < cols) {
-          monthDrawn[mon] = true;
-          monthLabels.push({ x: col * (cell + gap), text: mon });
-        }
+        monthLabels.push({ x: col * (cell + gap), text: mon, date: key });
       }
       const fill = count === 0 ? 'var(--hm-cell-empty)' : count <= 3 ? 'var(--hm-cell-l1)' : count <= 9 ? 'var(--hm-cell-l2)' : 'var(--hm-cell-l3)';
       svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 集</title></rect>`;
@@ -144,7 +140,7 @@
       }
     }
     visibleMonths.reverse().forEach(label => {
-      svg += `<text class="hm-month-label" x="${label.x}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${label.text}</text>`;
+      svg += `<text class="hm-month-label" data-date="${label.date}" x="${label.x}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${label.text}</text>`;
     });
     svg += '</g></svg>';
     const active = data.days.filter(day => day.count > 0).length;
