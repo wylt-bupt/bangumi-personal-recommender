@@ -47,7 +47,7 @@ legacy/                     旧推荐源码、测试与备份
 
 `demo/profile.html` 使用演示推荐与回顾数据；分页夹具禁止真实 API/清单请求。`demo/timeline.html` 只验证本地挂载、读取该本地站点的已有缓存，不自动采集或造出观看记录；首次没有缓存时会保持“正在整理”外壳，不能把它算成完整热力图验收。完整解析/同步/绘图测试使用下述隔离夹具脚本。
 
-`scripts/test-profile-browser.cjs`、`scripts/test-stats-viz-browser.cjs`、`scripts/test-timeline-browser.cjs` 为隔离浏览器回归脚本，需要外部安装的 `playwright` 和 Chrome，不是组件运行依赖，不包含在 `npm run verify` 中。前两者需要本地服务器；热力图脚本通过请求夹具独立运行。操作用户已登录的 Chrome 时按用户要求使用 Codex 浏览器插件，不用这些脚本接管登录浏览器。
+`scripts/test-profile-browser.cjs`、`scripts/test-stats-viz-browser.cjs`、`scripts/test-timeline-browser.cjs` 为隔离浏览器回归脚本，需要外部安装的 `playwright` 和 Chrome，不是组件运行依赖，不包含在 `npm run verify` 中。前两者需要本地服务器；热力图脚本通过请求夹具独立运行。浏览器与电脑交互工具选择遵循 [AGENTS.md](../AGENTS.md#浏览器与电脑交互工具)，不用这些脚本接管用户的登录浏览器。
 
 ## 数据刷新与交付
 
@@ -57,6 +57,10 @@ legacy/                     旧推荐源码、测试与备份
 - 纯文档或行为不变的目录整理仍验证、提交、推送；若 `dist/` 和聚合清单逐字未变，就没有需要升级或重发的组件版本。
 
 ## 2026-09-30 维护记录
+
+明确本项目的交互工具优先级：浏览器使用 Codex 官方浏览器/Chrome；桌面应用及系统界面在可用且已授权时优先使用 KimiCU。当前本机的 `kimi-webbridge/agents/openai.yaml` 设置 `policy.allow_implicit_invocation: false`，保留明确指定时的手动调用；该技能策略是本机设置，不随仓库自动安装。全局 `AGENTS.md`、Codex `config.toml`、KimiCU 服务配置与 Kimi 技能正文不变。此轮仅更新协作规范，不改变组件版本或重新发布 Bangumi 代码。
+
+验证：技能结构校验与调用策略 YAML 校验通过；`npm run verify` 通过（42 项当前测试、25 项兼容测试），文档链接检查通过。重建的三个发布文件和聚合清单与修改前 SHA-256 完全一致；全局指令、Codex 配置和 Kimi 技能正文也逐字未变。调用策略是否已被当前会话热加载未验证，应在新任务中核对；如未刷新，重启 Codex。不启动 Kimi 服务做手动调用测试，以免为了验证策略而发生不必要的浏览器或电脑操作。
 
 活跃度热力图 `1.0.14`：仅 Bangumi 首页使用按组件宽度自适应的热力图；`wylt` 个人主页恢复全年网格、横向滚动与原有周列月份标签。`npm run verify` 通过（42 项当前测试、25 项兼容测试），隔离浏览器回归验证首页与个人主页布局分流及既有的同步、缓存、错误回退、窄屏、暗色和减少动画场景。Bangumi 7057 现有开发草稿已更新至 `1.0.14`，未提交全站审核；登录态个人主页检查显示 367 个全年格子，首页在 319px 热力图容器内显示 24 周、无横向溢出。
 

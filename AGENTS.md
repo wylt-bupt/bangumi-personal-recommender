@@ -23,6 +23,13 @@ AI 开发的核心风险不是能力不足，而是用训练惯性替代需求�
 - 原始个人/公开用户逐条评分与采集缓存不得进入发布产物或 Git；只发布必要的聚合结果。不创建空文档框架或占位模板，文档围绕实际决策、接口和维护需要增长。
 - 每轮完成后更新受影响的文档和验证记录；具体目录、验证和交付入口见 [开发维护说明](docs/development.md)。设计原则只在本文件维护，其他文档引用它，避免多个版本漂移。
 
+## 浏览器与电脑交互工具
+
+- 本项目需要浏览器交互时，优先使用 Codex 官方 [@浏览器](plugin://browser@openai-bundled) 或 [@Chrome](plugin://browser@openai-bundled?browserFamily=chrome)。需要用户现有登录态、标签页或 Chrome 扩展时使用 @Chrome；本地预览可使用 @浏览器。先检查实际连接与可用能力，不把官方工具当成第三方服务失败后的备用入口。
+- `kimi-webbridge` 保留手动调用，仅在用户明确指定时使用；不因一般网页任务自动触发，也不作为官方浏览器工具的静默回退。
+- 浏览器交互与原生电脑操控分开选择工具：本项目需要操控桌面应用或系统界面时，在工具可用且任务已授权的前提下优先使用 KimiCU。保持 KimiCU 服务及现有配置，不因浏览器选择规则禁用或屏蔽它。
+- 上述工具优先级仅作为本项目约束，不修改全局 `AGENTS.md`。工具选择不扩大任务授权，也不替代适用的安全或确认要求。
+
 ## Project delivery workflow
 
 Unless the user explicitly asks for a local-only draft, do not treat a product change as complete until the full delivery flow is finished:
