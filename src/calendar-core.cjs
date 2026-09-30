@@ -51,13 +51,29 @@
     const byId = new Map(collections.map(row => [row.id, row.type]));
     return calendar.map(day => ({ weekday: day.weekday, items: day.items.filter(item => byId.has(item.id) && (!onlyWatching || byId.get(item.id) === 3)).map(item => ({ ...item, type: byId.get(item.id) })) }));
   }
-  function weekDates(now = new Date()) {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-    return Array.from({ length: 7 }, (_, index) => {
-      const offset = index - 1;
-      const date = new Date(day); date.setDate(date.getDate() + offset);
-      return { weekday: date.getDay() || 7, date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`, label: `${date.getMonth() + 1}/${date.getDate()}`, relative: offset === -1 ? '昨天' : offset === 0 ? '今天' : offset === 1 ? '明天' : '' };
-    });
+  function dateKey(value = new Date()) {
+    const date = value instanceof Date ? value : new Date(`${value}T12:00:00`);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+  function shiftDate(value, offset) {
+    if (!Number.isInteger(offset)) throw new Error('日期偏移必须是整数');
+    const date = new Date(`${dateKey(value)}T12:00:00`);
+    date.setDate(date.getDate() + offset);
+    return dateKey(date);
+  }
+  function dateEntry(value, today) {
+    const date = new Date(`${dateKey(value)}T12:00:00`), diff = Math.round((date - new Date(`${dateKey(today)}T12:00:00`)) / 86400000);
+    return { weekday: date.getDay() || 7, date: dateKey(date), label: `${date.getMonth() + 1}/${date.getDate()}`, relative: diff === -1 ? '昨天' : diff === 0 ? '今天' : diff === 1 ? '明天' : '' };
+  }
+  function weekDates(anchor = new Date(), today = new Date()) {
+    const date = new Date(`${dateKey(anchor)}T12:00:00`), mondayOffset = (date.getDay() + 6) % 7;
+    date.setDate(date.getDate() - mondayOffset);
+    return Array.from({ length: 7 }, (_, index) => dateEntry(shiftDate(date, index), today));
+  }
+  function dateWindow(anchor = new Date(), count = 3, today = new Date()) {
+    if (!Number.isInteger(count) || count < 1 || count > 7) throw new Error('显示日期列数无效');
+    const first = Math.floor((count - 1) / 2);
+    return Array.from({ length: count }, (_, index) => dateEntry(shiftDate(anchor, index - first), today));
   }
   async function collectPublic(loadPage, progress = () => {}) {
     let offset = 0, total;
@@ -107,5 +123,5 @@
     });
     return { rows, total, next };
   }
-  return { labels, weekdays, routes, imageURL, normalizeCalendar, normalizeCollections, intersect, weekDates, collectPublic, parseCalendarDocument, parseCollectionDocument };
+  return { labels, weekdays, routes, imageURL, normalizeCalendar, normalizeCollections, intersect, dateKey, shiftDate, weekDates, dateWindow, collectPublic, parseCalendarDocument, parseCollectionDocument };
 });

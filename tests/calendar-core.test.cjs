@@ -32,10 +32,13 @@ test('public pagination rejects truncation, repeats and concurrent collection ch
   await assert.rejects(C.collectPublic(async offset => ({ total: 2, offset, data: [{ subject_id: 1, type: 1 }] })), /重复/);
   await assert.rejects(C.collectPublic(async offset => ({ total: offset ? 3 : 2, offset, data: [{ subject_id: offset + 1, type: 1 }] })), /变化/);
 });
-test('dates cross month/year boundaries in the browser local timezone', () => {
-  const dates = C.weekDates(new Date(2026, 11, 31, 23, 59));
-  assert.equal(dates[0].date, '2026-12-30'); assert.equal(dates[1].date, '2026-12-31'); assert.equal(dates[2].date, '2027-01-01');
-  assert.equal(dates[0].relative, '昨天'); assert.equal(dates[1].weekday, 4); assert.equal(dates[1].relative, '今天'); assert.equal(dates[2].relative, '明天');
+test('weekday navigation stays Monday to Sunday and adjacent dates cross week/year boundaries', () => {
+  const now = new Date(2026, 11, 31, 23, 59), dates = C.weekDates(now, now), window = C.dateWindow(now, 3, now);
+  assert.deepEqual(dates.map(day => day.weekday), [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(dates[0].date, '2026-12-28'); assert.equal(dates[6].date, '2027-01-03');
+  assert.equal(dates[3].date, '2026-12-31'); assert.equal(dates[3].relative, '今天');
+  assert.deepEqual(window.map(day => day.date), ['2026-12-30', '2026-12-31', '2027-01-01']);
+  assert.equal(C.shiftDate('2026-12-31', 1), '2027-01-01'); assert.equal(C.shiftDate('2026-12-31', -1), '2026-12-30');
 });
 test('release is independent and paste-friendly output is identical', () => {
   const fs = require('node:fs'), path = require('node:path');

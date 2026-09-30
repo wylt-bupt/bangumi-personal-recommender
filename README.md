@@ -15,7 +15,7 @@
 
 - 推荐与回顾组件：`0.11.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；开发者本人可使用未审核版本。
 - 独立活跃度热力图：`1.0.14`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
-- 独立我的放送表：`1.0.1`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
+- 独立我的放送表：`1.0.2`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
 
 ## 0.11.0：从零重建动画推荐
@@ -64,6 +64,11 @@
 
 - 初始三列改为昨天、今天和明天，今天居中并单独加粗；窄屏按列宽显示今天附近的日期。
 - 日期导航保留昨天起的连续七天，手动翻页与筛选行为不变。
+
+## 我的放送表 1.0.2
+
+- 星期导航固定按周一到周日排列，左右箭头每次只移动前一天或后一天。
+- 日期导航按选中日期所在周显示；中间作品列表跟随日期逐日平移，跨周时仍显示完整的周一到周日。
 
 ## 1.0.14：首页与个人主页使用各自的热力图布局
 

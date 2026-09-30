@@ -63,9 +63,12 @@ function collectionHTML(type, page, options) {
       assert.equal(await p.locator('.day').count(), expectedColumns);
       const adjacentDays = await p.locator('.day').evaluateAll(elements => elements.map(day => Number(day.dataset.weekday)));
       const navLabels = await p.locator('.days button').allTextContents();
+      assert.deepEqual(navLabels, C.weekdays.slice(1));
       const todayIndex = Number(await p.locator('.days button.today').getAttribute('data-day'));
-      const firstVisibleIndex = Math.max(0, todayIndex - Math.floor((expectedColumns - 1) / 2));
-      assert.deepEqual(adjacentDays, navLabels.slice(firstVisibleIndex, firstVisibleIndex + expectedColumns).map(label => C.weekdays.indexOf(label)), `${width}px ${full ? 'full' : 'home'}: today index ${todayIndex}; labels ${navLabels.join(',')}`);
+      const todayWeekday = C.weekdays.indexOf(navLabels[todayIndex]);
+      const firstWeekday = ((todayWeekday - 1 - Math.floor((expectedColumns - 1) / 2) + 7) % 7) + 1;
+      assert.deepEqual(adjacentDays, Array.from({ length: expectedColumns }, (_, i) => ((firstWeekday - 1 + i) % 7) + 1));
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').count(), 1);
       assert.equal(await p.locator('.days button.today').evaluate(button => getComputedStyle(button).fontWeight), '700');
       assert.equal(await p.locator('.days button:not(.today)').evaluateAll(buttons => buttons.some(button => getComputedStyle(button).fontWeight === '700')), false);
       assert.equal(await p.locator('.day.today').count(), 1);
@@ -78,8 +81,20 @@ function collectionHTML(type, page, options) {
       await p.getByRole('button', { name: '仅在看', exact: true }).click();
       for (const text of await p.locator('.state').allTextContents()) assert.equal(text, '在看');
       await p.getByRole('button', { name: '全部收藏', exact: true }).click();
-      const total = f.requests.length; await p.getByRole('button', { name: '较晚日期' }).click();
-      assert.equal(await p.locator('.day').count(), expectedColumns);
+      const total = f.requests.length;
+      const initialDates = await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date));
+      const initialSelected = await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date');
+      await p.getByRole('button', { name: '后一天' }).click();
+      assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates.map(date => C.shiftDate(date, 1)));
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date'), C.shiftDate(initialSelected, 1));
+      await p.getByRole('button', { name: '前一天' }).click();
+      assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates);
+      await p.locator('[data-day="0"]').click(); // Monday
+      await p.getByRole('button', { name: '前一天' }).click(); // Sunday before the week
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-day'), '6');
+      assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => Number(day.dataset.weekday))), expectedColumns === 1 ? [7] : expectedColumns === 2 ? [7, 1] : [6, 7, 1, 2].slice(0, expectedColumns));
+      await p.getByRole('button', { name: '后一天' }).click();
+      await p.locator('.days button.today').click();
       assert.equal(f.requests.length, total); // navigation never refetches data
       await p.getByRole('button', { name: '显示原始放送表' }).click(); assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), true);
       await p.getByRole('button', { name: '返回我的放送表' }).click();

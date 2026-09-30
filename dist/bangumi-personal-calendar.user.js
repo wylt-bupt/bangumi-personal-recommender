@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         我的放送表
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.1
+// @version      1.0.2
 // @description  仅显示我的收藏；按日纵向排列，清晰封面、中文标题，支持站内私密收藏同步。
 // @author       wylt
 // @match        https://bgm.tv/
@@ -65,13 +65,29 @@
     const byId = new Map(collections.map(row => [row.id, row.type]));
     return calendar.map(day => ({ weekday: day.weekday, items: day.items.filter(item => byId.has(item.id) && (!onlyWatching || byId.get(item.id) === 3)).map(item => ({ ...item, type: byId.get(item.id) })) }));
   }
-  function weekDates(now = new Date()) {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-    return Array.from({ length: 7 }, (_, index) => {
-      const offset = index - 1;
-      const date = new Date(day); date.setDate(date.getDate() + offset);
-      return { weekday: date.getDay() || 7, date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`, label: `${date.getMonth() + 1}/${date.getDate()}`, relative: offset === -1 ? '昨天' : offset === 0 ? '今天' : offset === 1 ? '明天' : '' };
-    });
+  function dateKey(value = new Date()) {
+    const date = value instanceof Date ? value : new Date(`${value}T12:00:00`);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+  function shiftDate(value, offset) {
+    if (!Number.isInteger(offset)) throw new Error('日期偏移必须是整数');
+    const date = new Date(`${dateKey(value)}T12:00:00`);
+    date.setDate(date.getDate() + offset);
+    return dateKey(date);
+  }
+  function dateEntry(value, today) {
+    const date = new Date(`${dateKey(value)}T12:00:00`), diff = Math.round((date - new Date(`${dateKey(today)}T12:00:00`)) / 86400000);
+    return { weekday: date.getDay() || 7, date: dateKey(date), label: `${date.getMonth() + 1}/${date.getDate()}`, relative: diff === -1 ? '昨天' : diff === 0 ? '今天' : diff === 1 ? '明天' : '' };
+  }
+  function weekDates(anchor = new Date(), today = new Date()) {
+    const date = new Date(`${dateKey(anchor)}T12:00:00`), mondayOffset = (date.getDay() + 6) % 7;
+    date.setDate(date.getDate() - mondayOffset);
+    return Array.from({ length: 7 }, (_, index) => dateEntry(shiftDate(date, index), today));
+  }
+  function dateWindow(anchor = new Date(), count = 3, today = new Date()) {
+    if (!Number.isInteger(count) || count < 1 || count > 7) throw new Error('显示日期列数无效');
+    const first = Math.floor((count - 1) / 2);
+    return Array.from({ length: count }, (_, index) => dateEntry(shiftDate(anchor, index - first), today));
   }
   async function collectPublic(loadPage, progress = () => {}) {
     let offset = 0, total;
@@ -121,7 +137,7 @@
     });
     return { rows, total, next };
   }
-  return { labels, weekdays, routes, imageURL, normalizeCalendar, normalizeCollections, intersect, weekDates, collectPublic, parseCalendarDocument, parseCollectionDocument };
+  return { labels, weekdays, routes, imageURL, normalizeCalendar, normalizeCollections, intersect, dateKey, shiftDate, weekDates, dateWindow, collectPublic, parseCalendarDocument, parseCollectionDocument };
 });
 
 
@@ -151,11 +167,11 @@
     .week-nav{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line);margin-top:10px}.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));flex:1;min-width:0}.days button{min-height:44px;padding:6px 0;color:var(--muted);font-size:13px}.days button[aria-pressed=true]{color:var(--ink);font-weight:normal}.days button.today{color:var(--accent);font-weight:bold}.arrow{min-width:44px;min-height:44px;font-size:24px;color:var(--muted)}.board{display:grid;grid-template-columns:repeat(var(--columns,3),minmax(0,1fr));gap:24px;margin-top:20px}.day{min-width:0}.day-head{margin-bottom:20px;padding:0 0 8px;border-bottom:3px solid var(--line)}.day.today .day-head{border-color:var(--pink)}.date{font-size:13px;color:var(--muted)}.day-head h3{margin:0;font-size:18px;font-weight:normal}.day.today h3{color:var(--accent);font-weight:bold}.relative{font-size:12px;color:var(--muted);margin-left:8px}.day-list{list-style:none;margin:0 0 0 3px;padding:0 0 0 14px;border-left:1px solid var(--line)}.entry{position:relative;margin-bottom:22px}.entry::before{content:'';position:absolute;left:-18px;top:8px;width:6px;height:6px;background:var(--line);border-radius:50%}.day.today .entry::before{background:var(--pink)}.subject{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:start;min-height:100px}.cover{display:block;width:72px;height:100px;object-fit:contain;background:var(--soft);border-radius:3px}.no-cover{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}.title{display:block;font-size:14px;line-height:1.6;overflow-wrap:anywhere}.state{display:block;font-size:12px;color:var(--muted);margin-top:8px}.state.watching{color:var(--accent)}.empty{color:var(--muted);font-size:13px;padding:8px 0;min-height:100px}.foot{border-top:1px solid var(--line);padding-top:10px;margin-top:4px;display:flex;gap:4px 14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}.foot button{color:var(--muted);min-height:36px;padding:4px 0;text-decoration:underline;text-underline-offset:3px}.note{margin:6px 0 0;color:var(--muted);font-size:12px}.message{margin:8px 0;font-size:13px;overflow-wrap:anywhere}.message:empty{display:none}.message.error{color:var(--accent)}.loading{color:var(--muted)}
     @media(max-width:480px){.panel{padding:12px 10px}.toolbar{gap:0 8px}.toolbar h2{width:100%;margin-bottom:4px}.top-link{margin-left:auto}.board{gap:16px}.subject{grid-template-columns:78px minmax(0,1fr)}.cover{width:78px;height:108px}.title{font-size:16px}.days button{font-size:12px}.arrow{min-width:36px}}
   `;
-  shadow.innerHTML = `<style>${css}</style><section class="panel" aria-label="我的放送表"><div class="toolbar"><h2>我的放送表</h2><div class="filters" role="group" aria-label="收藏筛选"><button data-filter="all" aria-pressed="true">全部收藏</button><button data-filter="watching" aria-pressed="false">仅在看</button></div><button class="refresh">刷新</button><a class="top-link" href="/calendar${full ? '?personal=off' : ''}">${full ? '原始放送表' : '完整放送表'}</a></div><p class="message loading" role="status" aria-live="polite">正在核对我的收藏…</p><nav class="week-nav" aria-label="放送日期" hidden><button class="arrow prev" aria-label="较早日期">‹</button><div class="days"></div><button class="arrow next" aria-label="较晚日期">›</button></nav><div class="board" hidden></div><div class="foot" hidden><span class="checked"></span><button class="complete">包含私密收藏</button><button class="restore">显示原始放送表</button></div><p class="note">按 Bangumi 每周放送表展示；具体播出时间及停播以官方公告为准。</p><button class="cancel" hidden>取消同步</button></section>`;
+  shadow.innerHTML = `<style>${css}</style><section class="panel" aria-label="我的放送表"><div class="toolbar"><h2>我的放送表</h2><div class="filters" role="group" aria-label="收藏筛选"><button data-filter="all" aria-pressed="true">全部收藏</button><button data-filter="watching" aria-pressed="false">仅在看</button></div><button class="refresh">刷新</button><a class="top-link" href="/calendar${full ? '?personal=off' : ''}">${full ? '原始放送表' : '完整放送表'}</a></div><p class="message loading" role="status" aria-live="polite">正在核对我的收藏…</p><nav class="week-nav" aria-label="放送日期" hidden><button class="arrow prev" aria-label="前一天">‹</button><div class="days"></div><button class="arrow next" aria-label="后一天">›</button></nav><div class="board" hidden></div><div class="foot" hidden><span class="checked"></span><button class="complete">包含私密收藏</button><button class="restore">显示原始放送表</button></div><p class="note">按 Bangumi 每周放送表展示；具体播出时间及停播以官方公告为准。</p><button class="cancel" hidden>取消同步</button></section>`;
   const $ = selector => shadow.querySelector(selector);
   $('.complete').title = '通过站内登录态同步全部收藏；首次同步可能较慢，可以取消';
   $('.cancel').style.cssText = 'min-height:44px;padding:6px 10px';
-  let calendar, collections, checkedAt = 0, source = 'public', watching = false, start = 0, columns = 0, ready = false, originalView = false, busy = false, controller, storageBlocked = false, navChanged = false;
+  let calendar, collections, checkedAt = 0, source = 'public', watching = false, selectedDate = C.dateKey(), columns = 0, ready = false, originalView = false, busy = false, controller, storageBlocked = false, navChanged = false;
   const prefix = `bgm-personal-calendar:v1:${username}:`;
   function read(key) { try { return JSON.parse(localStorage.getItem(prefix + key)); } catch { return null; } }
   function save(key, value) { try { localStorage.setItem(prefix + key, JSON.stringify(value)); } catch { storageBlocked = true; } }
@@ -175,18 +191,18 @@
   function render() {
     if (!ready) return;
     const focusedDay = shadow.activeElement?.dataset.day;
-    const dates = C.weekDates(), result = C.intersect(calendar, collections, watching);
-    start = Math.min(Math.max(0, start), 7 - columns);
+    const dates = C.weekDates(selectedDate), visibleDates = C.dateWindow(selectedDate, columns), result = C.intersect(calendar, collections, watching);
     $('.board').style.setProperty('--columns', columns);
     const nav = document.createDocumentFragment(), board = document.createDocumentFragment();
     dates.forEach((day, index) => {
       const btn = element('button', day.relative === '今天' ? 'today' : '', C.weekdays[day.weekday]);
-      btn.dataset.day = index; btn.setAttribute('aria-pressed', String(index >= start && index < start + columns));
+      btn.dataset.day = index; btn.dataset.date = day.date; btn.setAttribute('aria-pressed', String(day.date === selectedDate));
+      if (day.relative === '今天') btn.setAttribute('aria-current', 'date');
       btn.setAttribute('aria-label', `${day.date} ${C.weekdays[day.weekday]}${day.relative ? ` ${day.relative}` : ''}`); nav.append(btn);
     });
-    dates.slice(start, start + columns).forEach(day => {
+    visibleDates.forEach(day => {
       const section = element('section', `day${day.relative === '今天' ? ' today' : ''}`);
-      section.dataset.weekday = day.weekday;
+      section.dataset.weekday = day.weekday; section.dataset.date = day.date;
       const head = element('div', 'day-head'), time = element('time', 'date', day.label); time.dateTime = day.date;
       const heading = element('h3', '', C.weekdays[day.weekday]);
       if (day.relative) heading.append(element('span', 'relative', day.relative));
@@ -209,7 +225,6 @@
     });
     $('.days').replaceChildren(nav); $('.board').replaceChildren(board);
     if (focusedDay !== undefined) $(`[data-day="${focusedDay}"]`)?.focus();
-    $('.prev').disabled = start === 0; $('.next').disabled = start >= 7 - columns;
     shadow.querySelectorAll('[data-filter]').forEach(btn => btn.setAttribute('aria-pressed', String((btn.dataset.filter === 'watching') === watching)));
     $('.checked').textContent = `${source === 'site' ? '含私密收藏' : '公开收藏'} · ${new Date(checkedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 核对${storageBlocked ? ' · 本地缓存不可用' : ''}`;
     $('.complete').textContent = source === 'site' ? '切换公开收藏' : '包含私密收藏';
@@ -311,9 +326,9 @@
   shadow.addEventListener('click', event => {
     const btn = event.target.closest('button'); if (!btn) return;
     if (btn.dataset.filter) { watching = btn.dataset.filter === 'watching'; render(); }
-    else if (btn.dataset.day !== undefined) { navChanged = true; start = Number(btn.dataset.day); render(); }
-    else if (btn.classList.contains('prev')) { navChanged = true; start -= columns; render(); }
-    else if (btn.classList.contains('next')) { navChanged = true; start += columns; render(); }
+    else if (btn.dataset.day !== undefined) { navChanged = true; selectedDate = C.weekDates(selectedDate)[Number(btn.dataset.day)].date; render(); }
+    else if (btn.classList.contains('prev')) { navChanged = true; selectedDate = C.shiftDate(selectedDate, -1); render(); }
+    else if (btn.classList.contains('next')) { navChanged = true; selectedDate = C.shiftDate(selectedDate, 1); render(); }
     else if (btn.classList.contains('refresh')) sync(true);
     else if (btn.classList.contains('complete')) sync(true, source === 'site' ? 'public' : 'site');
     else if (btn.classList.contains('cancel')) controller?.abort();
@@ -323,21 +338,16 @@
   new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); theme();
   function resize(width) {
     const next = Math.min(full ? 4 : 3, Math.max(1, Math.floor((width - 28) / 250)));
-    if (next !== columns) {
-      columns = next;
-      if (!navChanged) start = Math.max(0, C.weekDates().findIndex(day => day.relative === '今天') - Math.floor((columns - 1) / 2));
-      else start = Math.min(start, 7 - columns);
-      render();
-    }
+    if (next !== columns) { columns = next; render(); }
   }
   if ('ResizeObserver' in globalThis) new ResizeObserver(entries => resize(entries[0].contentRect.width)).observe(host);
   resize(host.getBoundingClientRect().width);
-  let dayKey = C.weekDates().find(day => day.relative === '今天')?.date;
+  let dayKey = C.dateKey();
   document.addEventListener('visibilitychange', () => {
-    const today = C.weekDates().find(day => day.relative === '今天')?.date;
+    const today = C.dateKey();
     if (!document.hidden && dayKey !== today) {
-      dayKey = today; navChanged = false;
-      start = Math.max(0, C.weekDates().findIndex(day => day.relative === '今天') - Math.floor((columns - 1) / 2));
+      dayKey = today;
+      if (!navChanged) selectedDate = today;
       render();
     }
   });
