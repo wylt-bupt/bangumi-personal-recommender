@@ -98,9 +98,9 @@ function collectionHTML(type, page, options) {
       assert.equal(f.requests.length, total); // navigation never refetches data
       await p.getByRole('button', { name: '显示原始放送表' }).click(); assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), true);
       await p.getByRole('button', { name: '返回我的放送表' }).click();
+      await p.screenshot({ path: `artifacts/calendar-${full ? 'full' : 'home'}-${width}-${theme}.png`, fullPage: true });
       await p.locator('[data-day="0"]').click();
       assert.equal(await p.locator('[data-day="0"]').evaluate(e => e.getRootNode().activeElement === e), true);
-      await p.screenshot({ path: `artifacts/calendar-${full ? 'full' : 'home'}-${width}-${theme}.png`, fullPage: true });
       await p.reload(); await p.addScriptTag({ content: release }); await p.locator('.board').waitFor({ state: 'visible' });
       assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 2);
       assert.deepEqual(f.errors, []); await f.context.close(); report.push(`${full ? 'calendar' : 'home'} ${width}px ${theme}: layout, safe titles, filtering, navigation, restore, cache passed`);
