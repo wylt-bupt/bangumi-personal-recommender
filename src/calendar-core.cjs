@@ -53,9 +53,10 @@
   }
   function weekDates(now = new Date()) {
     const day = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
-    return Array.from({ length: 7 }, (_, offset) => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const offset = index - 1;
       const date = new Date(day); date.setDate(date.getDate() + offset);
-      return { weekday: date.getDay() || 7, date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`, label: `${date.getMonth() + 1}/${date.getDate()}`, relative: offset === 0 ? '今天' : offset === 1 ? '明天' : '' };
+      return { weekday: date.getDay() || 7, date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`, label: `${date.getMonth() + 1}/${date.getDate()}`, relative: offset === -1 ? '昨天' : offset === 0 ? '今天' : offset === 1 ? '明天' : '' };
     });
   }
   async function collectPublic(loadPage, progress = () => {}) {

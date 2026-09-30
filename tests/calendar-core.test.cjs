@@ -34,7 +34,8 @@ test('public pagination rejects truncation, repeats and concurrent collection ch
 });
 test('dates cross month/year boundaries in the browser local timezone', () => {
   const dates = C.weekDates(new Date(2026, 11, 31, 23, 59));
-  assert.equal(dates[0].date, '2026-12-31'); assert.equal(dates[1].date, '2027-01-01'); assert.equal(dates[0].weekday, 4); assert.equal(dates[1].relative, '明天');
+  assert.equal(dates[0].date, '2026-12-30'); assert.equal(dates[1].date, '2026-12-31'); assert.equal(dates[2].date, '2027-01-01');
+  assert.equal(dates[0].relative, '昨天'); assert.equal(dates[1].weekday, 4); assert.equal(dates[1].relative, '今天'); assert.equal(dates[2].relative, '明天');
 });
 test('release is independent and paste-friendly output is identical', () => {
   const fs = require('node:fs'), path = require('node:path');

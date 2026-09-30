@@ -61,6 +61,14 @@ function collectionHTML(type, page, options) {
       assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       const expectedColumns = full && width === 1200 ? 4 : width === 1200 ? 3 : width === 667 ? 2 : 1;
       assert.equal(await p.locator('.day').count(), expectedColumns);
+      const adjacentDays = await p.locator('.day').evaluateAll(elements => elements.map(day => Number(day.dataset.weekday)));
+      const navLabels = await p.locator('.days button').allTextContents();
+      const todayIndex = Number(await p.locator('.days button.today').getAttribute('data-day'));
+      const firstVisibleIndex = Math.max(0, todayIndex - Math.floor((expectedColumns - 1) / 2));
+      assert.deepEqual(adjacentDays, navLabels.slice(firstVisibleIndex, firstVisibleIndex + expectedColumns).map(label => C.weekdays.indexOf(label)), `${width}px ${full ? 'full' : 'home'}: today index ${todayIndex}; labels ${navLabels.join(',')}`);
+      assert.equal(await p.locator('.days button.today').evaluate(button => getComputedStyle(button).fontWeight), '700');
+      assert.equal(await p.locator('.days button:not(.today)').evaluateAll(buttons => buttons.some(button => getComputedStyle(button).fontWeight === '700')), false);
+      assert.equal(await p.locator('.day.today').count(), 1);
       assert.equal(await p.locator('.title img').count(), 0);
       assert.equal(await p.locator('.subject[href$="4"]').count(), 0);
       assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), false);
