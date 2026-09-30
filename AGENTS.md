@@ -45,6 +45,7 @@ Once the user has explicitly authorized the task scope and release targets, carr
 7. Publish the affected Bangumi component version and verify the live version/page behavior:
    - App `6931`: `dist/bangumi-personal-recommender.user.js` (the `.bgm.txt` file is an identical paste-friendly copy).
    - App `7057`: `dist/bangumi-personal-timeline.user.js`.
+   - App `7211`: `dist/bangumi-personal-calendar.user.js` (the `.bgm.txt` file is an identical paste-friendly copy).
 
 If authentication, permissions, network state, review policy, or a required confirmation prevents publishing, report the exact blocker and the last completed delivery step. Never imply that a local build or Git commit is already live on Bangumi.
 
