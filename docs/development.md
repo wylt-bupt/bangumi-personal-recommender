@@ -30,6 +30,7 @@ legacy/                     旧推荐源码、测试与备份
 | `src/recommendation-feed.cjs`、`src/recommender-v2.js` | 校验清单、过滤全部已标记动画，展示推荐与分页 |
 | `src/stats-core.cjs`、`src/stats-viz.cjs`、`src/stats.js` | 动画回顾、年代、词云、创作与声优统计 |
 | `src/timeline-core.cjs`、`src/timeline.js` | 独立活跃度热力图；只统计看过的集数，不统计收藏操作次数 |
+| `src/calendar-core.cjs`、`src/calendar.js` | 独立个人放送表；七天放送表与当前登录用户五种状态收藏的 ID 交集 |
 | `src/series-family.cjs`、`scripts/family-folds.cjs` | 离线评测的系列分组；不包含旧推荐资格规则或权重 |
 | `scripts/refresh-recommendations.cjs`、`scripts/build-recommendations.py` | 限速读取公开数据，比较模型，生成聚合清单 |
 
@@ -51,12 +52,16 @@ legacy/                     旧推荐源码、测试与备份
 
 ## 数据刷新与交付
 
+“我的放送表”使用 `package.json.calendarVersion` 和 `scripts/build-calendar.mjs` 独立构建，产物为 `dist/bangumi-personal-calendar.user.js` 与逐字相同的 `.bgm.txt`。浏览器回归为 `node scripts/test-calendar-browser.cjs`（隔离请求夹具，不需本地服务器）；预览与源码入口为 `demo/calendar.html`、`demo/calendar-source.html`。数据来源、私密同步、缓存和失败边界见 [放送组件说明](calendar.md)。这个新组件独立发布，不占用应用 6931 或 7057。
+
 - 月度流水线为 [.github/workflows/monthly-recommendations.yml](../.github/workflows/monthly-recommendations.yml)，每月 1 日北京时间 11:17 计划执行，实际启动时间由 GitHub 调度决定。本地正式刷新入口为 `node scripts/refresh-recommendations.cjs`，需要 Node.js 22、Python 3.12、NumPy 2.x；持续请求公开 API，不是日常构建步骤。
 - 月度任务只提交 `public/recommendations.json`，不发布逐人评分，不修改收藏。网页“更新”核对收藏和清单，不即时重训；失败时保留可用旧清单并显示真实日期。
 - 产品变更遵循 [AGENTS.md](../AGENTS.md)：验证、受影响版本、README、构建、提交、推送、Bangumi 发布与线上验收。应用 6931 对应推荐/回顾，7057 对应热力图；推荐 `.user.js` 与 `.bgm.txt` 必须一致。
 - 纯文档或行为不变的目录整理仍验证、提交、推送；若 `dist/` 和聚合清单逐字未变，就没有需要升级或重发的组件版本。
 
 ## 2026-09-30 维护记录
+
+我的放送表 `1.0.0`：新增首页/完整放送页个人视图，按日期分列、条目纵向排列，封面/中文名/五种收藏状态、仅在看筛选、原界面切换、独立缓存和站内私密收藏完整同步。`npm run verify` 通过（49 项当前测试、25 项兼容测试）；隔离浏览器回归通过首页与完整页的 1200/667/375px、暗色、分页与中文回退、标题安全、日期键盘焦点、缓存免请求、五种状态/私密成员、漏页、取消、登录失效和网络回退。构建约 26 KB，没有新增运行依赖；推荐、热力图及聚合推荐清单没有修改。真实私密条目仅在夹具中模拟验证，不能把它说成实际账号私密数据验收。
 
 明确本项目的交互工具优先级：浏览器使用 Codex 官方浏览器/Chrome；桌面应用及系统界面在可用且已授权时优先使用 KimiCU。当前本机的 `kimi-webbridge/agents/openai.yaml` 设置 `policy.allow_implicit_invocation: false`，保留明确指定时的手动调用；该技能策略是本机设置，不随仓库自动安装。全局 `AGENTS.md`、Codex `config.toml`、KimiCU 服务配置与 Kimi 技能正文不变。此轮仅更新协作规范，不改变组件版本或重新发布 Bangumi 代码。
 

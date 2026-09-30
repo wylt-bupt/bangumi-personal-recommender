@@ -2,6 +2,8 @@
 
 面向 `wylt` 个人主页的动画回顾与推荐组件。推荐只读公开的 Bangumi 收藏与评分；独立的“活跃度热力图”组件保持原有观看集数口径，不随推荐算法更新。
 
+独立的“我的放送表”组件在首页和 `/calendar` 展示当前登录用户收藏与每周放送表的交集，按日期分列、条目纵向排列。
+
 ## 项目文档入口
 
 - [开发设计与协作准则](AGENTS.md)：用户六条原则完整正文、执行与交付要求；后续开发首先阅读。
@@ -13,6 +15,7 @@
 
 - 推荐与回顾组件：`0.11.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；开发者本人可使用未审核版本。
 - 独立活跃度热力图：`1.0.14`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
+- 独立我的放送表：`1.0.0`；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
 
 ## 0.11.0：从零重建动画推荐
@@ -36,7 +39,7 @@
 
 ## 构建与验证
 
-在仓库根目录执行 `npm run verify`，会重建两个组件、检查语法，并分别运行当前测试和历史兼容测试。`npm test` 只验证当前实现，`npm run test:legacy` 单独验证归档源码。浏览器预览从 `demo/index.html` 导航至 `demo/profile.html` 等页面；验收应覆盖桌面/窄屏、暗色、分页、展开理由、隐藏/撤销和网络回退。发布产物为 `dist/bangumi-personal-recommender.user.js`；同目录 `.bgm.txt` 与它逐字相同，可粘贴到 Bangumi。热力图产物为 `dist/bangumi-personal-timeline.user.js`。浏览器验收条件详见开发维护说明，`npm run verify` 不自动启动浏览器。
+在仓库根目录执行 `npm run verify`，会重建三个组件、检查语法，并分别运行当前测试和历史兼容测试。`npm test` 只验证当前实现，`npm run test:legacy` 单独验证归档源码。浏览器预览从 `demo/index.html` 导航至 `demo/profile.html` 等页面；验收应覆盖桌面/窄屏、暗色、分页、展开理由、隐藏/撤销和网络回退。发布产物为 `dist/bangumi-personal-recommender.user.js`；同目录 `.bgm.txt` 与它逐字相同，可粘贴到 Bangumi。热力图产物为 `dist/bangumi-personal-timeline.user.js`。浏览器验收条件详见开发维护说明，`npm run verify` 不自动启动浏览器。
 
 首次生成或月度刷新聚合数据：`node scripts/refresh-recommendations.cjs`。需要 Node.js 22、Python 3.12 与 NumPy 2.x，且会持续读取大量公开 API 页面；不要在普通页面加载时运行。测试原始数据放在 `scripts/.cache/`，已被 Git 忽略。
 
@@ -48,6 +51,14 @@
 - `src/series-family.cjs` 与 `scripts/family-folds.cjs`：离线评测系列分组，不依赖旧推荐核心。
 - `legacy/src/`、`legacy/tests/`、`legacy/backups/`：旧源码、历史测试和原始备份，不混入当前源码目录。
 - [旧版说明与版本历史](docs/legacy-readme-through-0.10.8.md)。
+
+## 我的放送表 1.0.0
+
+- 在首页原“每日放送”位置与完整放送页展示个人收藏；大封面、中文名称、收藏状态，按日期分列、番剧纵向排列；桌面最多三列/宽版四列，窄屏单列，支持暗色、键盘日期选择和原始界面切换。
+- 默认保留想看、在看、看过、搁置、抛弃全部状态，提供“仅在看”筛选。只按条目 ID 取交集，不按标题、评分、国家或形式筛选。
+- 默认读取公开收藏，可点击“包含私密收藏”通过本站登录态完整同步五种收藏状态；同步可取消，完整分页验证成功后才更新本地收藏缓存。收藏列表不保存评分、标签、评论或登录凭据。
+- 网络失败保留旧数据并说明错误；首次失败保留原始放送表。未登录及 `?personal=off` 不加载个人数据。
+- 日期代表 Bangumi 的每周放送安排，不保证停播、延期或实际更新集数；不推算具体时间。数据来源、缓存和维护说明见 [放送组件说明](docs/calendar.md)。
 
 ## 1.0.14：首页与个人主页使用各自的热力图布局
 
@@ -69,4 +80,4 @@
 
 2026-09-29 文档与目录整理：完整落实用户设计原则，隔离历史实现，更新预览/发布辅助入口与实验导航；不改变推荐数据。
 
-本项目只读取公开收藏与评分；推荐分数是统计预测，不代表 Bangumi 官方结论。组件不改动个人收藏、评分或标签，也不会把他人的逐条评分发布到仓库。
+推荐只读取公开收藏与评分；推荐分数是统计预测，不代表 Bangumi 官方结论。组件不改动个人收藏、评分或标签，也不会把他人的逐条评分发布到仓库。

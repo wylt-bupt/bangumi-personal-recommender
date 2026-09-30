@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>我的放送表 · 布局预览</title>
+<style>body{margin:32px auto;max-width:1040px;padding:0 16px;background:#fafafa;color:#555;font:14px/1.6 Arial,"Microsoft YaHei",sans-serif}a{color:#a74458}header{margin-bottom:20px}header h1{font-size:20px;font-weight:normal}#home_calendar{max-width:817px}html[data-theme=dark] body{background:#181818;color:#ddd}html[data-theme=dark] .original{background:#292929}.original{padding:16px;border:1px solid #ddd;background:#fff}body[data-calendar-layout=full] #home_calendar{max-width:none}</style>
+<body data-calendar-demo="true"><header><h1>我的放送表</h1><p>隔离演示数据；不读取或修改真实收藏。<a href="?full=1">宽版</a> · <a href="?theme=dark">暗色</a> · <a href="index.html">返回预览导航</a></p></header><div id="home_calendar"><div class="original">原始每日放送（请求失败时保留）</div></div>
+<script>
+const params = new URLSearchParams(location.search);
+document.documentElement.dataset.theme = params.get('theme') || 'light';
+document.body.dataset.calendarLayout = params.has('full') ? 'full' : 'home';
+const current = new Date().getDay() || 7;
+const calendarFixture = Array.from({length:7}, (_, n) => ({weekday:{id:n+1},items:[{id:101+n*10,name_cn:['与你相恋到生命尽头','盗墓王','二十世纪电气目录','无职转生 第三季 ～到了异世界就拿出真本事～','擅长逃跑的殿下 第二季','再见菈菈','碧蓝之海 第三季'][n],name:'Original title',images:{common:'https://lain.bgm.tv/pic/cover/c/7a/d3/621835_IFhDH.jpg'}},{id:102+n*10,name:'中文名称缺失时显示原名',images:{common:'https://lain.bgm.tv/pic/cover/c/20/9b/541285_vBKTD.jpg'}},{id:103+n*10,name_cn:'没有收藏的番剧',images:{}}]}));
+const collectionFixture = calendarFixture.flatMap((d,n)=>d.items.slice(0,2).map((s,i)=>({subject_id:s.id,type:i===0?3:2})));
+window.fetch = async function(url) {
+  const u = String(url);
+  if(params.has('error')) throw new Error('演示网络不可用');
+  if(u==='https://api.bgm.tv/calendar') return {ok:true,json:async()=>calendarFixture};
+  if(u.startsWith('https://api.bgm.tv/v0/users/calendar-demo/collections?')) return {ok:true,json:async()=>({total:params.has('empty')?0:collectionFixture.length,offset:0,data:params.has('empty')?[]:collectionFixture})};
+  throw new Error('演示禁止请求真实 API');
+};
+</script><script src="../dist/bangumi-personal-calendar.user.js"></script></body></html>
