@@ -50,6 +50,7 @@ function collectionHTML(type, page, options) {
       }
       return route.abort();
     });
+    if (options.siteMode) await page.addInitScript(() => localStorage.setItem('bgm-personal-calendar:v1:test-user:mode', '"site"'));
     await page.goto(`https://bgm.tv/${options.full ? 'calendar' : ''}${options.off ? '?personal=off' : ''}`);
     await page.addScriptTag({ content: release });
     return { context, page, requests, errors, options };
@@ -74,13 +75,13 @@ function collectionHTML(type, page, options) {
       assert.equal(await p.locator('.day.today').count(), 1);
       assert.equal(await p.locator('.title img').count(), 0);
       assert.equal(await p.locator('.subject[href$="4"]').count(), 0);
+      assert.equal(await p.locator('.toolbar button').count(), 1);
+      assert.equal(await p.locator('.toolbar .refresh').innerText(), '刷新核对个人收藏');
+      for (const selector of ['.filters', '.complete', '.restore', '.cancel', '.foot', '.note', '.top-link', '.state', '.loading']) assert.equal(await p.locator(selector).count(), 0, selector);
       assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), false);
       if (full) assert.ok((await p.locator('.title').first().innerText()).startsWith('站内标题'));
       assert.ok((await p.locator('.subject').count()) > 0);
       assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 2);
-      await p.getByRole('button', { name: '仅在看', exact: true }).click();
-      for (const text of await p.locator('.state').allTextContents()) assert.equal(text, '在看');
-      await p.getByRole('button', { name: '全部收藏', exact: true }).click();
       const total = f.requests.length;
       const initialDates = await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date));
       const initialSelected = await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date');
@@ -96,58 +97,50 @@ function collectionHTML(type, page, options) {
       await p.getByRole('button', { name: '后一天' }).click();
       await p.locator('.days button.today').click();
       assert.equal(f.requests.length, total); // navigation never refetches data
-      await p.getByRole('button', { name: '显示原始放送表' }).click(); assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), true);
-      await p.getByRole('button', { name: '返回我的放送表' }).click();
+      await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
+      await p.waitForFunction(() => { const button = document.querySelector('#bgm-personal-calendar')?.shadowRoot.querySelector('.refresh'); return button && !button.disabled && button.textContent === '刷新核对个人收藏'; });
+      assert.ok(f.requests.length > total); // the one manual action forces a fresh check
       await p.screenshot({ path: `artifacts/calendar-${full ? 'full' : 'home'}-${width}-${theme}.png`, fullPage: true });
       await p.locator('[data-day="0"]').click();
       assert.equal(await p.locator('[data-day="0"]').evaluate(e => e.getRootNode().activeElement === e), true);
       await p.reload(); await p.addScriptTag({ content: release }); await p.locator('.board').waitFor({ state: 'visible' });
-      assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 2);
-      assert.deepEqual(f.errors, []); await f.context.close(); report.push(`${full ? 'calendar' : 'home'} ${width}px ${theme}: layout, safe titles, filtering, navigation, restore, cache passed`);
+      assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 4);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push(`${full ? 'calendar' : 'home'} ${width}px ${theme}: layout, minimal controls, safe titles, navigation, cache passed`);
     }
     {
-      const f = await fixture(); const p = f.page;
+      const f = await fixture({ siteMode: true }); const p = f.page;
       await p.locator('.board').waitFor({ state: 'visible' });
-      await p.getByRole('button', { name: '包含私密收藏', exact: true }).click();
-      await p.getByRole('button', { name: '切换公开收藏', exact: true }).waitFor();
       assert.equal(await p.locator(`.subject[href="/subject/${privateId}"]`).count(), 1);
       const storage = await p.evaluate(() => Object.entries(localStorage).map(([key, value]) => ({ key, value })));
       assert.ok(!JSON.stringify(storage).includes('never cache')); assert.ok(!JSON.stringify(storage).includes('"rate"'));
       const ids = JSON.parse(storage.find(x => x.key.endsWith('collections:site')).value).value;
       assert.equal(ids.length, rows.length + 1); assert.ok(ids.some(x => x.id === privateId));
-      f.options.fail = true; await p.getByRole('button', { name: '刷新', exact: true }).click();
-      // Site mode remains available even if the public API fails.
-      await p.getByRole('button', { name: '刷新', exact: true }).waitFor({ state: 'visible' });
-      assert.deepEqual(f.errors, []); await f.context.close(); report.push('site sync: all five states, private membership, multi-page totals, minimal storage passed');
+      f.options.fail = true; await p.getByRole('button', { name: '刷新核对个人收藏' }).click(); await p.locator('.message.error').waitFor();
+      assert.ok(await p.locator('.board').isVisible());
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('remembered site mode: all five states, private membership, multi-page totals, minimal storage passed');
     }
     for (const kind of ['empty', 'fail', 'partial']) {
       const f = await fixture({ [kind]: true }); const p = f.page;
-      if (kind === 'empty') { await p.locator('.board').waitFor({ state: 'visible' }); assert.ok(await p.getByText('这天没有收藏的番剧', { exact: true }).count()); }
+      if (kind === 'empty') { await p.locator('.board').waitFor({ state: 'visible' }); assert.ok(await p.getByText('无收藏', { exact: true }).count()); }
       else { await p.locator('.message.error').waitFor(); assert.ok(await p.locator('.original').isVisible()); assert.equal(await p.locator('.board').isVisible(), false); }
       assert.deepEqual(f.errors, []); await f.context.close(); report.push(`${kind}: honest empty/error fallback passed`);
     }
     {
-      const f = await fixture(); const p = f.page;
-      await p.locator('.board').waitFor({ state: 'visible' }); f.options.truncated = true;
-      await p.getByRole('button', { name: '包含私密收藏', exact: true }).click(); await p.locator('.message.error').waitFor();
+      const f = await fixture({ siteMode: true, truncated: true }); const p = f.page;
+      await p.locator('.message.error').waitFor();
       assert.equal(await p.locator(`.subject[href="/subject/${privateId}"]`).count(), 0);
       assert.equal(await p.evaluate(() => localStorage.getItem('bgm-personal-calendar:v1:test-user:collections:site')), null);
-      f.options.truncated = false; f.options.loggedOut = true;
-      await p.getByRole('button', { name: '包含私密收藏', exact: true }).click(); await p.getByText(/登录已失效/).waitFor();
-      assert.ok(await p.locator('.board').isVisible()); await f.context.close(); report.push('partial site sync and expired login preserve the previous collection without saving incomplete data');
+      assert.ok(await p.locator('.original').isVisible()); await f.context.close(); report.push('partial site sync preserves the original view and writes no partial cache');
+    }
+    {
+      const f = await fixture({ siteMode: true }); const p = f.page; await p.locator('.board').waitFor({ state: 'visible' });
+      f.options.loggedOut = true;
+      await p.getByRole('button', { name: '刷新核对个人收藏' }).click(); await p.getByText(/登录已失效/).waitFor();
+      assert.ok(await p.locator('.board').isVisible()); await f.context.close(); report.push('expired site login preserves the previous collection');
     }
     {
       const f = await fixture(); const p = f.page; await p.locator('.board').waitFor({ state: 'visible' });
-      await p.getByRole('button', { name: '包含私密收藏', exact: true }).click();
-      await p.getByRole('button', { name: '取消同步', exact: true }).click(); await p.getByText(/同步已取消/).waitFor();
-      assert.ok(await p.locator('.board').isVisible());
-      assert.equal(await p.evaluate(() => localStorage.getItem('bgm-personal-calendar:v1:test-user:collections:site')), null);
-      assert.equal(await p.getByRole('button', { name: '刷新', exact: true }).isEnabled(), true);
-      await f.context.close(); report.push('cancelled full sync preserves the old view and leaves no partial cache');
-    }
-    {
-      const f = await fixture(); const p = f.page; await p.locator('.board').waitFor({ state: 'visible' });
-      f.options.fail = true; await p.getByRole('button', { name: '刷新', exact: true }).click(); await p.locator('.message.error').waitFor();
+      f.options.fail = true; await p.getByRole('button', { name: '刷新核对个人收藏' }).click(); await p.locator('.message.error').waitFor();
       assert.ok(await p.locator('.board').isVisible()); assert.ok((await p.locator('.message').innerText()).includes('保留上次'));
       await f.context.close(); report.push('failed refresh preserves existing data and reports stale membership');
     }
