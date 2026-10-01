@@ -65,13 +65,15 @@ function collectionHTML(type, page, options) {
       const adjacentDays = await p.locator('.day').evaluateAll(elements => elements.map(day => Number(day.dataset.weekday)));
       const navLabels = await p.locator('.days button').allTextContents();
       assert.deepEqual(navLabels, C.weekdays.slice(1));
-      const todayIndex = Number(await p.locator('.days button.today').getAttribute('data-day'));
+      const todayIndex = Number(await p.locator('.days button[aria-current="date"]').getAttribute('data-day'));
       const todayWeekday = C.weekdays.indexOf(navLabels[todayIndex]);
       const firstWeekday = ((todayWeekday - 1 - Math.floor((expectedColumns - 1) / 2) + 7) % 7) + 1;
       assert.deepEqual(adjacentDays, Array.from({ length: expectedColumns }, (_, i) => ((firstWeekday - 1 + i) % 7) + 1));
       assert.equal(await p.locator('.days button[aria-pressed="true"]').count(), 1);
-      assert.equal(await p.locator('.days button.today').evaluate(button => getComputedStyle(button).fontWeight), '700');
-      assert.equal(await p.locator('.days button:not(.today)').evaluateAll(buttons => buttons.some(button => getComputedStyle(button).fontWeight === '700')), false);
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('aria-current'), 'date');
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button).fontWeight), '700');
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button, '::before').height), '3px');
+      assert.equal(await p.locator('.days button:not([aria-pressed="true"])').evaluateAll(buttons => buttons.some(button => getComputedStyle(button).fontWeight === '700' || getComputedStyle(button, '::before').content !== 'none')), false);
       assert.equal(await p.locator('.day.today').count(), 1);
       assert.equal(await p.locator('.title img').count(), 0);
       assert.equal(await p.locator('.subject[href$="4"]').count(), 0);
@@ -88,14 +90,19 @@ function collectionHTML(type, page, options) {
       await p.getByRole('button', { name: '后一天' }).click();
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates.map(date => C.shiftDate(date, 1)));
       assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date'), C.shiftDate(initialSelected, 1));
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button, '::before').height), '3px');
+      assert.notEqual(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button).color), await p.locator('.days button[aria-current="date"]').evaluate(button => getComputedStyle(button).color));
       await p.getByRole('button', { name: '前一天' }).click();
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates);
       await p.locator('[data-day="0"]').click(); // Monday
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-day'), '0');
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button, '::before').height), '3px');
       await p.getByRole('button', { name: '前一天' }).click(); // Sunday before the week
       assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-day'), '6');
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button, '::before').height), '3px');
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => Number(day.dataset.weekday))), expectedColumns === 1 ? [7] : expectedColumns === 2 ? [7, 1] : [6, 7, 1, 2].slice(0, expectedColumns));
       await p.getByRole('button', { name: '后一天' }).click();
-      await p.locator('.days button.today').click();
+      await p.locator('.days button[aria-current="date"]').click();
       assert.equal(f.requests.length, total); // navigation never refetches data
       await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
       await p.waitForFunction(() => { const button = document.querySelector('#bgm-personal-calendar')?.shadowRoot.querySelector('.refresh'); return button && !button.disabled && button.textContent === '刷新核对个人收藏'; });
