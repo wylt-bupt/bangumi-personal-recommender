@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.11.1
+// @version      0.11.2
 // @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -58,7 +58,7 @@
     a{color:var(--site-link);text-decoration:none}a:hover{color:var(--link);text-decoration:underline}
     :is(a,button,input,select,summary):focus-visible{outline:2px solid var(--link);outline-offset:3px}
     h2,h3,p{margin:0}h2{font-size:18px;font-weight:400;color:var(--muted)}h3{font-size:13px;font-weight:400}
-    .module{min-width:0;background:var(--surface)}.module-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:0 0 9px;border-bottom:1px solid var(--line);margin-bottom:16px}.module-head h2{margin-right:auto}.module-head>button{font-size:12px}
+    .module{min-width:0;background:var(--surface)}.module-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:0 0 9px;border-bottom:1px solid var(--line);margin-bottom:16px}.module-head h2{margin-right:auto}.module-head>button{font-size:12px}.update-button{min-height:36px;min-width:44px;padding:6px 10px;font-size:12px;border-radius:6px;touch-action:manipulation}@container(max-width:500px){.update-button{min-height:44px}}
     .tabs{display:flex;flex-wrap:wrap;gap:3px;padding:3px;background:var(--soft);border-radius:8px;width:fit-content;max-width:100%}.tabs button{padding:4px 12px;font-size:12px}.tabs button[aria-pressed="true"]{background:var(--pink);color:#40232a}
     .content{min-width:0}.empty,.error{padding:24px 8px;color:var(--muted);text-align:center}.empty button,.error button,.welcome button{color:var(--link);background:var(--pink-soft);margin-top:10px}
     .progress-region,.progress{margin:10px 0;color:var(--muted);font-size:12px}.progress-copy{display:flex;justify-content:space-between;gap:12px}.progress-track{height:2px;background:var(--line);margin-top:6px}.progress-track span{display:block;height:100%;background:var(--pink);transform-origin:left;transform:scaleX(0)}
@@ -2150,7 +2150,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.11.1";
+  const APP_VERSION = "0.11.2";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2582,7 +2582,7 @@ globalThis.BangumiInitialRecommendationFeed = {
       return `<div class="pager" aria-label="分页"><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button><span>${page} / ${pages}</span><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>下一页</button></div>`;
     }
     listRows(rows, kind, pageKind) {
-      if (!rows.length) return '<p class="empty">暂无匹配的人物。资料尚未齐全时，可在“更新”中补全。</p>';
+      if (!rows.length) return '<p class="empty">暂无匹配的人物。</p>';
       const pages = Math.max(1, Math.ceil(rows.length / RANK_PAGE_SIZE));
       const page = Math.min(pages, Math.max(1, this.state.pages[pageKind] || 1));
       this.state.pages[pageKind] = page;
@@ -2716,19 +2716,23 @@ globalThis.BangumiInitialRecommendationFeed = {
       const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast, 0.1);
       return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast")}`;
     }
-    content(stats) { if (this.state.activeTab === "staff") return this.staff(stats); if (this.state.activeTab === "cast") return this.cast(stats); return this.overview(stats); }
+    content(stats) {
+      if (!["staff", "cast"].includes(this.state.activeTab)) return this.overview(stats);
+      const enriching = Object.values(this.state.jobs).some(Boolean);
+      const tools = `<div class="entity-tools"><button type="button" data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>${enriching ? "补全中…" : "补全人物资料"}</button>${enriching ? '<button type="button" data-action="cancel">暂停补全</button>' : ""}</div>`;
+      return tools + (this.state.activeTab === "staff" ? this.staff(stats) : this.cast(stats));
+    }
     render() {
       const active = this.shadow.activeElement;
       const action = active?.getAttribute("data-action");
       const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-metric') || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
       const name = active?.getAttribute('aria-label');
-      const settingsOpen = this.$(".data-settings")?.open;
       const stats = this.stats();
       this.isBusy();
       const progress = this.state.progress;
       const needsNotice = this.state.busy || /失败|异常/.test(progress.label);
       const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
-      this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><details class="data-settings" ${settingsOpen ? "open" : ""}><summary>更新</summary><div><button data-action="sync" ${this.state.busy ? "disabled" : ""}>更新收藏</button><button data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>补全人物资料</button>${this.state.busy ? '<button data-action="cancel">暂停补全</button>' : ""}</div></details></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
+      this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title" aria-busy="${this.state.busy}"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><button class="update-button" type="button" data-action="sync" title="核对个人收藏与评分" aria-live="polite" ${this.state.busy ? "disabled" : ""}>${this.state.syncing ? "更新中…" : "更新"}</button></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
       if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
         const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-metric') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
         if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
@@ -2737,7 +2741,7 @@ globalThis.BangumiInitialRecommendationFeed = {
     }
     styles() { return `<style>${globalThis.BangumiProfileUI.css}
       .content{padding:18px 0 0;min-height:230px}.content header{display:none}
-      .data-settings{position:relative;font-size:12px;color:var(--muted)}.data-settings summary{padding:4px 9px;border-radius:6px}.data-settings>div{position:absolute;right:0;top:32px;z-index:2;display:grid;min-width:150px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 3px 12px #0000000a}
+      .entity-tools{display:flex;justify-content:flex-end;gap:6px;margin-bottom:12px;font-size:12px}
       .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
       .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
@@ -2762,7 +2766,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const Feed = globalThis.BangumiRecommendationFeed;
   if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.11.1";
+  const APP_VERSION = "0.11.2";
   const OWNER = Feed.OWNER;
   const PAGE_SIZE = 5;
   const FEED_TTL = 6 * 60 * 60 * 1000;
@@ -2834,7 +2838,7 @@ globalThis.BangumiInitialRecommendationFeed = {
       this.host.dataset.theme = globalThis.BangumiProfileUI.theme();
       this.shadow = this.host.attachShadow({ mode: "open" });
       this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmpr-title">
-        <header class="module-head"><h2 id="bgmpr-title">个性推荐 · 动画</h2><button class="refresh-data" type="button" title="同步最新收藏与推荐数据">更新</button></header>
+        <header class="module-head"><h2 id="bgmpr-title">个性推荐 · 动画</h2><button class="refresh-data update-button" type="button" title="核对个人收藏与最新推荐清单" aria-live="polite">更新</button></header>
         <div class="progress" role="status" hidden></div>
         <div class="welcome"><p>根据你的评分与公开用户的共同观看轨迹，寻找还未标记的作品。</p><button class="start" type="button">看看推荐</button></div>
         <div class="results" hidden><p class="summary"></p><div class="recommendation-list"></div><nav class="pagination" aria-label="推荐结果分页"></nav></div>
@@ -2886,6 +2890,7 @@ globalThis.BangumiInitialRecommendationFeed = {
     setBusy(value, message = "") {
       this.state.busy = value;
       for (const selector of [".start", ".retry", ".refresh-data"]) this.$(selector).disabled = value;
+      this.$(".refresh-data").textContent = value ? "更新中…" : "更新";
       this.$(".progress").hidden = !value;
       this.$(".progress").textContent = message;
       this.$(".module").setAttribute("aria-busy", String(value));

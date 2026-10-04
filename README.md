@@ -13,10 +13,16 @@
 
 ## 当前版本
 
-- 推荐与回顾组件：`0.11.1`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
+- 推荐与回顾组件：`0.11.2`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
 - 独立活跃度热力图：`1.0.14`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
-- 独立我的放送表：`1.0.6`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
+- 独立我的放送表：`1.0.7`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
+
+## 更新按钮统一：推荐与回顾 0.11.2 / 放送表 1.0.7
+
+- 三个模块右上角统一使用“更新”：相同字号、间距、圆角、悬停与键盘焦点样式；窄屏保留 44px 点击高度。更新时显示“更新中…”并禁用重复点击。
+- 动画回顾点击即可核对收藏，不再先打开菜单；“补全人物资料／暂停补全”移入创作和声优页，仍需手动触发。
+- 保持缓存优先与手动核对策略，失败保留上次结果；热力图无手动更新入口，版本保持 1.0.14。仅保存作者个人开发版本，不提交全站审核。
 
 ## 0.11.1：回顾与推荐优先显示缓存
 

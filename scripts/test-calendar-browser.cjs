@@ -72,6 +72,16 @@ function collectionHTML(type, page, options) {
     return { context, page, requests, errors, options, releaseCalendar };
   }
   try {
+    {
+      const f = await fixture({ cached: true, cacheAge: 0, holdCalendar: true }), p = f.page;
+      await p.getByRole('button', { name: '更新', exact: true }).click();
+      await p.getByRole('button', { name: '更新中…', exact: true }).waitFor();
+      assert.equal(await p.locator('.refresh').isEnabled(), false);
+      f.releaseCalendar();
+      await p.locator('.refresh:enabled').waitFor();
+      assert.equal(await p.locator('.refresh').innerText(), '更新');
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('blocked manual update shows disabled busy control and returns to the normal label');
+    }
     for (const options of [
       { cached: true, cacheAge: 0, large: true },
       { cached: true, holdCalendar: true },
@@ -82,7 +92,7 @@ function collectionHTML(type, page, options) {
       const f = await fixture(options), p = f.page;
       // The schedule request is still blocked: the first view must already exist.
       assert.equal(await p.locator('.board').isVisible(), true);
-      assert.equal(await p.locator('.refresh').innerText(), '刷新核对个人收藏');
+      assert.equal(await p.locator('.refresh').innerText(), '更新');
       assert.equal(await p.locator('.refresh').isEnabled(), true);
       assert.equal(f.requests.filter(u => /\/collections\?|\/anime\/list\//.test(u)).length, 0);
       if (options.full) assert.ok((await p.locator('.title').first().innerText()).startsWith('站内标题'));
@@ -118,7 +128,7 @@ function collectionHTML(type, page, options) {
     {
       const f = await fixture({ cached: true, holdCalendar: true, scheduleTitles: true }), p = f.page;
       assert.equal(await p.locator('.board').isVisible(), true);
-      await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
+      await p.getByRole('button', { name: '更新' }).click();
       await p.locator('.title').first().filter({ hasText: '手动新响应' }).waitFor();
       await p.waitForFunction(() => !document.querySelector('#bgm-personal-calendar').shadowRoot.querySelector('.refresh').disabled);
       const storedCalendar = await p.evaluate(() => localStorage.getItem('bgm-personal-calendar:v1:test-user:calendar'));
@@ -155,7 +165,7 @@ function collectionHTML(type, page, options) {
       assert.equal(await p.locator('.panel').evaluate(e => getComputedStyle(e).borderRadius), '15px');
       assert.equal(await p.locator('.today-jump').innerText(), `今天 · ${C.weekdays[today]}`);
       assert.equal(await p.locator('.subject[href$="2"]').count(), 0); // completed entries never render
-      assert.equal(await p.locator('.toolbar .refresh').innerText(), '刷新核对个人收藏');
+      assert.equal(await p.locator('.toolbar .refresh').innerText(), '更新');
       for (const selector of ['.filters', '.complete', '.restore', '.cancel', '.foot', '.note', '.top-link', '.state', '.loading']) assert.equal(await p.locator(selector).count(), 0, selector);
       assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), false);
       if (full) assert.ok((await p.locator('.title').first().innerText()).startsWith('站内标题'));
@@ -184,8 +194,8 @@ function collectionHTML(type, page, options) {
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates);
       assert.equal(await p.locator('.today-jump').evaluate(e => e.getRootNode().activeElement === e), true);
       assert.equal(f.requests.length, total); // navigation never refetches data
-      await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
-      await p.waitForFunction(() => { const button = document.querySelector('#bgm-personal-calendar')?.shadowRoot.querySelector('.refresh'); return button && !button.disabled && button.textContent === '刷新核对个人收藏'; });
+      await p.getByRole('button', { name: '更新' }).click();
+      await p.waitForFunction(() => { const button = document.querySelector('#bgm-personal-calendar')?.shadowRoot.querySelector('.refresh'); return button && !button.disabled && button.textContent === '更新'; });
       assert.ok(f.requests.length > total); // the one manual action forces a fresh check
       await p.screenshot({ path: `artifacts/calendar-${full ? 'full' : 'home'}-${width}-${theme}.png`, fullPage: true });
       await p.locator('[data-day="0"]').click();
@@ -215,7 +225,7 @@ function collectionHTML(type, page, options) {
       const subject = p.locator(`.subject[href="/subject/${today * 10 + 1}"]`);
       assert.equal(await subject.count(), 1);
       f.options.completed = true;
-      await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
+      await p.getByRole('button', { name: '更新' }).click();
       await subject.waitFor({ state: 'detached' });
       assert.equal(await p.locator('.subject[href$="2"]').count(), 0);
       assert.equal(await p.locator('.message.error').count(), 0);
@@ -229,7 +239,7 @@ function collectionHTML(type, page, options) {
       assert.ok(!JSON.stringify(storage).includes('never cache')); assert.ok(!JSON.stringify(storage).includes('"rate"'));
       const ids = JSON.parse(storage.find(x => x.key.endsWith('collections:site')).value).value;
       assert.equal(ids.length, rows.length + 1); assert.ok(ids.some(x => x.id === privateId));
-      f.options.fail = true; await p.getByRole('button', { name: '刷新核对个人收藏' }).click(); await p.locator('.message.error').waitFor();
+      f.options.fail = true; await p.getByRole('button', { name: '更新' }).click(); await p.locator('.message.error').waitFor();
       assert.ok(await p.locator('.board').isVisible());
       assert.deepEqual(f.errors, []); await f.context.close(); report.push('remembered site mode: all five states, private membership, multi-page totals, minimal storage passed');
     }
@@ -249,12 +259,12 @@ function collectionHTML(type, page, options) {
     {
       const f = await fixture({ siteMode: true }); const p = f.page; await p.locator('.board').waitFor({ state: 'visible' });
       f.options.loggedOut = true;
-      await p.getByRole('button', { name: '刷新核对个人收藏' }).click(); await p.getByText(/登录已失效/).waitFor();
+      await p.getByRole('button', { name: '更新' }).click(); await p.getByText(/登录已失效/).waitFor();
       assert.ok(await p.locator('.board').isVisible()); await f.context.close(); report.push('expired site login preserves the previous collection');
     }
     {
       const f = await fixture(); const p = f.page; await p.locator('.board').waitFor({ state: 'visible' });
-      f.options.fail = true; await p.getByRole('button', { name: '刷新核对个人收藏' }).click(); await p.locator('.message.error').waitFor();
+      f.options.fail = true; await p.getByRole('button', { name: '更新' }).click(); await p.locator('.message.error').waitFor();
       assert.ok(await p.locator('.board').isVisible()); assert.ok((await p.locator('.message').innerText()).includes('保留上次'));
       await f.context.close(); report.push('failed refresh preserves existing data and reports stale membership');
     }

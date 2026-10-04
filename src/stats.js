@@ -446,7 +446,7 @@
       return `<div class="pager" aria-label="分页"><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button><span>${page} / ${pages}</span><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>下一页</button></div>`;
     }
     listRows(rows, kind, pageKind) {
-      if (!rows.length) return '<p class="empty">暂无匹配的人物。资料尚未齐全时，可在“更新”中补全。</p>';
+      if (!rows.length) return '<p class="empty">暂无匹配的人物。</p>';
       const pages = Math.max(1, Math.ceil(rows.length / RANK_PAGE_SIZE));
       const page = Math.min(pages, Math.max(1, this.state.pages[pageKind] || 1));
       this.state.pages[pageKind] = page;
@@ -580,19 +580,23 @@
       const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast, 0.1);
       return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast")}`;
     }
-    content(stats) { if (this.state.activeTab === "staff") return this.staff(stats); if (this.state.activeTab === "cast") return this.cast(stats); return this.overview(stats); }
+    content(stats) {
+      if (!["staff", "cast"].includes(this.state.activeTab)) return this.overview(stats);
+      const enriching = Object.values(this.state.jobs).some(Boolean);
+      const tools = `<div class="entity-tools"><button type="button" data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>${enriching ? "补全中…" : "补全人物资料"}</button>${enriching ? '<button type="button" data-action="cancel">暂停补全</button>' : ""}</div>`;
+      return tools + (this.state.activeTab === "staff" ? this.staff(stats) : this.cast(stats));
+    }
     render() {
       const active = this.shadow.activeElement;
       const action = active?.getAttribute("data-action");
       const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-metric') || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
       const name = active?.getAttribute('aria-label');
-      const settingsOpen = this.$(".data-settings")?.open;
       const stats = this.stats();
       this.isBusy();
       const progress = this.state.progress;
       const needsNotice = this.state.busy || /失败|异常/.test(progress.label);
       const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
-      this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><details class="data-settings" ${settingsOpen ? "open" : ""}><summary>更新</summary><div><button data-action="sync" ${this.state.busy ? "disabled" : ""}>更新收藏</button><button data-action="all" ${this.state.busy || !stats.overview.works ? "disabled" : ""}>补全人物资料</button>${this.state.busy ? '<button data-action="cancel">暂停补全</button>' : ""}</div></details></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
+      this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title" aria-busy="${this.state.busy}"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><button class="update-button" type="button" data-action="sync" title="核对个人收藏与评分" aria-live="polite" ${this.state.busy ? "disabled" : ""}>${this.state.syncing ? "更新中…" : "更新"}</button></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
       if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
         const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-metric') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
         if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
@@ -601,7 +605,7 @@
     }
     styles() { return `<style>${globalThis.BangumiProfileUI.css}
       .content{padding:18px 0 0;min-height:230px}.content header{display:none}
-      .data-settings{position:relative;font-size:12px;color:var(--muted)}.data-settings summary{padding:4px 9px;border-radius:6px}.data-settings>div{position:absolute;right:0;top:32px;z-index:2;display:grid;min-width:150px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px;box-shadow:0 3px 12px #0000000a}
+      .entity-tools{display:flex;justify-content:flex-end;gap:6px;margin-bottom:12px;font-size:12px}
       .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
       .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}

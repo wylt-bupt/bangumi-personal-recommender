@@ -32,6 +32,7 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
         return route.fulfill({ json: feed(n === 1 ? '后台旧' : '手动新') });
       }
       if (url.hostname === 'api.bgm.tv') {
+        if (options.holdCollections && url.pathname.includes('/collections')) await gate;
         if (options.failCollections && url.pathname.includes('/collections')) return route.fulfill({ status: 503, body: '{}' });
         if (url.pathname.includes('/collections')) {
           const offset = Number(url.searchParams.get('offset')), limit = Number(url.searchParams.get('limit'));
@@ -82,6 +83,32 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
     });
   }
   try {
+    for (const width of [1200, 375]) {
+      const f = await fixture({ freshFeed: true, holdCollections: true, width });
+      try {
+        await stable(f);
+        for (const component of [f.stats, f.rec]) {
+          const button = component.locator('.update-button');
+          assert.equal(await button.innerText(), '更新');
+          assert.equal(await button.isEnabled(), true);
+          assert.deepEqual(await button.evaluate(el => {
+            const css = getComputedStyle(el);
+            return [css.fontSize, css.padding, css.borderRadius, css.minHeight];
+          }), ['12px', '6px 10px', '6px', width === 375 ? '44px' : '36px']);
+          assert.equal(await component.locator('.module-head details').count(), 0);
+          await button.click();
+          await component.getByRole('button', { name: '更新中…', exact: true }).waitFor();
+          assert.equal(await component.locator('.update-button').isEnabled(), false);
+        }
+        f.unlock();
+        await f.stats.locator('.update-button:enabled').waitFor();
+        await f.rec.locator('.update-button:enabled').waitFor();
+        assert.equal(await f.stats.locator('.update-button').innerText(), '更新');
+        assert.equal(await f.rec.locator('.update-button').innerText(), '更新');
+        assert.deepEqual(f.errors, []);
+        console.log(`unified direct update controls and busy recovery at ${width}px`);
+      } finally { await f.close(); }
+    }
     for (const [width, theme] of [[1200, 'light'], [375, 'light'], [1200, 'dark']]) {
       const f = await fixture({ holdFeed: true, width, theme });
       try {
@@ -142,7 +169,7 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
         await stable(f); const before = await saved(f);
         await f.rec.locator('.refresh-data').click(); await f.rec.locator('.error').waitFor();
         assert.equal(await f.rec.locator('.recommendation-card').count(), 5);
-        await f.stats.locator('.data-settings summary').click(); await f.stats.locator('[data-action="sync"]').click();
+        await f.stats.locator('[data-action="sync"]').click();
         await f.stats.locator('.progress').filter({ hasText: '失败' }).waitFor();
         assert.ok(await f.stats.locator('.year-column').count());
         assert.deepEqual(await saved(f), before); console.log('failed/truncated manual refresh preserves both caches and views');
@@ -155,7 +182,7 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
         await f.rec.locator('.refresh-data').click(); await f.rec.locator('h3').first().filter({ hasText: '手动新' }).waitFor();
         const before = await saved(f); assert.equal(before.rec.value[0].rate, 9);
         f.unlock();
-        await f.stats.locator('.data-settings summary').click(); await f.stats.locator('[data-action="sync"]').click();
+        await f.stats.locator('[data-action="sync"]').click();
         await f.stats.locator('[data-action="sync"]:enabled').waitFor({ state: 'attached' });
         assert.match(await f.stats.locator('.year-column').first().getAttribute('aria-label'), /2021/);
         assert.equal((await saved(f)).stats.value[0].rate, 9);
@@ -178,7 +205,7 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
       try {
         await stable(f); assert.equal(f.requests.length, 0);
         const requested = f.page.waitForResponse(response => /\/persons$|\/characters$/.test(new URL(response.url()).pathname));
-        await f.stats.locator('.data-settings summary').click(); await f.stats.locator('[data-action="all"]').click();
+        await f.stats.getByRole('button', { name: '创作', exact: true }).click(); await f.stats.locator('[data-action="all"]').click();
         await requested;
         assert.ok(f.requests.some(url => /\/persons$|\/characters$/.test(new URL(url).pathname)));
         await f.stats.locator('[data-action="cancel"]').click();

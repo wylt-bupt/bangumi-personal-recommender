@@ -76,7 +76,7 @@
       this.host.dataset.theme = globalThis.BangumiProfileUI.theme();
       this.shadow = this.host.attachShadow({ mode: "open" });
       this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmpr-title">
-        <header class="module-head"><h2 id="bgmpr-title">个性推荐 · 动画</h2><button class="refresh-data" type="button" title="同步最新收藏与推荐数据">更新</button></header>
+        <header class="module-head"><h2 id="bgmpr-title">个性推荐 · 动画</h2><button class="refresh-data update-button" type="button" title="核对个人收藏与最新推荐清单" aria-live="polite">更新</button></header>
         <div class="progress" role="status" hidden></div>
         <div class="welcome"><p>根据你的评分与公开用户的共同观看轨迹，寻找还未标记的作品。</p><button class="start" type="button">看看推荐</button></div>
         <div class="results" hidden><p class="summary"></p><div class="recommendation-list"></div><nav class="pagination" aria-label="推荐结果分页"></nav></div>
@@ -128,6 +128,7 @@
     setBusy(value, message = "") {
       this.state.busy = value;
       for (const selector of [".start", ".retry", ".refresh-data"]) this.$(selector).disabled = value;
+      this.$(".refresh-data").textContent = value ? "更新中…" : "更新";
       this.$(".progress").hidden = !value;
       this.$(".progress").textContent = message;
       this.$(".module").setAttribute("aria-busy", String(value));
