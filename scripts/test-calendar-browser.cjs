@@ -12,7 +12,7 @@ const calendar = days.map((name, n) => ({ weekday: { id: n + 1 }, items: [
   { id: (n + 1) * 10 + 3, name_cn: '私密收藏番剧', images: {} },
   { id: (n + 1) * 10 + 4, name_cn: '未收藏条目', images: {} }
 ] }));
-const rows = calendar.flatMap((day, n) => day.items.slice(0, 2).map((item, i) => ({ subject_id: item.id, type: i ? 2 : n % 5 + 1, rate: 8, private: false, comment: 'never cache this' })));
+const rows = calendar.flatMap((day, n) => day.items.slice(0, 2).map((item, i) => ({ subject_id: item.id, type: i ? 2 : [1, 3, 4, 5][n % 4], rate: 8, private: false, comment: 'never cache this' })));
 const privateId = today * 10 + 3;
 function pageHTML(full = false, signedIn = true, theme = 'light') {
   const content = full ? `<div class="columns"><div id="colunmSingle"><div class="BgmCalendar">${calendar.map((day, n) => `<dl><dt>${days[n]}</dt><dd class="${days[n]}"><ul class="coverList">${day.items.map(item => `<li style="background:url('//lain.bgm.tv/fixture.jpg')"><p><a href="/subject/${item.id}">站内标题 ${item.id}</a></p><p><a href="/subject/${item.id}">Original</a></p></li>`).join('')}</ul></dd></dl>`).join('')}</div></div></div>` : '<div id="home_calendar"><div class="original">原始每日放送</div></div>';
@@ -29,8 +29,9 @@ function collectionHTML(type, page, options) {
   const report = [];
   fs.mkdirSync('artifacts', { recursive: true });
   async function fixture(options = {}) {
-    const context = await browser.newContext({ viewport: { width: options.width || 1200, height: 1000 } });
+    const context = await browser.newContext({ viewport: { width: options.width || 1200, height: 1000 }, timezoneId: 'Asia/Shanghai' });
     const page = await context.newPage(), requests = [], errors = [];
+    if (options.time) await page.clock.install({ time: new Date(options.time) });
     page.on('pageerror', e => errors.push(e.message));
     await context.route('**/*', async route => {
       const url = new URL(route.request().url()); requests.push(url.href);
@@ -39,7 +40,7 @@ function collectionHTML(type, page, options) {
         if (options.fail) return route.fulfill({ status: 503, body: '{}' });
         if (url.pathname === '/calendar') return route.fulfill({ json: calendar });
         const offset = Number(url.searchParams.get('offset'));
-        const data = options.empty ? [] : rows;
+        const data = options.empty ? [] : rows.map(row => ({ ...row, type: options.completed && row.subject_id === today * 10 + 1 ? 2 : row.type }));
         return route.fulfill({ json: { total: data.length, offset, data: options.partial && offset ? [] : data.slice(offset, offset + 7) } });
       }
       if (url.hostname === 'bgm.tv') {
@@ -77,7 +78,10 @@ function collectionHTML(type, page, options) {
       assert.equal(await p.locator('.day.today').count(), 1);
       assert.equal(await p.locator('.title img').count(), 0);
       assert.equal(await p.locator('.subject[href$="4"]').count(), 0);
-      assert.equal(await p.locator('.toolbar button').count(), 1);
+      assert.equal(await p.locator('.toolbar > button').count(), 1); // only one data action; today is date navigation
+      assert.equal(await p.locator('.panel').evaluate(e => getComputedStyle(e).borderRadius), '15px');
+      assert.equal(await p.locator('.today-jump').innerText(), `今天 · ${C.weekdays[today]}`);
+      assert.equal(await p.locator('.subject[href$="2"]').count(), 0); // completed entries never render
       assert.equal(await p.locator('.toolbar .refresh').innerText(), '刷新核对个人收藏');
       for (const selector of ['.filters', '.complete', '.restore', '.cancel', '.foot', '.note', '.top-link', '.state', '.loading']) assert.equal(await p.locator(selector).count(), 0, selector);
       assert.equal(await p.locator(full ? '#colunmSingle' : '.original').isVisible(), false);
@@ -91,7 +95,8 @@ function collectionHTML(type, page, options) {
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates.map(date => C.shiftDate(date, 1)));
       assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date'), C.shiftDate(initialSelected, 1));
       assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button, '::before').height), '3px');
-      assert.notEqual(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button).color), await p.locator('.days button[aria-current="date"]').evaluate(button => getComputedStyle(button).color));
+      assert.notEqual(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button).color), await p.locator('.days button:not([aria-pressed="true"])').first().evaluate(button => getComputedStyle(button).color));
+      assert.equal(await p.locator('.today-jump').innerText(), `今天 · ${C.weekdays[today]}`);
       await p.getByRole('button', { name: '前一天' }).click();
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates);
       await p.locator('[data-day="0"]').click(); // Monday
@@ -101,8 +106,10 @@ function collectionHTML(type, page, options) {
       assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-day'), '6');
       assert.equal(await p.locator('.days button[aria-pressed="true"]').evaluate(button => getComputedStyle(button, '::before').height), '3px');
       assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => Number(day.dataset.weekday))), expectedColumns === 1 ? [7] : expectedColumns === 2 ? [7, 1] : [6, 7, 1, 2].slice(0, expectedColumns));
-      await p.getByRole('button', { name: '后一天' }).click();
-      await p.locator('.days button[aria-current="date"]').click();
+      await p.getByRole('button', { name: '回到今天', exact: false }).click(); // works even outside the actual week
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date'), initialSelected);
+      assert.deepEqual(await p.locator('.day').evaluateAll(elements => elements.map(day => day.dataset.date)), initialDates);
+      assert.equal(await p.locator('.today-jump').evaluate(e => e.getRootNode().activeElement === e), true);
       assert.equal(f.requests.length, total); // navigation never refetches data
       await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
       await p.waitForFunction(() => { const button = document.querySelector('#bgm-personal-calendar')?.shadowRoot.querySelector('.refresh'); return button && !button.disabled && button.textContent === '刷新核对个人收藏'; });
@@ -113,6 +120,33 @@ function collectionHTML(type, page, options) {
       await p.reload(); await p.addScriptTag({ content: release }); await p.locator('.board').waitFor({ state: 'visible' });
       assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 4);
       assert.deepEqual(f.errors, []); await f.context.close(); report.push(`${full ? 'calendar' : 'home'} ${width}px ${theme}: layout, minimal controls, safe titles, navigation, cache passed`);
+    }
+    for (const manual of [false, true]) {
+      const f = await fixture({ time: '2026-10-04T23:59:00+08:00' }); const p = f.page;
+      await p.locator('.board').waitFor({ state: 'visible' });
+      if (manual) await p.locator('[data-day="2"]').click();
+      const selected = await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date');
+      const total = f.requests.length;
+      await p.clock.runFor(61000);
+      assert.equal(await p.locator('.today-jump').innerText(), '今天 · 周一');
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date'), manual ? selected : '2026-10-05');
+      await p.getByRole('button', { name: '回到今天', exact: false }).click();
+      assert.equal(await p.locator('.days button[aria-pressed="true"]').getAttribute('data-date'), '2026-10-05');
+      assert.equal(await p.locator('.day.today').getAttribute('data-date'), '2026-10-05');
+      assert.equal(f.requests.length, total);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push(`midnight ${manual ? 'manual' : 'automatic'}: real today advances, browsing is preserved, today jump resets selection without requests`);
+    }
+    {
+      const f = await fixture(); const p = f.page;
+      await p.locator('.board').waitFor({ state: 'visible' });
+      const subject = p.locator(`.subject[href="/subject/${today * 10 + 1}"]`);
+      assert.equal(await subject.count(), 1);
+      f.options.completed = true;
+      await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
+      await subject.waitFor({ state: 'detached' });
+      assert.equal(await p.locator('.subject[href$="2"]').count(), 0);
+      assert.equal(await p.locator('.message.error').count(), 0);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('completed status changes disappear after a successful refresh');
     }
     {
       const f = await fixture({ siteMode: true }); const p = f.page;

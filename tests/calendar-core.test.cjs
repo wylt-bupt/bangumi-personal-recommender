@@ -2,12 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const C = require('../src/calendar-core.cjs');
 const week = () => Array.from({ length: 7 }, (_, n) => ({ weekday: { id: n + 1 }, items: [] }));
-test('calendar intersection retains all five states and never matches by title', () => {
+test('calendar intersection hides completed entries, retains other states and never matches by title', () => {
   const data = week(); data[0].items = Array.from({ length: 6 }, (_, n) => ({ id: n + 1, name_cn: '同名作品' }));
   const collection = C.normalizeCollections(Array.from({ length: 5 }, (_, n) => ({ subject_id: n + 1, type: n + 1, rate: 9, comment: 'do not retain' })));
   assert.deepEqual(collection[0], { id: 1, type: 1 });
-  assert.deepEqual(C.intersect(C.normalizeCalendar(data), collection)[0].items.map(x => x.type), [1, 2, 3, 4, 5]);
-  assert.deepEqual(C.intersect(C.normalizeCalendar(data), collection, true)[0].items.map(x => x.id), [3]);
+  assert.deepEqual(C.intersect(C.normalizeCalendar(data), collection)[0].items.map(x => x.type), [1, 3, 4, 5]);
+  collection[0].type = 2;
+  assert.deepEqual(C.intersect(C.normalizeCalendar(data), collection)[0].items.map(x => x.id), [3, 4, 5]);
 });
 test('calendar has Chinese fallbacks, deduplicated IDs and safe HTTPS images', () => {
   const data = week(); data[0].items = [{ id: 1, name: 'Original', name_cn: '', images: { common: 'http://lain.bgm.tv/pic/cover/c/a.jpg' } }, { id: 1, name: 'Duplicate' }, { id: 2, name_cn: '<script>not markup</script>', images: { common: 'https://evil.test/a.jpg' } }];

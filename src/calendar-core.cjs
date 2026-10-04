@@ -47,9 +47,9 @@
     }
     return [...result.values()];
   }
-  function intersect(calendar, collections, onlyWatching = false) {
+  function intersect(calendar, collections) {
     const byId = new Map(collections.map(row => [row.id, row.type]));
-    return calendar.map(day => ({ weekday: day.weekday, items: day.items.filter(item => byId.has(item.id) && (!onlyWatching || byId.get(item.id) === 3)).map(item => ({ ...item, type: byId.get(item.id) })) }));
+    return calendar.map(day => ({ weekday: day.weekday, items: day.items.filter(item => byId.has(item.id) && byId.get(item.id) !== 2).map(item => ({ ...item, type: byId.get(item.id) })) }));
   }
   function dateKey(value = new Date()) {
     const date = value instanceof Date ? value : new Date(`${value}T12:00:00`);

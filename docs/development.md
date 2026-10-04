@@ -30,7 +30,7 @@ legacy/                     旧推荐源码、测试与备份
 | `src/recommendation-feed.cjs`、`src/recommender-v2.js` | 校验清单、过滤全部已标记动画，展示推荐与分页 |
 | `src/stats-core.cjs`、`src/stats-viz.cjs`、`src/stats.js` | 动画回顾、年代、词云、创作与声优统计 |
 | `src/timeline-core.cjs`、`src/timeline.js` | 独立活跃度热力图；只统计看过的集数，不统计收藏操作次数 |
-| `src/calendar-core.cjs`、`src/calendar.js` | 独立个人放送表；七天放送表与当前登录用户五种状态收藏的 ID 交集 |
+| `src/calendar-core.cjs`、`src/calendar.js` | 独立个人放送表；七天放送表与当前登录用户收藏的 ID 交集，展示时排除看过 |
 | `src/series-family.cjs`、`scripts/family-folds.cjs` | 离线评测的系列分组；不包含旧推荐资格规则或权重 |
 | `scripts/refresh-recommendations.cjs`、`scripts/build-recommendations.py` | 限速读取公开数据，比较模型，生成聚合清单 |
 
@@ -56,8 +56,16 @@ legacy/                     旧推荐源码、测试与备份
 
 - 月度流水线为 [.github/workflows/monthly-recommendations.yml](../.github/workflows/monthly-recommendations.yml)，每月 1 日北京时间 11:17 计划执行，实际启动时间由 GitHub 调度决定。本地正式刷新入口为 `node scripts/refresh-recommendations.cjs`，需要 Node.js 22、Python 3.12、NumPy 2.x；持续请求公开 API，不是日常构建步骤。
 - 月度任务只提交 `public/recommendations.json`，不发布逐人评分，不修改收藏。网页“更新”核对收藏和清单，不即时重训；失败时保留可用旧清单并显示真实日期。
-- 产品变更遵循 [AGENTS.md](../AGENTS.md)：验证、受影响版本、README、构建、提交、推送、Bangumi 发布与线上验收。应用 6931 对应推荐/回顾，7057 对应热力图，7211 对应放送表；推荐与放送表各自的 `.user.js` 与 `.bgm.txt` 必须一致。
+- 产品变更遵循 [AGENTS.md](../AGENTS.md)：验证、受影响版本、README、构建、提交、推送、Bangumi 个人开发版本保存与线上验收，未经用户明确要求不提交全站审核。应用 6931 对应推荐/回顾，7057 对应热力图，7211 对应放送表；推荐与放送表各自的 `.user.js` 与 `.bgm.txt` 必须一致。
 - 纯文档或行为不变的目录整理仍验证、提交、推送；若 `dist/` 和聚合清单逐字未变，就没有需要升级或重发的组件版本。
+
+## 2026-10-04 维护记录
+
+我的放送表 `1.0.5`：核对真实页面面板圆角后改为 15px；标题旁始终显示实际今天星期，可直接返回今天；选中星期继续单独红色高亮。排除收藏状态“看过”，保留其他状态。跨午夜定时器只更新本地日期，不发网络请求；手动浏览保留选择，点击今天后恢复自动跟随。
+
+`npm run verify` 通过（49 项当前测试、25 项兼容测试），隔离 Chrome 浏览器回归通过桌面/窄屏、暗色、跨周定位、焦点、自动/手动跨午夜、完成状态刷新、同步完整性与错误回退。没有新增依赖。全量构建因月度聚合清单刷新而生成的无关推荐快照变更已恢复，本轮只交付放送表；推荐、热力图和公开聚合清单保持原样。
+
+用户明确只个人使用，更新 AGENTS.md 交付要求：保存个人开发版，不再提交审核；此前 1.0.4 在应用页已确认为“已发布”。萌娘百科页首时间定义及放送 API 的精确时刻边界见 [放送组件说明](calendar.md#放送日与自然日期2026-10-04-核对)。
 
 ## 2026-09-30 维护记录
 

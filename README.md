@@ -15,7 +15,7 @@
 
 - 推荐与回顾组件：`0.11.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；开发者本人可使用未审核版本。
 - 独立活跃度热力图：`1.0.14`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
-- 独立我的放送表：`1.0.4`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
+- 独立我的放送表：`1.0.5`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
 
 ## 0.11.0：从零重建动画推荐
@@ -78,6 +78,12 @@
 ## 我的放送表 1.0.4
 
 - 日期栏红色高亮与上方标记跟随当前选中日期；初始选中今天，切换日期后标记随之移动。实际今天在放送列中的提示仍保留。
+
+## 我的放送表 1.0.5
+
+- 外框采用 Bangumi 原生主要面板的 15px 圆角；标题旁始终显示“今天 · 周几”，点击可从任意日期返回今天，红色星期高亮仍跟随选择。
+- 隐藏标为“看过”的条目；保留其他收藏状态。跨午夜自动更新实际今天，手动浏览的日期保持不变。
+- 后续只更新作者个人使用的开发版本；除非用户明确要求，不提交全站审核。
 
 ## 1.0.14：首页与个人主页使用各自的热力图布局
 

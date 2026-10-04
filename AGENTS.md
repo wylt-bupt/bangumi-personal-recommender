@@ -42,7 +42,7 @@ Once the user has explicitly authorized the task scope and release targets, carr
 4. Rebuild and verify the matching files under `dist/`.
 5. Commit the source, tests, documentation, versions, and generated release artifacts.
 6. Push the current branch to its configured Git remote.
-7. Publish the affected Bangumi component version and verify the live version/page behavior:
+7. Save the affected Bangumi component as the author's personal development version and verify the live version/page behavior. Do not submit for site-wide review unless the user explicitly requests it. An already approved version may remain available to other users; create a new development version when needed rather than replacing the approved release:
    - App `6931`: `dist/bangumi-personal-recommender.user.js` (the `.bgm.txt` file is an identical paste-friendly copy).
    - App `7057`: `dist/bangumi-personal-timeline.user.js`.
    - App `7211`: `dist/bangumi-personal-calendar.user.js` (the `.bgm.txt` file is an identical paste-friendly copy).
