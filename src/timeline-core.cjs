@@ -127,9 +127,12 @@
       const time = start + i * DAY, key = dayKey(time);
       return { key, time, count: daily[key] || 0, known: time >= coverage };
     });
+    const completedDays = days.slice(-31, -1);
+    const average30 = completedDays.every(day => day.known)
+      ? completedDays.reduce((sum, day) => sum + day.count, 0) / 30 : null;
     const ranked = Object.entries(sources).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
-    return { days, hourly, weekly, platform, total, complete: stream.complete, start, end };
+    return { days, hourly, weekly, platform, total, complete: stream.complete, start, end, average30 };
   }
   return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
 });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.14
+// @version      1.0.15
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -138,9 +138,12 @@
       const time = start + i * DAY, key = dayKey(time);
       return { key, time, count: daily[key] || 0, known: time >= coverage };
     });
+    const completedDays = days.slice(-31, -1);
+    const average30 = completedDays.every(day => day.known)
+      ? completedDays.reduce((sum, day) => sum + day.count, 0) / 30 : null;
     const ranked = Object.entries(sources).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
-    return { days, hourly, weekly, platform, total, complete: stream.complete, start, end };
+    return { days, hourly, weekly, platform, total, complete: stream.complete, start, end, average30 };
   }
   return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
 });
@@ -310,7 +313,10 @@
     const active = data.days.filter(day => day.count > 0).length;
     const activeRate = (active / data.days.length * 100).toFixed(1);
     const recentActive = data.days.slice(-30).filter(day => day.count > 0).length;
-    area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;"><span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span></span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
+    const summary = homeLayout
+      ? `<span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span><span style="color:var(--hm-border);">·</span><span>近30天日均: <b style="color:#f09199;">${data.average30 === null ? '—' : data.average30.toFixed(1)}</b> 集</span>`
+      : `<span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span>`;
+    area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;">${summary}</span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
     drawnWidth = area.clientWidth;
     if (!homeLayout) {
       const wrap = area.querySelector('.hm-scroll');
@@ -327,7 +333,7 @@
   function render() {
     if (!shadow) return;
     const data = C.aggregate(state);
-    const signature = data.days.map(day => day.count).join(',');
+    const signature = `${data.end}:${data.days.map(day => `${day.count}/${day.known}`).join(',')}`;
     if (signature !== drawnSignature && (data.total || data.complete)) {
       drawnSignature = signature;
       chartData = data;

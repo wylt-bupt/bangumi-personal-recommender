@@ -113,7 +113,9 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     }
     const firstDay = core.dayKey(now - core.DAY);
     assert.ok((await page.locator('.hm-cell title').allTextContents()).includes(`${firstDay}: 1 集`), 'a collection on the same day must not add another episode');
-    assert.match(await page.locator('.hm-chart-area').textContent(), /近1年活跃率:\s*0\.8%\s*·\s*近30天活跃:\s*3\s*天少多/);
+    await page.waitForFunction(() => /近30天日均:\s*0\.1\s*集/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent));
+    assert.match(await page.locator('.hm-chart-area').textContent(), /近30天活跃:\s*3\s*天\s*·\s*近30天日均:\s*0\.1\s*集少多/);
+    assert.ok(!(await page.locator('.hm-chart-area').textContent()).includes('近1年活跃率'));
     assert.equal(await page.locator('img').count(), 0, 'remote covers never enter live DOM');
     const style = await page.locator('#hm-dashboard').evaluate(element => {
       const computed = getComputedStyle(element);
@@ -144,7 +146,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(!parserResult.text.includes('封面')); assert.deepEqual(parserResult.rejects, [true, true, true]);
 
     const visibleWeeks = {}, oldestVisibleDays = {};
-    for (const [width, height, theme] of [[1200, 900, 'light'], [375, 812, 'light'], [667, 375, 'light'], [1200, 900, 'dark']]) {
+    for (const [width, height, theme] of [[1200, 900, 'light'], [375, 812, 'light'], [320, 640, 'light'], [667, 375, 'light'], [1200, 900, 'dark']]) {
       await page.setViewportSize({ width, height });
       await page.evaluate(value => document.documentElement.dataset.theme = value, theme);
       await page.waitForFunction(() => document.querySelector('#bgmtl-personal')?.shadowRoot?.querySelector('svg')?.getAttribute('width') && document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-scroll').scrollWidth <= document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-scroll').clientWidth);
@@ -153,6 +155,11 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       oldestVisibleDays[width] = await page.locator('.hm-cell title').first().textContent();
       assert.ok(await page.locator('#hm-dashboard').isVisible());
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px ${theme} page overflow`);
+      assert.ok(await page.locator('.hm-chart-area').evaluate(area => {
+        const row = area.firstElementChild, [metrics, legend] = row.children;
+        return metrics.getBoundingClientRect().right <= legend.getBoundingClientRect().left
+          && legend.getBoundingClientRect().right <= area.getBoundingClientRect().right + 1;
+      }), `${width}px ${theme} summary must fit without clipping or overlap`);
       await page.screenshot({ path: `artifacts/timeline-heatmap-${width}-${theme}.png`, fullPage: true });
     }
     assert.ok(visibleWeeks[1200] > visibleWeeks[375], `wide layout should show more history: ${JSON.stringify(visibleWeeks)}`);
@@ -165,6 +172,8 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await load(profilePage, 'https://bgm.tv/user/wylt');
     await profilePage.locator('.hm-cell').first().waitFor({ state: 'visible', timeout: 30000 });
     assert.ok(await profilePage.locator('#hm-dashboard').evaluate(element => element.classList.contains('profile-layout')));
+    assert.match(await profilePage.locator('.hm-chart-area').textContent(), /近1年活跃率:\s*0\.8%/);
+    assert.ok(!(await profilePage.locator('.hm-chart-area').textContent()).includes('日均'));
     assert.equal(await profilePage.locator('.hm-cell').count(), cellCount, 'profile shows the same full-year day range');
     assert.equal(await profilePage.locator('.hm-month-label').count(), 0, 'profile retains the original week-based month labels');
     const profileScroll = profilePage.locator('.hm-scroll');
@@ -186,7 +195,8 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
 
     // Stale cursors refresh automatically; there is no sync control in the UI.
     extra = true; await prepareRefresh(); await load(page);
-    await page.waitForFunction(() => /近1年活跃率:\s*1\.1%/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent), null, { timeout: 30000 });
+    await page.waitForFunction(() => /近30天活跃:\s*4\s*天/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent), null, { timeout: 30000 });
+    assert.match(await page.locator('.hm-chart-area').textContent(), /近30天日均:\s*0\.1\s*集/);
     const updated = await readState();
     assert.ok(updated.events.some(event => event.id === '210'), 'new progress record added incrementally');
 

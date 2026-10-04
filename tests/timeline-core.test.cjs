@@ -83,6 +83,23 @@ test('rolling year excludes old records and groups small platforms', () => {
   assert.equal(data.total, 7); assert.equal(data.platform.length, 5);
   assert.equal(data.platform.at(-1).name, '其他'); assert.equal(data.platform.at(-1).count, 3);
 });
+test('30-day average uses yesterday through 30 days ago, including inactive days', () => {
+  const state = C.freshState('wylt');
+  state.streams.progress.complete = true;
+  const watched = (id, daysAgo, count) => ({ ...event(id, C.dayStart(now) - daysAgo * C.DAY), subjects: [String(id)], text: `完成了 动画 ${count} of 100 话` });
+  state.events = [watched(1, 0, 99), watched(2, 1, 6), watched(3, 30, 9), watched(4, 31, 60)];
+  assert.equal(C.aggregate(state, now).average30, 0.5);
+  assert.equal(C.aggregate(state, C.dayStart(now)).average30, 0.5);
+  state.events = [];
+  assert.equal(C.aggregate(state, now).average30, 0);
+});
+test('30-day average waits for full date coverage instead of treating unknown days as zero', () => {
+  const state = C.freshState('wylt');
+  state.streams.progress.oldest = C.dayStart(now) - 30 * C.DAY;
+  assert.equal(C.aggregate(state, now).average30, null);
+  state.streams.progress.oldest -= C.DAY;
+  assert.equal(C.aggregate(state, now).average30, 0);
+});
 test('backup validates account and merges without trusting coverage or cursors', () => {
   const state = C.freshState('wylt'); state.events = [event(1)];
   const backup = { format: 'bangumi-personal-timeline', schema: 1, user: 'wylt', events: [event(1), event(2)], streams: { progress: { complete: true, page: 9999 } } };

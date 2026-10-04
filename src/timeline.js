@@ -162,7 +162,10 @@
     const active = data.days.filter(day => day.count > 0).length;
     const activeRate = (active / data.days.length * 100).toFixed(1);
     const recentActive = data.days.slice(-30).filter(day => day.count > 0).length;
-    area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;"><span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span></span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
+    const summary = homeLayout
+      ? `<span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span><span style="color:var(--hm-border);">·</span><span>近30天日均: <b style="color:#f09199;">${data.average30 === null ? '—' : data.average30.toFixed(1)}</b> 集</span>`
+      : `<span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span>`;
+    area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;">${summary}</span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
     drawnWidth = area.clientWidth;
     if (!homeLayout) {
       const wrap = area.querySelector('.hm-scroll');
@@ -179,7 +182,7 @@
   function render() {
     if (!shadow) return;
     const data = C.aggregate(state);
-    const signature = data.days.map(day => day.count).join(',');
+    const signature = `${data.end}:${data.days.map(day => `${day.count}/${day.known}`).join(',')}`;
     if (signature !== drawnSignature && (data.total || data.complete)) {
       drawnSignature = signature;
       chartData = data;
