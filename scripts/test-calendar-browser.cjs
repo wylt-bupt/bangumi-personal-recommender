@@ -162,7 +162,7 @@ function collectionHTML(type, page, options) {
     }
     for (const kind of ['empty', 'fail', 'partial']) {
       const f = await fixture({ [kind]: true }); const p = f.page;
-      if (kind === 'empty') { await p.locator('.board').waitFor({ state: 'visible' }); assert.ok(await p.getByText('无收藏', { exact: true }).count()); }
+      if (kind === 'empty') { await p.locator('.board').waitFor({ state: 'visible' }); assert.ok(await p.getByText('暂无条目', { exact: true }).count()); }
       else { await p.locator('.message.error').waitFor(); assert.ok(await p.locator('.original').isVisible()); assert.equal(await p.locator('.board').isVisible(), false); }
       assert.deepEqual(f.errors, []); await f.context.close(); report.push(`${kind}: honest empty/error fallback passed`);
     }

@@ -65,7 +65,7 @@
       if (day.relative) heading.append(element('span', 'relative', day.relative));
       head.append(time, heading); section.append(head);
       const items = result.find(row => row.weekday === day.weekday).items;
-      if (!items.length) section.append(element('p', 'empty', '无收藏'));
+      if (!items.length) section.append(element('p', 'empty', '暂无条目'));
       else {
         const list = element('ul', 'day-list');
         items.forEach(item => {
