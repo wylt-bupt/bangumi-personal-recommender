@@ -7,7 +7,6 @@
 
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
-  const COLLECTION_TTL = 12 * 60 * 60 * 1000;
   const ENTITY_TTL = 90 * 24 * 60 * 60 * 1000;
   const ENTITY_CONCURRENCY = 1;
   const ENTITY_DELAY = 850;
@@ -15,7 +14,7 @@
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.10.3";
+  const APP_VERSION = "0.11.1";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -66,6 +65,27 @@
         transaction.onerror = () => reject(transaction.error);
       });
     }
+    async getMany(keys) {
+      const database = await this.open();
+      return new Promise((resolve, reject) => {
+        const result = {};
+        const transaction = database.transaction("kv", "readonly");
+        const store = transaction.objectStore("kv");
+        for (const key of keys) {
+          const request = store.get(key);
+          request.onsuccess = () => { result[key] = request.result; };
+        }
+        transaction.oncomplete = () => resolve(result);
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+  }
+
+  function validCollections(cached) {
+    return Number.isFinite(cached?.storedAt) && Array.isArray(cached.value) && cached.value.every(row =>
+      Number.isSafeInteger(row?.subjectId) && row.subjectId > 0 && [1, 2, 3, 4, 5].includes(row.status) &&
+      Number.isFinite(row.rate) && Array.isArray(row.tags) && row.subject?.id === row.subjectId);
   }
 
   class Client {
@@ -89,22 +109,28 @@
     async collections(force, onProgress) {
       const key = this.key("collections:api");
       const cached = await this.store.get(key);
-      if (!force && cached && Date.now() - cached.storedAt < COLLECTION_TTL) return cached.value;
+      if (!force && validCollections(cached)) return cached;
       const rows = [];
       let offset = 0;
       let total = Infinity;
       while (offset < total) {
         const page = await this.fetchJson(`/v0/users/${encodeURIComponent(this.username)}/collections?subject_type=2&limit=100&offset=${offset}`);
-        const data = Array.isArray(page.data) ? page.data : [];
-        total = number(page.total);
+        const data = page.data;
+        const count = Number(page.total);
+        if (!Array.isArray(data) || !Number.isSafeInteger(count) || count < 0 ||
+            (total !== Infinity && total !== count) || data.length > 100 ||
+            (offset < count && !data.length) || offset + data.length > count) throw new Error("收藏分页无效或不完整");
+        total = count;
         rows.push(...data);
         offset += data.length;
         onProgress?.("正在同步动画收藏…", Math.min(offset, total), total);
         if (!data.length) break;
       }
       const value = rows.map(Core.compactCollection);
-      await this.store.set(key, { storedAt: Date.now(), value });
-      return value;
+      const next = { storedAt: Date.now(), value };
+      if (rows.length !== total || !validCollections(next) || new Set(value.map(row => row.subjectId)).size !== value.length) throw new Error("收藏条目无效或分页重复");
+      await this.store.set(key, next);
+      return next;
     }
     async entity(kind, subjectId) {
       const key = this.key(`${kind}:${subjectId}`);
@@ -122,12 +148,14 @@
       await this.store.set(key, { storedAt: Date.now(), value });
       return value;
     }
-    async entityMap(kind, ids) {
+    async entityMap(kind, ids, fresh = false) {
       const result = {};
-      await Promise.all(ids.map(async (id) => {
-        const cached = await this.store.get(this.key(`${kind}:${id}`));
-        if (cached && Date.now() - cached.storedAt < ENTITY_TTL && Array.isArray(cached.value)) result[id] = cached.value;
-      }));
+      const keys = ids.map(id => this.key(`${kind}:${id}`));
+      const records = await this.store.getMany(keys);
+      ids.forEach((id, index) => {
+        const cached = records[keys[index]];
+        if (cached && (!fresh || Date.now() - cached.storedAt < ENTITY_TTL) && Array.isArray(cached.value)) result[id] = cached.value;
+      });
       return result;
     }
     async enrichmentState() {
@@ -194,7 +222,7 @@
       updateTheme();
       new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
       matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", updateTheme);
-      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
+      this.open();
     }
     detectTheme() { return globalThis.BangumiProfileUI.theme(); }
     $(selector) { return this.shadow.querySelector(selector); }
@@ -230,8 +258,9 @@
       this.progress(`${prefix}：创作人员 ${formatNumber(people.cached)} / ${formatNumber(people.total)} · 声优 ${formatNumber(cast.cached)} / ${formatNumber(cast.total)}${failedText}`, current, total, total ? `${percent}%` : "");
     }
     async open() {
+      if (this.state.open) return;
       this.state.open = true;
-      if (!this.state.collections.length && !this.isBusy()) await this.sync(false);
+      await this.sync(false);
     }
     close() {}
     progress(label, current = 0, total = 0, countText = null) {
@@ -250,24 +279,29 @@
       this.state.cancel = false;
       this.render();
       this.progress("正在同步动画收藏…", 0, 1);
-      let shouldResume = false;
       try {
-        const allCollections = await this.client.collections(force, (label, current, total) => this.progress(label, current, total));
-        this.state.collections = allCollections.filter((row) => row.status === 2);
+        const saved = await this.client.collections(force, (label, current, total) => this.progress(label, current, total));
+        this.state.collections = saved.value.filter((row) => row.status === 2);
+        this.state.lastSync = saved.storedAt;
+        this.statsSignature = null;
+        // Show local collection statistics before reading the larger entity caches.
+        this.render();
         const ids = this.state.collections.map((row) => row.subjectId);
         [this.state.people, this.state.cast] = await Promise.all([this.client.entityMap("people", ids), this.client.entityMap("cast", ids)]);
         this.initializeEntityProgress();
-        this.state.lastSync = Date.now();
-        const enrichmentState = await this.client.enrichmentState();
-        shouldResume = Boolean(enrichmentState.enabled && Date.now() >= number(enrichmentState.nextAt));
+        this.statsSignature = null;
         this.refreshEntityProgress("已同步收藏");
       } catch (error) { this.progress(`同步失败：${error.message || "网络异常"}`, 0, 0); }
       finally { this.state.syncing = false; this.render(); }
-      if (shouldResume && !this.state.cancel) this.enrichAll(false);
     }
     async enrichAll(userInitiated = true) {
-      if (!this.state.collections.length || this.state.syncing) return;
-      if (userInitiated) await this.client.setEnrichmentState({ enabled: true, nextAt: Date.now() });
+      if (!this.state.collections.length || this.isBusy()) return;
+      if (userInitiated) {
+        await this.client.setEnrichmentState({ enabled: true, nextAt: Date.now() });
+        const ids = this.state.collections.map(row => row.subjectId);
+        [this.state.people, this.state.cast] = await Promise.all([this.client.entityMap("people", ids, true), this.client.entityMap("cast", ids, true)]);
+        this.statsSignature = null;
+      }
       await Promise.all([this.enrich("people"), this.enrich("cast")]);
       const people = this.state.entityProgress.people;
       const cast = this.state.entityProgress.cast;

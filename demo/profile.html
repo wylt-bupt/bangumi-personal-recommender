@@ -14,7 +14,7 @@ const fixtureTags=['日常','治愈','青春','科幻','悬疑','恋爱','奇幻
 const fixtureCollections = Array.from({length:80},(_,i)=>({subject_id:i+1,type:2,rate:6+i%5,tags:fixtureTags.filter((tag,j)=>(i*17+j*3)%80<Math.max(1,70-j*1.2)),ep_status:12,subject:{id:i+1,type:2,name:fixtureNames[i%5],date:(1980+Math.floor(Math.sqrt(i/79)*46))+ '-' + String(i%12+1).padStart(2,'0') + '-01',eps:i<36?12:i<48?24:i<58?13:i<66?1:i<72?26:30+i,images:{small:fixtureImages[i%3]}}}));
 if(query.has('dense'))fixtureCollections.forEach((row,i)=>{row.tags=['日常','原创',...Array.from({length:700},(_,n)=>n).filter(n=>n%80===i).map(n=>n%2?'标签'+n:'Animation-'+n)];});
 window.fetch=async(input)=>{const url=String(input);if(query.has('error'))throw new Error('演示网络不可用');let data=[];if(url.includes('/collections'))return new Response(JSON.stringify({total:query.has('empty')?0:80,data:query.has('empty')?[]:fixtureCollections}),{status:200});if(url.includes('/persons'))data=[{id:100+Number(url.match(/subjects\/(\d+)/)[1])%15,name:['山田尚子','京都动画','新房昭之','今敏','汤浅政明'][Number(url.match(/subjects\/(\d+)/)[1])%5],relation:'导演'}];if(url.includes('/characters'))data=[{id:1,actors:[{id:201,name:'花泽香菜'}]}];return new Response(JSON.stringify(data),{status:200});};
-</script><script src="../dist/bangumi-personal-recommender.user.js?preview=0.11.0"></script>
+</script><script src="../dist/bangumi-personal-recommender.user.js?preview=0.11.1"></script>
 <script>
 document.addEventListener('DOMContentLoaded',()=>{
 const app=window.BangumiPersonalRecommender;

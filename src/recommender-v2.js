@@ -4,10 +4,10 @@
   const Feed = globalThis.BangumiRecommendationFeed;
   if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.11.0";
+  const APP_VERSION = "0.11.1";
   const OWNER = Feed.OWNER;
   const PAGE_SIZE = 5;
-  const CACHE_TTL = 6 * 60 * 60 * 1000;
+  const FEED_TTL = 6 * 60 * 60 * 1000;
   const FEED_URL = "https://raw.githubusercontent.com/wylt-bupt/bangumi-personal-recommender/main/public/recommendations.json";
 
   function escapeHtml(value) {
@@ -27,9 +27,26 @@
     catch { return null; }
   }
 
-  function cache(key, value) {
-    try { localStorage.setItem(`bgmpr:v2:${key}`, JSON.stringify({ storedAt: Date.now(), value })); }
+  function cache(key, value, storedAt = Date.now()) {
+    try { localStorage.setItem(`bgmpr:v2:${key}`, JSON.stringify({ storedAt, value })); }
     catch { /* Storage may be unavailable in private mode. */ }
+  }
+
+  function savedCollections() {
+    const saved = cached("collections");
+    if (!Number.isFinite(saved?.storedAt) || !Array.isArray(saved.value) ||
+        !saved.value.every(row => Number.isSafeInteger(row?.subject_id) && row.subject_id > 0 && Number.isFinite(row.rate))) return null;
+    return saved;
+  }
+
+  function localFeed() {
+    const saved = cached("feed");
+    try {
+      if (Number.isFinite(saved?.storedAt)) return { feed: Feed.parseFeed(saved.value), raw: saved.value, source: "cache", storedAt: saved.storedAt };
+    } catch { /* Ignore incompatible cached feeds and use the bundled fallback. */ }
+    try {
+      return { feed: Feed.parseFeed(globalThis.BangumiInitialRecommendationFeed), source: "bundle", storedAt: 0 };
+    } catch { return null; }
   }
 
   async function requestJson(url) {
@@ -50,6 +67,7 @@
       };
       this.excludedBatch = new Set();
       this.toastTimer = null;
+      this.revision = 0;
     }
 
     mount() {
@@ -69,7 +87,13 @@
       const updateTheme = () => { this.host.dataset.theme = globalThis.BangumiProfileUI.theme(); };
       new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
       matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", updateTheme);
-      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
+      const collections = savedCollections();
+      const feed = localFeed();
+      if (collections && feed) {
+        this.state.open = true;
+        this.applyData(feed, collections.value, collections.storedAt);
+        globalThis.BangumiProfileUI.lazy(this.host, () => this.refreshFeed());
+      } else globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
     }
 
     $(selector) { return this.shadow.querySelector(selector); }
@@ -110,82 +134,97 @@
     }
 
     async getFeed(force) {
-      const saved = cached("feed");
-      if (!force && saved && Date.now() - saved.storedAt < CACHE_TTL) {
-        this.feedSource = "cache";
-        return Feed.parseFeed(saved.value);
-      }
+      const saved = localFeed();
+      if (!force && saved?.source === "cache" && Date.now() - saved.storedAt < FEED_TTL) return saved;
       try {
         const raw = await requestJson(FEED_URL);
-        const parsed = Feed.parseFeed(raw);
-        cache("feed", raw);
-        this.feedSource = "remote";
-        return parsed;
+        return { feed: Feed.parseFeed(raw), raw, source: "remote", storedAt: Date.now() };
       } catch (error) {
-        if (saved?.value) {
-          this.feedSource = "cache";
-          return Feed.parseFeed(saved.value);
-        }
-        if (globalThis.BangumiInitialRecommendationFeed) {
-          this.feedSource = "bundle";
-          return Feed.parseFeed(globalThis.BangumiInitialRecommendationFeed);
-        }
+        if (saved) return { ...saved, error };
         throw new Error(`推荐数据读取失败：${error.message}`);
       }
     }
 
-    async getCollections(force) {
-      const saved = cached("collections");
-      if (!force && saved && Date.now() - saved.storedAt < CACHE_TTL) {
-        this.collectionCheckedAt = saved.storedAt;
-        return saved.value;
+    applyData(next, collections, checkedAt, reset = true) {
+      this.state.feed = next.feed;
+      this.feedSource = next.source;
+      this.state.collections = collections;
+      this.collectionCheckedAt = checkedAt;
+      this.state.profile = { collectionCount: collections.length, ratedCount: collections.filter(row => row.rate > 0).length };
+      this.state.pageOrder = Feed.unmarkedCandidates(next.feed, collections);
+      this.state.eligibleCandidateCount = this.state.pageOrder.length;
+      if (reset) {
+        this.excludedBatch.clear();
+        this.state.currentPage = 1;
       }
+      this.renderFromPool();
+    }
+
+    notice(message) {
+      this.$(".error").hidden = false;
+      this.$(".error-message").textContent = message;
+    }
+
+    async refreshFeed() {
+      const saved = localFeed();
+      if (saved?.source === "cache" && Date.now() - saved.storedAt < FEED_TTL) return;
+      const revision = this.revision;
       try {
-        const rows = [];
-        let total = Infinity;
-        for (let offset = 0; offset < total; offset += 50) {
-          const page = await requestJson(`https://api.bgm.tv/v0/users/${OWNER}/collections?subject_type=2&limit=50&offset=${offset}`);
-          const batch = Array.isArray(page.data) ? page.data : [];
-          total = Number(page.total);
-          if (!Number.isFinite(total)) throw new Error("收藏分页信息无效");
-          rows.push(...batch.map((row) => ({ subject_id: Number(row.subject_id), rate: Number(row.rate) || 0 })));
-          this.$(".progress").textContent = `正在核对已标记动画… ${Math.min(rows.length, total)}/${total}`;
-          if (!batch.length) break;
-          if (offset + batch.length < total) await new Promise((resolve) => setTimeout(resolve, 180));
+        const next = await this.getFeed(false);
+        if (revision !== this.revision) return;
+        if (next.error) {
+          this.notice("推荐清单更新失败，保留已有结果。可点击更新重试。");
+          return;
         }
-        if (!rows.length) throw new Error("没有读取到公开收藏");
-        cache("collections", rows);
-        this.collectionCheckedAt = Date.now();
-        return rows;
-      } catch (error) {
-        if (!force && saved?.value?.length) {
-          this.collectionCheckedAt = saved.storedAt;
-          return saved.value;
+        if (next.source === "remote") cache("feed", next.raw);
+        this.applyData(next, this.state.collections, this.collectionCheckedAt, false);
+      } catch { if (revision === this.revision) this.notice("推荐清单更新失败，保留已有结果。可点击更新重试。"); }
+    }
+
+    async getCollections(force) {
+      const saved = savedCollections();
+      if (!force && saved) return saved;
+      const rows = [];
+      const seen = new Set();
+      let total = Infinity;
+      for (let offset = 0; offset < total; offset += 50) {
+        const page = await requestJson(`https://api.bgm.tv/v0/users/${OWNER}/collections?subject_type=2&limit=50&offset=${offset}`);
+        const batch = page.data;
+        const count = Number(page.total);
+        if (!Array.isArray(batch) || !Number.isSafeInteger(count) || count < 0 ||
+            (total !== Infinity && total !== count) || batch.length > 50 ||
+            (offset < count && !batch.length) || offset + batch.length > count) throw new Error("收藏分页信息无效或不完整");
+        total = count;
+        for (const row of batch) {
+          const id = Number(row.subject_id);
+          if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) throw new Error("收藏分页重复或条目无效");
+          seen.add(id);
         }
-        throw new Error(`收藏读取失败：${error.message}`);
+        rows.push(...batch.map((row) => ({ subject_id: Number(row.subject_id), rate: Number(row.rate) || 0 })));
+        this.$(".progress").textContent = `正在核对已标记动画… ${Math.min(rows.length, total)}/${total}`;
+        if (!batch.length) break;
+        if (offset + batch.length < total) await new Promise((resolve) => setTimeout(resolve, 180));
       }
+      if (rows.length !== total) throw new Error("收藏分页不完整");
+      return { value: rows, storedAt: Date.now() };
     }
 
     async ensureRecommendations({ force = false } = {}) {
       if (this.state.busy) return;
+      this.revision += 1;
       this.setBusy(true, "正在读取推荐数据…");
       this.$(".error").hidden = true;
       try {
         const [feed, collections] = await Promise.all([this.getFeed(force), this.getCollections(force)]);
-        this.state.feed = feed;
-        this.state.collections = collections;
-        this.state.profile = { collectionCount: collections.length, ratedCount: collections.filter((row) => row.rate > 0).length };
-        this.state.pageOrder = Feed.unmarkedCandidates(feed, collections);
-        this.state.eligibleCandidateCount = this.state.pageOrder.length;
-        if (!this.state.pageOrder.length) throw new Error("暂时没有未标记的候选动画。");
-        this.excludedBatch.clear();
-        this.state.currentPage = 1;
-        this.renderFromPool();
+        if (force || !savedCollections()) cache("collections", collections.value, collections.storedAt);
+        if (feed.source === "remote") cache("feed", feed.raw);
+        this.applyData(feed, collections.value, collections.storedAt);
+        if (feed.error) this.notice("收藏已核对；推荐清单更新失败，保留已有清单。");
       } catch (error) {
-        this.$(".results").hidden = true;
+        if (!this.state.feed) this.$(".results").hidden = true;
         this.$(".welcome").hidden = true;
         this.$(".error").hidden = false;
-        this.$(".error-message").textContent = `${error.message}。可稍后重试；组件不会修改你的 Bangumi 数据。`;
+        this.$(".error-message").textContent = `${error.message}。${this.state.feed ? "保留已有结果；" : ""}可稍后重试。`;
       } finally { this.setBusy(false); }
     }
 
@@ -208,6 +247,7 @@
       const fallback = this.feedSource === "bundle" ? " · 使用内置 50 条快照" : "";
       const neighbor = feed?.neighborCount ? `（${feed.neighborCount} 位近邻召回）` : "";
       this.$(".summary").textContent = `分析 ${feed?.ratedCount || this.state.profile?.ratedCount || 0} 条个人评分、${feed?.peerCount || 0} 位公开用户${neighbor} · ${model} · 数据 ${date} · 收藏核对 ${checked}${fallback}`;
+      if (!available.length) this.$(".summary").textContent += " · 暂无未标记的候选动画";
       this.$(".recommendation-list").innerHTML = this.state.current.map((item) => this.card(item)).join("");
       const options = Array.from({ length: pages }, (_, index) => `<option value="${index + 1}" ${index + 1 === page ? "selected" : ""}>${index + 1}</option>`).join("");
       this.$(".pagination").innerHTML = `<button type="button" data-page-direction="-1" ${page === 1 ? "disabled" : ""}>上一页</button><label>第 <select data-page-select aria-label="跳转到推荐页">${options}</select> / ${pages} 页</label><button type="button" data-page-direction="1" ${page === pages ? "disabled" : ""}>下一页</button>`;

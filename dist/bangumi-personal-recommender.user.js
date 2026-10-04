@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.11.0
+// @version      0.11.1
 // @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -143,12 +143,34 @@
 globalThis.BangumiInitialRecommendationFeed = {
   "schema": 1,
   "owner": "wylt",
-  "generatedAt": "2026-09-28T01:17:35.106785+00:00",
-  "peerCount": 100,
+  "generatedAt": "2026-10-01T10:52:49.714777+00:00",
+  "peerCount": 98,
   "neighborCount": 40,
-  "ratedCount": 1326,
+  "ratedCount": 1327,
   "model": "content",
   "candidates": [
+    {
+      "subject": {
+        "id": 531924,
+        "type": 2,
+        "name": "Miraculous World: London, At the Edge of Tim",
+        "nameCn": "瓢虫雷迪伦敦篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/9c/34/531924_a7D77.jpg",
+        "tags": [
+          "瓢虫雷迪",
+          "欧美"
+        ],
+        "rating": {
+          "score": 10,
+          "total": 0
+        }
+      },
+      "predicted": 10,
+      "collaborativeLift": 0,
+      "reasons": [
+        "综合你的评分基线与作品口碑进入候选。"
+      ]
+    },
     {
       "subject": {
         "id": 253,
@@ -172,301 +194,37 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 9.1,
-          "total": 19639
+          "total": 19648
         }
       },
-      "predicted": 9.524,
+      "predicted": 9.717,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 2907,
+        "id": 358634,
         "type": 2,
-        "name": "銀河英雄伝説",
-        "nameCn": "银河英雄传说",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c7/55/2907_8xX82.jpg",
+        "name": "疾风竞速",
+        "nameCn": "",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1d/1b/358634_hhvpW.jpg",
         "tags": [
-          "银河英雄传说",
-          "田中芳树",
-          "科幻",
-          "经典",
-          "ova",
-          "小说改",
-          "1989",
-          "补旧番",
-          "银英",
-          "tv",
-          "皆杀的田中",
-          "世界观"
+          "中国",
+          "动画",
+          "国产",
+          "web"
         ],
         "rating": {
-          "score": 8.8,
-          "total": 2955
+          "score": 10,
+          "total": 0
         }
       },
-      "predicted": 9,
+      "predicted": 9.577,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“科幻、sf”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 11577,
-        "type": 2,
-        "name": "THE IDOLM@STER",
-        "nameCn": "偶像大师",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a8/6a/11577_5U5G1.jpg",
-        "tags": [
-          "偶像大师",
-          "a-1pictures",
-          "偶像",
-          "tv",
-          "2011年7月",
-          "游戏改",
-          "励志",
-          "锦织敦史",
-          "2011",
-          "神前暁",
-          "骗钱大师",
-          "音乐"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 8828
-        }
-      },
-      "predicted": 8.885,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、a-1pictures”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 25961,
-        "type": 2,
-        "name": "Tom and Jerry",
-        "nameCn": "猫和老鼠（1965年电视版）",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fd/60/25961_WDKz6.jpg",
-        "tags": [
-          "童年",
-          "欧美",
-          "搞笑",
-          "童年的经典",
-          "经典",
-          "神作",
-          "tom&jerry",
-          "tv",
-          "美国",
-          "原创",
-          "爆笑",
-          "汤姆杰瑞好基友"
-        ],
-        "rating": {
-          "score": 9.1,
-          "total": 14203
-        }
-      },
-      "predicted": 8.844,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“奇幻、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 848,
-        "type": 2,
-        "name": "ハチミツとクローバー II",
-        "nameCn": "蜂蜜与四叶草II",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/36/2e/848_RC9L8.jpg",
-        "tags": [
-          "青春",
-          "j.c.staff",
-          "蜂蜜与四叶草ii",
-          "校园",
-          "羽海野千花",
-          "治愈",
-          "tv",
-          "2006",
-          "noitamina",
-          "人生",
-          "治愈系",
-          "大学"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 4507
-        }
-      },
-      "predicted": 8.831,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1015,
-        "type": 2,
-        "name": "機動戦士ガンダム0080 ポケットの中の戦争",
-        "nameCn": "机动战士高达0080 口袋里的战争",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/29/89/1015_Z2xoh.jpg",
-        "tags": [
-          "高达",
-          "ova",
-          "sunrise",
-          "战争",
-          "0080",
-          "1989",
-          "萝卜",
-          "原创",
-          "美树本晴彦",
-          "科幻",
-          "高山文彦",
-          "是爷们就开扎古"
-        ],
-        "rating": {
-          "score": 8.6,
-          "total": 6053
-        }
-      },
-      "predicted": 8.806,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1728,
-        "type": 2,
-        "name": "るろうに剣心 -明治剣客浪漫譚- 追憶編",
-        "nameCn": "浪客剑心 追忆篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/71/37/1728_HLsCr.jpg",
-        "tags": [
-          "ova",
-          "剑心",
-          "浪客剑心",
-          "追忆篇",
-          "雪代巴",
-          "1999",
-          "悲剧",
-          "十字伤",
-          "studiodeen",
-          "漫画改",
-          "古桥一浩",
-          "明治维新"
-        ],
-        "rating": {
-          "score": 8.9,
-          "total": 9697
-        }
-      },
-      "predicted": 8.804,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“恋爱、催泪”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 28205,
-        "type": 2,
-        "name": "日常 Eテレ版",
-        "nameCn": "日常 ETV版",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/19/6b/28205_AAqG1.jpg",
-        "tags": [
-          "日常",
-          "京阿尼",
-          "搞笑",
-          "2012年1月",
-          "tv",
-          "爆笑",
-          "电波",
-          "吐槽向",
-          "重制版",
-          "石原立也",
-          "2012",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 2585
-        }
-      },
-      "predicted": 8.766,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 9622,
-        "type": 2,
-        "name": "機動戦士Ζガンダム",
-        "nameCn": "机动战士Z高达",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/97/c8/9622_2P229.jpg",
-        "tags": [
-          "高达",
-          "富野由悠季",
-          "sunrise",
-          "tv",
-          "gundam",
-          "1985",
-          "原创",
-          "时代的眼泪",
-          "科幻",
-          "高达z",
-          "机战",
-          "萝卜"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 5381
-        }
-      },
-      "predicted": 8.757,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 4583,
-        "type": 2,
-        "name": "機動戦士ガンダム 逆襲のシャア",
-        "nameCn": "机动战士高达 逆袭的夏亚",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/33/80/4583_RvVeE.jpg",
-        "tags": [
-          "高达",
-          "剧场版",
-          "富野由悠季",
-          "sunrise",
-          "1988",
-          "gundam",
-          "原创",
-          "萝卜",
-          "科幻",
-          "机战",
-          "14年的基情",
-          "nt大战"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 5214
-        }
-      },
-      "predicted": 8.745,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+        "综合你的评分基线与作品口碑进入候选。"
       ]
     },
     {
@@ -492,237 +250,171 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.4,
-          "total": 5756
+          "total": 5757
         }
       },
-      "predicted": 8.743,
+      "predicted": 8.965,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 64172,
+        "id": 72299,
         "type": 2,
-        "name": "THE IDOLM@STER MOVIE 輝きの向こう側へ！",
-        "nameCn": "偶像大师 剧场版 向着光辉的彼岸！",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f8/45/64172_8MujB.jpg",
+        "name": "東方幼霊夢",
+        "nameCn": "东方幼灵梦",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e7/e7/72299_NrGG3.jpg",
         "tags": [
-          "剧场版",
-          "a-1pictures",
-          "偶像大师",
-          "偶像",
-          "2014",
-          "锦织敦史",
-          "游戏改",
-          "im@s",
-          "音乐",
-          "2014年1月",
-          "輝きの向こう側へ！",
-          "錦織敦史"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 4259
-        }
-      },
-      "predicted": 8.738,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、a-1_pictures”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 847,
-        "type": 2,
-        "name": "ハチミツとクローバー",
-        "nameCn": "蜂蜜与四叶草",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f4/55/847_xHHqh.jpg",
-        "tags": [
-          "青春",
-          "蜂蜜与四叶草",
-          "j.c.staff",
-          "校园",
-          "治愈系",
-          "羽海野千花",
-          "tv",
+          "东方",
+          "同人",
+          "手书",
           "治愈",
-          "2005",
-          "noitamina",
-          "大学",
-          "尋找自我"
+          "让人哭泣程度的动画",
+          "東方",
+          "东方手书",
+          "致郁",
+          "前传",
+          "催泪"
         ],
         "rating": {
           "score": 8.4,
-          "total": 5811
+          "total": 0
         }
       },
-      "predicted": 8.735,
+      "predicted": 8.945,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“致郁、催泪”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 37183,
+        "id": 2907,
         "type": 2,
-        "name": "太陽の牙ダグラム",
-        "nameCn": "太阳之牙达格拉姆",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
+        "name": "銀河英雄伝説",
+        "nameCn": "银河英雄传说",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c7/55/2907_8xX82.jpg",
         "tags": [
-          "sunrise",
-          "tv",
-          "原创",
-          "1981",
-          "萝卜",
-          "高桥良辅",
+          "银河英雄传说",
+          "田中芳树",
           "科幻",
-          "神田武幸",
-          "真实系",
-          "政治",
-          "高橋良輔",
-          "机战"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 293
-        }
-      },
-      "predicted": 8.734,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 860,
-        "type": 2,
-        "name": "カウボーイビバップ 天国の扉",
-        "nameCn": "星际牛仔 天国之扉",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
-        "tags": [
-          "剧场版",
-          "渡边信一郎",
-          "星际牛仔",
-          "sunrise",
-          "菅野よう子",
-          "bones",
-          "2001",
-          "原创",
-          "科幻",
-          "菅野洋子",
-          "cowboy",
-          "cowboy_bebop"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 7227
-        }
-      },
-      "predicted": 8.715,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 40003,
-        "type": 2,
-        "name": "うる星やつら2 ビューティフル・ドリーマー",
-        "nameCn": "福星小子2 绮丽梦中人",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/51/54/40003_d2Egm.jpg",
-        "tags": [
-          "押井守",
-          "剧场版",
-          "1984",
-          "studiopierrot",
-          "高桥留美子",
-          "漫画改",
-          "福星小子",
-          "漫改",
-          "奇幻",
-          "搞笑",
-          "西村纯二",
-          "电影"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 1563
-        }
-      },
-      "predicted": 8.709,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1428,
-        "type": 2,
-        "name": "鋼の錬金術師 FULLMETAL ALCHEMIST",
-        "nameCn": "钢之炼金术师 FULLMETAL ALCHEMIST",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/06/63/1428_xwkMI.jpg",
-        "tags": [
-          "钢之炼金术师",
-          "bones",
-          "骨头社",
-          "热血",
-          "漫画改",
-          "等价交换",
-          "钢炼",
+          "经典",
+          "ova",
+          "小说改",
+          "1989",
+          "补旧番",
+          "银英",
           "tv",
-          "2009年4月",
-          "2009",
-          "战斗",
-          "fa"
+          "皆杀的田中",
+          "世界观"
         ],
         "rating": {
           "score": 8.8,
-          "total": 25135
+          "total": 2954
         }
       },
-      "predicted": 8.699,
+      "predicted": 8.934,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“奇幻”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“小说改、科幻”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 338,
+        "id": 1728,
         "type": 2,
-        "name": "フルメタル・パニック? ふもっふ",
-        "nameCn": "全金属狂潮 校园篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
+        "name": "るろうに剣心 -明治剣客浪漫譚- 追憶編",
+        "nameCn": "浪客剑心 追忆篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/71/37/1728_HLsCr.jpg",
         "tags": [
-          "京阿尼",
-          "全金属狂潮",
-          "搞笑",
-          "爆笑",
-          "tv",
-          "校园",
-          "贺东招二",
-          "2003",
-          "校园篇",
-          "bon太君",
-          "轻小说改",
-          "全金属狂潮2"
+          "ova",
+          "剑心",
+          "浪客剑心",
+          "追忆篇",
+          "雪代巴",
+          "1999",
+          "悲剧",
+          "十字伤",
+          "studiodeen",
+          "漫画改",
+          "古桥一浩",
+          "明治维新"
         ],
         "rating": {
-          "score": 8.1,
-          "total": 6521
+          "score": 8.9,
+          "total": 9701
         }
       },
-      "predicted": 8.698,
+      "predicted": 8.922,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“校园、京阿尼”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“恋爱、催泪”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 11577,
+        "type": 2,
+        "name": "THE IDOLM@STER",
+        "nameCn": "偶像大师",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a8/6a/11577_5U5G1.jpg",
+        "tags": [
+          "偶像大师",
+          "a-1pictures",
+          "偶像",
+          "tv",
+          "2011年7月",
+          "游戏改",
+          "励志",
+          "锦织敦史",
+          "2011",
+          "神前暁",
+          "骗钱大师",
+          "音乐"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 8838
+        }
+      },
+      "predicted": 8.882,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、a-1pictures”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1015,
+        "type": 2,
+        "name": "機動戦士ガンダム0080 ポケットの中の戦争",
+        "nameCn": "机动战士高达0080 口袋里的战争",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/29/89/1015_Z2xoh.jpg",
+        "tags": [
+          "高达",
+          "ova",
+          "sunrise",
+          "战争",
+          "0080",
+          "1989",
+          "萝卜",
+          "原创",
+          "美树本晴彦",
+          "科幻",
+          "高山文彦",
+          "是爷们就开扎古"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 6055
+        }
+      },
+      "predicted": 8.834,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -748,13 +440,75 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 7.6,
-          "total": 3502
+          "total": 3503
         }
       },
-      "predicted": 8.679,
+      "predicted": 8.829,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“电波、百合”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 28205,
+        "type": 2,
+        "name": "日常 Eテレ版",
+        "nameCn": "日常 ETV版",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/19/6b/28205_AAqG1.jpg",
+        "tags": [
+          "日常",
+          "京阿尼",
+          "搞笑",
+          "2012年1月",
+          "tv",
+          "爆笑",
+          "电波",
+          "吐槽向",
+          "重制版",
+          "石原立也",
+          "2012",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 2583
+        }
+      },
+      "predicted": 8.824,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“电波、百合”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 7056,
+        "type": 2,
+        "name": "よりぬき銀魂さん",
+        "nameCn": "银魂精选集",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/ce/d9/7056_845CC.jpg",
+        "tags": [
+          "银他妈",
+          "精选集",
+          "银魂",
+          "杉田智和",
+          "sunrise",
+          "等于没有",
+          "tv",
+          "gintama",
+          "jump",
+          "吐槽"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 0
+        }
+      },
+      "predicted": 8.808,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、吐槽”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -780,429 +534,109 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.3,
-          "total": 402
+          "total": 403
         }
       },
-      "predicted": 8.666,
+      "predicted": 8.799,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“校园、原创”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 93377,
+        "id": 9622,
         "type": 2,
-        "name": "Rick and Morty Season 1",
-        "nameCn": "瑞克和莫蒂 第一季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/db/e4/93377_TEzAK.jpg",
-        "tags": [
-          "科幻",
-          "美国",
-          "脑洞",
-          "欧美",
-          "搞笑",
-          "tv",
-          "原创",
-          "2013",
-          "rick_and_morty",
-          "神转折",
-          "奇诡万变",
-          "2013年12月"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 6348
-        }
-      },
-      "predicted": 8.662,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1270,
-        "type": 2,
-        "name": "ARIA The ORIGINATION",
-        "nameCn": "水星领航员 第三季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c8/50/1270_Yo7p2.jpg",
-        "tags": [
-          "治愈",
-          "aria",
-          "水星领航员",
-          "tv",
-          "治愈系神作",
-          "2008",
-          "漫画改",
-          "2008年1月",
-          "halfilmmaker",
-          "治愈系",
-          "日常",
-          "科幻"
-        ],
-        "rating": {
-          "score": 8.7,
-          "total": 2954
-        }
-      },
-      "predicted": 8.657,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3553,
-        "type": 2,
-        "name": "∀ガンダム",
-        "nameCn": "∀高达",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/50/3553_FIw4I.jpg",
+        "name": "機動戦士Ζガンダム",
+        "nameCn": "机动战士Z高达",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/97/c8/9622_2P229.jpg",
         "tags": [
           "高达",
           "富野由悠季",
           "sunrise",
-          "∀高达",
           "tv",
-          "菅野洋子",
-          "1999",
-          "原创",
           "gundam",
-          "科幻",
-          "萝卜",
-          "胡子"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 2831
-        }
-      },
-      "predicted": 8.649,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 340,
-        "type": 2,
-        "name": "蟲師",
-        "nameCn": "虫师",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/40/00/340_J14Mj.jpg",
-        "tags": [
-          "治愈",
-          "虫师",
-          "奇幻",
-          "神音乐",
-          "空灵",
-          "内涵系",
-          "tv",
-          "2005",
-          "治愈系",
-          "人生",
-          "水墨",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.7,
-          "total": 11896
-        }
-      },
-      "predicted": 8.603,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1029,
-        "type": 2,
-        "name": "ef - a tale of melodies.",
-        "nameCn": "悠久之翼2",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
-        "tags": [
-          "新房昭之",
-          "大沼心",
-          "ef",
-          "shaft",
-          "gal改",
-          "催泪",
-          "tv",
-          "minori",
-          "天门",
-          "2008年10月",
-          "ef_a_tale_of_melodies.",
-          "2008"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 6054
-        }
-      },
-      "predicted": 8.602,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“致郁、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 23304,
-        "type": 2,
-        "name": "伝説巨神イデオン 発動篇",
-        "nameCn": "传说巨神伊迪安 发动篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
-        "tags": [
-          "富野由悠季",
-          "剧场版",
-          "sunrise",
-          "1982",
-          "萝卜",
+          "1985",
           "原创",
+          "时代的眼泪",
           "科幻",
-          "全灭",
-          "传说巨神伊迪安",
+          "高达z",
           "机战",
-          "裸漂",
-          "日本"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 1011
-        }
-      },
-      "predicted": 8.6,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 254,
-        "type": 2,
-        "name": "サムライチャンプルー",
-        "nameCn": "混沌武士",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
-        "tags": [
-          "渡边信一郎",
-          "混沌武士",
-          "tv",
-          "manglobe",
-          "原创",
-          "2004",
-          "武士",
-          "动作",
-          "hiphop",
-          "神作",
-          "战斗",
-          "向日葵味道"
+          "萝卜"
         ],
         "rating": {
           "score": 8.5,
-          "total": 11398
+          "total": 5383
         }
       },
-      "predicted": 8.594,
+      "predicted": 8.796,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“原创、音乐”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 207195,
+        "id": 37183,
         "type": 2,
-        "name": "ゆるキャン△",
-        "nameCn": "摇曳露营△",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/18/bc/207195_2Cp3o.jpg",
+        "name": "太陽の牙ダグラム",
+        "nameCn": "太阳之牙达格拉姆",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
         "tags": [
-          "芳文社",
-          "治愈",
-          "百合",
-          "日常",
-          "2018年1月",
-          "漫画改",
+          "sunrise",
           "tv",
-          "摇曳露营△",
-          "c-station",
-          "露营",
-          "2018",
-          "轻百合"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 17683
-        }
-      },
-      "predicted": 8.593,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1608,
-        "type": 2,
-        "name": "スラムダンク",
-        "nameCn": "灌篮高手",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fa/af/1608_3I59P.jpg",
-        "tags": [
-          "灌篮高手",
-          "热血",
-          "教练我想打篮球",
-          "经典",
-          "slam_dunk",
-          "童年",
-          "体育",
-          "樱木花道",
-          "tv",
-          "篮球",
-          "1993",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.6,
-          "total": 9433
-        }
-      },
-      "predicted": 8.579,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、jump”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 93739,
-        "type": 2,
-        "name": "ピンポン THE ANIMATION",
-        "nameCn": "乒乓",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1e/63/93739_TZ9dS.jpg",
-        "tags": [
-          "汤浅政明",
-          "乒乓",
-          "运动",
-          "漫画改",
-          "tv",
-          "2014年4月",
-          "龙之子production",
-          "松本大洋",
-          "热血",
-          "2014",
-          "漫改",
-          "noitamina"
-        ],
-        "rating": {
-          "score": 8.7,
-          "total": 17644
-        }
-      },
-      "predicted": 8.579,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、noitamina”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 518519,
-        "type": 2,
-        "name": "ONE PIECE FAN LETTER",
-        "nameCn": "航海王：粉丝来信",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/be/42/518519_DMDo8.jpg",
-        "tags": [
-          "海贼王",
-          "ova",
-          "2024",
-          "番外",
-          "东映动画",
-          "短片",
-          "tv",
-          "小说改",
-          "日本",
-          "2024年10月",
-          "东映",
-          "热血"
-        ],
-        "rating": {
-          "score": 8.6,
-          "total": 4304
-        }
-      },
-      "predicted": 8.56,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“奇幻、催泪”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1891,
-        "type": 2,
-        "name": "少女革命ウテナ アドゥレセンス黙示録",
-        "nameCn": "少女革命 思春期默示录",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/13/16/1891_qDgl0.jpg",
-        "tags": [
-          "剧场版",
-          "j.c.staff",
-          "几原邦彦",
-          "百合",
-          "1999",
           "原创",
-          "少女革命",
-          "幾原邦彦",
-          "榎戸洋司",
-          "少女革命ウテナ",
-          "神作",
-          "光宗信吉"
+          "1981",
+          "萝卜",
+          "高桥良辅",
+          "科幻",
+          "神田武幸",
+          "真实系",
+          "政治",
+          "高橋良輔",
+          "机战"
         ],
         "rating": {
-          "score": 8.2,
-          "total": 3137
+          "score": 8.3,
+          "total": 295
         }
       },
-      "predicted": 8.552,
+      "predicted": 8.793,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 1333,
+        "id": 860,
         "type": 2,
-        "name": "劇場版 空の境界 第五章 矛盾螺旋",
-        "nameCn": "剧场版 空之境界 第五章 矛盾螺旋",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/ff/49/1333_0Dn08.jpg",
+        "name": "カウボーイビバップ 天国の扉",
+        "nameCn": "星际牛仔 天国之扉",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
         "tags": [
-          "空之境界",
-          "type-moon",
           "剧场版",
-          "ufotable",
-          "两仪式",
-          "奈须きのこ",
-          "矛盾螺旋",
-          "2008",
-          "空の境界",
-          "坂本真绫",
-          "奇幻",
-          "战斗"
+          "渡边信一郎",
+          "星际牛仔",
+          "sunrise",
+          "菅野よう子",
+          "bones",
+          "2001",
+          "原创",
+          "科幻",
+          "菅野洋子",
+          "cowboy",
+          "cowboy_bebop"
         ],
         "rating": {
-          "score": 8.4,
-          "total": 12526
+          "score": 8.2,
+          "total": 7233
         }
       },
-      "predicted": 8.55,
+      "predicted": 8.768,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“奇幻、梶浦由记”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1228,10 +662,10 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 7.5,
-          "total": 6082
+          "total": 6079
         }
       },
-      "predicted": 8.545,
+      "predicted": 8.757,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
@@ -1239,34 +673,896 @@ globalThis.BangumiInitialRecommendationFeed = {
     },
     {
       "subject": {
-        "id": 623179,
+        "id": 40003,
         "type": 2,
-        "name": "「ray 超かぐや姫！Version」MV",
-        "nameCn": "",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/6f/da/623179_ww0Wi.jpg",
+        "name": "うる星やつら2 ビューティフル・ドリーマー",
+        "nameCn": "福星小子2 绮丽梦中人",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/51/54/40003_d2Egm.jpg",
         "tags": [
-          "短片",
-          "mv",
-          "百合",
-          "原创",
-          "2026",
-          "studiocolorido",
-          "山下清悟",
-          "web",
-          "日本",
-          "studiochromato",
-          "音乐",
-          "2026年1月"
+          "押井守",
+          "剧场版",
+          "1984",
+          "studiopierrot",
+          "高桥留美子",
+          "漫画改",
+          "福星小子",
+          "漫改",
+          "奇幻",
+          "搞笑",
+          "西村纯二",
+          "电影"
         ],
         "rating": {
-          "score": 7.8,
-          "total": 1143
+          "score": 8.2,
+          "total": 1564
         }
       },
-      "predicted": 8.529,
+      "predicted": 8.737,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、科幻”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 4583,
+        "type": 2,
+        "name": "機動戦士ガンダム 逆襲のシャア",
+        "nameCn": "机动战士高达 逆袭的夏亚",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/33/80/4583_RvVeE.jpg",
+        "tags": [
+          "高达",
+          "剧场版",
+          "富野由悠季",
+          "sunrise",
+          "1988",
+          "gundam",
+          "原创",
+          "萝卜",
+          "科幻",
+          "机战",
+          "14年的基情",
+          "nt大战"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 5215
+        }
+      },
+      "predicted": 8.737,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 64172,
+        "type": 2,
+        "name": "THE IDOLM@STER MOVIE 輝きの向こう側へ！",
+        "nameCn": "偶像大师 剧场版 向着光辉的彼岸！",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f8/45/64172_8MujB.jpg",
+        "tags": [
+          "剧场版",
+          "a-1pictures",
+          "偶像大师",
+          "偶像",
+          "2014",
+          "锦织敦史",
+          "游戏改",
+          "im@s",
+          "音乐",
+          "2014年1月",
+          "輝きの向こう側へ！",
+          "錦織敦史"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 4262
+        }
+      },
+      "predicted": 8.732,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、a-1_pictures”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 848,
+        "type": 2,
+        "name": "ハチミツとクローバー II",
+        "nameCn": "蜂蜜与四叶草II",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/36/2e/848_RC9L8.jpg",
+        "tags": [
+          "青春",
+          "j.c.staff",
+          "蜂蜜与四叶草ii",
+          "校园",
+          "羽海野千花",
+          "治愈",
+          "tv",
+          "2006",
+          "noitamina",
+          "人生",
+          "治愈系",
+          "大学"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 4510
+        }
+      },
+      "predicted": 8.726,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 335579,
+        "type": 2,
+        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会 2期",
+        "nameCn": "Love Live! 虹咲学园校园偶像同好会 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/78/6f/335579_3ldtt.jpg",
+        "tags": [
+          "偶像",
+          "原创",
+          "sunrise",
+          "百合",
+          "lovelive！",
+          "2022年4月",
+          "tv",
+          "音乐",
+          "校园",
+          "2022",
+          "田中仁",
+          "lovelive"
+        ],
+        "rating": {
+          "score": 7.4,
+          "total": 4431
+        }
+      },
+      "predicted": 8.725,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 338,
+        "type": 2,
+        "name": "フルメタル・パニック? ふもっふ",
+        "nameCn": "全金属狂潮 校园篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
+        "tags": [
+          "京阿尼",
+          "全金属狂潮",
+          "搞笑",
+          "爆笑",
+          "tv",
+          "校园",
+          "贺东招二",
+          "2003",
+          "校园篇",
+          "bon太君",
+          "轻小说改",
+          "全金属狂潮2"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6526
+        }
+      },
+      "predicted": 8.723,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“京阿尼、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 847,
+        "type": 2,
+        "name": "ハチミツとクローバー",
+        "nameCn": "蜂蜜与四叶草",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f4/55/847_xHHqh.jpg",
+        "tags": [
+          "青春",
+          "蜂蜜与四叶草",
+          "j.c.staff",
+          "校园",
+          "治愈系",
+          "羽海野千花",
+          "tv",
+          "治愈",
+          "2005",
+          "noitamina",
+          "大学",
+          "尋找自我"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 5812
+        }
+      },
+      "predicted": 8.716,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3553,
+        "type": 2,
+        "name": "∀ガンダム",
+        "nameCn": "∀高达",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/50/3553_FIw4I.jpg",
+        "tags": [
+          "高达",
+          "富野由悠季",
+          "sunrise",
+          "∀高达",
+          "tv",
+          "菅野洋子",
+          "1999",
+          "原创",
+          "gundam",
+          "科幻",
+          "萝卜",
+          "胡子"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 2833
+        }
+      },
+      "predicted": 8.709,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 25961,
+        "type": 2,
+        "name": "Tom and Jerry",
+        "nameCn": "猫和老鼠（1965年电视版）",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fd/60/25961_WDKz6.jpg",
+        "tags": [
+          "童年",
+          "欧美",
+          "搞笑",
+          "童年的经典",
+          "经典",
+          "神作",
+          "tom&jerry",
+          "tv",
+          "美国",
+          "原创",
+          "爆笑",
+          "汤姆杰瑞好基友"
+        ],
+        "rating": {
+          "score": 9.1,
+          "total": 14209
+        }
+      },
+      "predicted": 8.709,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1029,
+        "type": 2,
+        "name": "ef - a tale of melodies.",
+        "nameCn": "悠久之翼2",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
+        "tags": [
+          "新房昭之",
+          "大沼心",
+          "ef",
+          "shaft",
+          "gal改",
+          "催泪",
+          "tv",
+          "minori",
+          "天门",
+          "2008年10月",
+          "ef_a_tale_of_melodies.",
+          "2008"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6061
+        }
+      },
+      "predicted": 8.695,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“致郁、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 254,
+        "type": 2,
+        "name": "サムライチャンプルー",
+        "nameCn": "混沌武士",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
+        "tags": [
+          "渡边信一郎",
+          "混沌武士",
+          "tv",
+          "manglobe",
+          "原创",
+          "2004",
+          "武士",
+          "动作",
+          "hiphop",
+          "神作",
+          "战斗",
+          "向日葵味道"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 11405
+        }
+      },
+      "predicted": 8.69,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“原创、音乐”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1608,
+        "type": 2,
+        "name": "スラムダンク",
+        "nameCn": "灌篮高手",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fa/af/1608_3I59P.jpg",
+        "tags": [
+          "灌篮高手",
+          "热血",
+          "教练我想打篮球",
+          "经典",
+          "slam_dunk",
+          "童年",
+          "体育",
+          "樱木花道",
+          "tv",
+          "篮球",
+          "1993",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 9436
+        }
+      },
+      "predicted": 8.69,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1027,
+        "type": 2,
+        "name": "舞-HiME",
+        "nameCn": "舞-HiME",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/88/3e/1027_7reJ8.jpg",
+        "tags": [
+          "百合",
+          "舞-hime",
+          "sunrise",
+          "梶浦由记",
+          "tv",
+          "2004",
+          "吐便当",
+          "校园",
+          "中原麻衣",
+          "原创",
+          "战斗",
+          "全员白魔法"
+        ],
+        "rating": {
+          "score": 7.3,
+          "total": 1860
+        }
+      },
+      "predicted": 8.689,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、百合”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 216310,
+        "type": 2,
+        "name": "ヤマノススメ サードシーズン",
+        "nameCn": "向山进发 第三季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/49/a2/216310_ci5yT.jpg",
+        "tags": [
+          "百合",
+          "漫画改",
+          "tv",
+          "2018年7月",
+          "治愈",
+          "8-bit",
+          "2018",
+          "向山进发",
+          "山本裕介",
+          "泡面番",
+          "日常",
+          "8bit"
+        ],
+        "rating": {
+          "score": 7.7,
+          "total": 3961
+        }
+      },
+      "predicted": 8.666,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“扭曲、百合”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1428,
+        "type": 2,
+        "name": "鋼の錬金術師 FULLMETAL ALCHEMIST",
+        "nameCn": "钢之炼金术师 FULLMETAL ALCHEMIST",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/06/63/1428_xwkMI.jpg",
+        "tags": [
+          "钢之炼金术师",
+          "bones",
+          "骨头社",
+          "热血",
+          "漫画改",
+          "等价交换",
+          "钢炼",
+          "tv",
+          "2009年4月",
+          "2009",
+          "战斗",
+          "fa"
+        ],
+        "rating": {
+          "score": 8.8,
+          "total": 25155
+        }
+      },
+      "predicted": 8.663,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、经典”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 5694,
+        "type": 2,
+        "name": "プリンセスチュチュ",
+        "nameCn": "萩萩公主",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_EHTE8.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "原创",
+          "童话",
+          "佐藤顺一",
+          "halfilmmaker",
+          "岡崎律子",
+          "芭蕾舞",
+          "萩萩公主",
+          "少女系",
+          "古典音乐",
+          "奇幻"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 716
+        }
+      },
+      "predicted": 8.657,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 316007,
+        "type": 2,
+        "name": "GOTCHA！",
+        "nameCn": "",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/79/84/316007_KkQOZ.jpg",
+        "tags": [
+          "短片",
+          "bones",
+          "2020",
+          "web",
+          "pokemon",
+          "松本理恵",
+          "mv",
+          "宝可梦",
+          "游戏改",
+          "中村豊",
+          "松本理惠",
+          "林祐己"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 876
+        }
+      },
+      "predicted": 8.652,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2979,
+        "type": 2,
+        "name": "勇者王ガオガイガーFINAL",
+        "nameCn": "勇者王GaoGaiGar Final",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2d/71/2979_VygjJ.jpg",
+        "tags": [
+          "ova",
+          "sunrise",
+          "勇者王",
+          "萝卜",
+          "2000",
+          "燃",
+          "热血",
+          "原创",
+          "科幻",
+          "勇者シリーズ",
+          "机战",
+          "童年"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 496
+        }
+      },
+      "predicted": 8.641,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、童年”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 567936,
+        "type": 2,
+        "name": "〈物語〉シリーズ オフ&モンスターシーズン：業物語 かれんオウガ",
+        "nameCn": "物语系列 外传季&怪物季：业物语 火怜逢我",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2d/00/567936_M6zp6.jpg",
+        "tags": [
+          "shaft",
+          "物语系列",
+          "新房昭之",
+          "小说改",
+          "奇幻",
+          "吉泽翠",
+          "web",
+          "日本",
+          "轻小说改",
+          "tv"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 0
+        }
+      },
+      "predicted": 8.635,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“小说改、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 93739,
+        "type": 2,
+        "name": "ピンポン THE ANIMATION",
+        "nameCn": "乒乓",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1e/63/93739_TZ9dS.jpg",
+        "tags": [
+          "汤浅政明",
+          "乒乓",
+          "运动",
+          "漫画改",
+          "tv",
+          "2014年4月",
+          "龙之子production",
+          "松本大洋",
+          "热血",
+          "2014",
+          "漫改",
+          "noitamina"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 17677
+        }
+      },
+      "predicted": 8.625,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、群像”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2741,
+        "type": 2,
+        "name": "タッチ",
+        "nameCn": "棒球英豪",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cd/cb/2741_GPGN2.jpg",
+        "tags": [
+          "安达充",
+          "棒球",
+          "爱情",
+          "touch",
+          "青春",
+          "校园",
+          "经典",
+          "tv",
+          "上杉达也",
+          "1985",
+          "童年",
+          "体育"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 1948
+        }
+      },
+      "predicted": 8.612,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 62285,
+        "type": 2,
+        "name": "プリティーリズム・レインボーライブ",
+        "nameCn": "美妙旋律 Rainbow Live",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/da/39/62285_zcb5F.jpg",
+        "tags": [
+          "tv",
+          "偶像",
+          "美妙旋律",
+          "2013",
+          "原创",
+          "龙之子",
+          "2013年4月",
+          "幼女向",
+          "音乐",
+          "菱田正和",
+          "星光少女",
+          "加藤英美里"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 295
+        }
+      },
+      "predicted": 8.607,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 340,
+        "type": 2,
+        "name": "蟲師",
+        "nameCn": "虫师",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/40/00/340_J14Mj.jpg",
+        "tags": [
+          "治愈",
+          "虫师",
+          "奇幻",
+          "神音乐",
+          "空灵",
+          "内涵系",
+          "tv",
+          "2005",
+          "治愈系",
+          "人生",
+          "水墨",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 11898
+        }
+      },
+      "predicted": 8.599,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、公路片”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 14879,
+        "type": 2,
+        "name": "おジャ魔女どれみナ・イ・ショ",
+        "nameCn": "小魔女DoReMi 童年秘密篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e9/85/14879_4kRqu.jpg",
+        "tags": [
+          "ova",
+          "2004",
+          "东映",
+          "五十岚卓哉",
+          "原创",
+          "佐藤顺一",
+          "東映アニメーション",
+          "魔法少女doremi",
+          "马越嘉彦",
+          "山内重保",
+          "doremi",
+          "童年"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 333
+        }
+      },
+      "predicted": 8.59,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 535669,
+        "type": 2,
+        "name": "氷の城壁",
+        "nameCn": "冰之城墙",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/93/8f/535669_4zoHG.jpg",
+        "tags": [
+          "恋爱",
+          "2026年4月",
+          "漫画改",
+          "校园",
+          "tv",
+          "studiokai",
+          "2026",
+          "青春",
+          "漫改",
+          "日本",
+          "まんきゅう",
+          "日常"
+        ],
+        "rating": {
+          "score": 7.3,
+          "total": 2955
+        }
+      },
+      "predicted": 8.586,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“扭曲、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 207195,
+        "type": 2,
+        "name": "ゆるキャン△",
+        "nameCn": "摇曳露营△",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/18/bc/207195_2Cp3o.jpg",
+        "tags": [
+          "芳文社",
+          "治愈",
+          "百合",
+          "日常",
+          "2018年1月",
+          "漫画改",
+          "tv",
+          "摇曳露营△",
+          "c-station",
+          "露营",
+          "2018",
+          "轻百合"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 17696
+        }
+      },
+      "predicted": 8.582,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 343607,
+        "type": 2,
+        "name": "VOY@GER",
+        "nameCn": "",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/04/14/343607_XRvUF.jpg",
+        "tags": [
+          "短片",
+          "cloverworks",
+          "2021",
+          "偶像大师",
+          "錦織敦史",
+          "khara",
+          "锦织敦史",
+          "web",
+          "偶像",
+          "im@s",
+          "游戏改",
+          "mv"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 2068
+        }
+      },
+      "predicted": 8.575,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“cloverworks、a-1pictures”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 23304,
+        "type": 2,
+        "name": "伝説巨神イデオン 発動篇",
+        "nameCn": "传说巨神伊迪安 发动篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
+        "tags": [
+          "富野由悠季",
+          "剧场版",
+          "sunrise",
+          "1982",
+          "萝卜",
+          "原创",
+          "科幻",
+          "全灭",
+          "传说巨神伊迪安",
+          "机战",
+          "裸漂",
+          "日本"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 1013
+        }
+      },
+      "predicted": 8.563,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1292,141 +1588,109 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.3,
-          "total": 12570
+          "total": 12577
         }
       },
-      "predicted": 8.523,
+      "predicted": 8.544,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 146457,
+        "id": 2664,
         "type": 2,
-        "name": "Rick and Morty Season 3",
-        "nameCn": "瑞克和莫蒂 第三季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c0/a7/146457_G7nNG.jpg",
+        "name": "機動戦士ガンダム 第08MS小隊",
+        "nameCn": "机动战士高达 第08MS小队",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/da/aa/2664_S3lsS.jpg",
         "tags": [
-          "科幻",
-          "欧美",
-          "脑洞",
-          "搞笑",
-          "美国",
-          "tv",
+          "高达",
+          "ova",
+          "第08ms小隊",
+          "sunrise",
+          "gundam",
+          "1996",
+          "uc系",
+          "爱情与战争",
           "原创",
-          "2017",
-          "2017年4月",
-          "rick",
-          "morty",
-          "猎奇"
+          "真实系",
+          "光剑温泉与妹子",
+          "科幻"
         ],
         "rating": {
-          "score": 8.5,
-          "total": 5416
+          "score": 7.9,
+          "total": 4022
         }
       },
-      "predicted": 8.502,
+      "predicted": 8.534,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“sunrise、恋爱”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 3324,
+        "id": 3130,
         "type": 2,
-        "name": "マインド・ゲーム",
-        "nameCn": "心灵游戏",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3c/e6/3324_y2yg1.jpg",
+        "name": "デジモンテイマーズ",
+        "nameCn": "数码宝贝驯兽师之王",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c9/22/3130_cGKH5.jpg",
         "tags": [
-          "汤浅政明",
-          "剧场版",
-          "studio4℃",
-          "2004",
-          "原创",
-          "湯浅政明",
-          "想像力",
-          "人生",
-          "渡辺信一郎",
-          "菅野洋子",
-          "渡边信一郎",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 2346
-        }
-      },
-      "predicted": 8.491,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 141530,
-        "type": 2,
-        "name": "Rick and Morty Season 2",
-        "nameCn": "瑞克和莫蒂 第二季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/63/28/141530_HCCpE.jpg",
-        "tags": [
-          "科幻",
-          "美国",
-          "脑洞",
-          "欧美",
+          "童年",
+          "数码宝贝",
           "tv",
-          "2015",
-          "搞笑",
+          "2001",
+          "东映",
+          "馴獸師之王",
           "原创",
-          "猎奇",
-          "rick_and_morty",
-          "美国动画",
-          "adult-swim"
+          "数码暴龙",
+          "催泪弹结局",
+          "刷蓝卡",
+          "燃！",
+          "digimon"
         ],
         "rating": {
-          "score": 8.4,
-          "total": 5199
+          "score": 8,
+          "total": 2683
         }
       },
-      "predicted": 8.468,
+      "predicted": 8.53,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 106207,
+        "id": 623179,
         "type": 2,
-        "name": "蟲師 続章 第2クール",
-        "nameCn": "虫师 续章 第2部分",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/9c/c7/106207_z8288.jpg",
+        "name": "「ray 超かぐや姫！Version」MV",
+        "nameCn": "",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/6f/da/623179_ww0Wi.jpg",
         "tags": [
-          "治愈",
-          "蟲師",
-          "tv",
-          "2014年10月",
-          "漫画改",
-          "奇幻",
-          "漆原友紀",
-          "artland",
-          "2014",
-          "虫师",
-          "増田俊郎",
-          "漫改"
+          "短片",
+          "mv",
+          "百合",
+          "原创",
+          "2026",
+          "studiocolorido",
+          "山下清悟",
+          "web",
+          "日本",
+          "studiochromato",
+          "音乐",
+          "2026年1月"
         ],
         "rating": {
-          "score": 8.6,
-          "total": 4413
+          "score": 7.8,
+          "total": 1145
         }
       },
-      "predicted": 8.467,
+      "predicted": 8.526,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“奇幻”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“百合、恋爱”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1452,301 +1716,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8,
-          "total": 2459
+          "total": 2464
         }
       },
-      "predicted": 8.457,
+      "predicted": 8.523,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“科幻、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 770,
-        "type": 2,
-        "name": "天元突破グレンラガン",
-        "nameCn": "天元突破 红莲螺岩",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/4e/a0/770_EvrMq.jpg",
-        "tags": [
-          "热血",
-          "gainax",
-          "今石洋之",
-          "燃",
-          "天元突破グレンラガン",
-          "钻头",
-          "原创",
-          "tv",
-          "萝卜",
-          "超级系",
-          "2007",
-          "神作"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 16704
-        }
-      },
-      "predicted": 8.455,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 18692,
-        "type": 2,
-        "name": "ドラえもん",
-        "nameCn": "哆啦A梦",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b4/4f/18692_Gilpl.jpg",
-        "tags": [
-          "童年",
-          "哆啦a梦",
-          "经典",
-          "藤子・f・不二雄",
-          "tv",
-          "2005",
-          "童年回憶",
-          "漫画改",
-          "没看完",
-          "沒看全",
-          "搞笑",
-          "我的童年不是喜羊羊實在太好了"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 6175
-        }
-      },
-      "predicted": 8.448,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 5694,
-        "type": 2,
-        "name": "プリンセスチュチュ",
-        "nameCn": "萩萩公主",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_MdZo5.jpg",
-        "tags": [
-          "tv",
-          "2002",
-          "原创",
-          "童话",
-          "佐藤顺一",
-          "halfilmmaker",
-          "岡崎律子",
-          "芭蕾舞",
-          "萩萩公主",
-          "少女系",
-          "古典音乐",
-          "奇幻"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 715
-        }
-      },
-      "predicted": 8.446,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“奇幻、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 292,
-        "type": 2,
-        "name": "DARKER THAN BLACK -黒の契約者-",
-        "nameCn": "DARKER THAN BLACK -黑之契约者-",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/17/00/292_86ZrF.jpg",
-        "tags": [
-          "bones",
-          "黑之契约者",
-          "骨头社",
-          "超能力",
-          "原创",
-          "tv",
-          "2007",
-          "菅野洋子",
-          "银",
-          "黒の契約者",
-          "战斗",
-          "2007年4月"
-        ],
-        "rating": {
-          "score": 7.9,
-          "total": 10024
-        }
-      },
-      "predicted": 8.443,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 4124,
-        "type": 2,
-        "name": "ハートキャッチプリキュア!",
-        "nameCn": "Heart Catch 光之美少女！",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/7d/c3/4124_pPP9r.jpg",
-        "tags": [
-          "光之美少女",
-          "tv",
-          "东映",
-          "2010",
-          "原创",
-          "抓心",
-          "東映アニメーション",
-          "水樹奈々",
-          "プリキュア",
-          "precure",
-          "百合",
-          "子供向"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 1411
-        }
-      },
-      "predicted": 8.442,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3128,
-        "type": 2,
-        "name": "デジモンアドベンチャー",
-        "nameCn": "数码宝贝大冒险",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/df/f8/3128_4QNAH.jpg",
-        "tags": [
-          "童年",
-          "数码暴龙",
-          "永远的回忆",
-          "tv",
-          "1999",
-          "热血",
-          "butterfly神曲",
-          "无限大的梦想",
-          "数码宝贝",
-          "原创",
-          "东映",
-          "butterfly"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 8587
-        }
-      },
-      "predicted": 8.44,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 243429,
-        "type": 2,
-        "name": "機動戦士ガンダム 閃光のハサウェイ",
-        "nameCn": "机动战士高达 闪光的哈萨维",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/46/243429_l49P7.jpg",
-        "tags": [
-          "剧场版",
-          "高达",
-          "sunrise",
-          "2021",
-          "富野由悠季",
-          "小说改",
-          "闪光的哈萨维",
-          "科幻",
-          "机战",
-          "萝卜",
-          "uc",
-          "村濑修功"
-        ],
-        "rating": {
-          "score": 7.9,
-          "total": 5834
-        }
-      },
-      "predicted": 8.44,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3423,
-        "type": 2,
-        "name": "劇場版 空の境界 第七章 殺人考察(後)",
-        "nameCn": "剧场版 空之境界 第七章 杀人考察（后）",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3d/32/3423_ZNaov.jpg",
-        "tags": [
-          "空之境界",
-          "剧场版",
-          "type-moon",
-          "ufotable",
-          "梶浦由記",
-          "奈须きのこ",
-          "两仪式",
-          "2009",
-          "空の境界",
-          "奇幻",
-          "小说改",
-          "坂本真绫"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 9951
-        }
-      },
-      "predicted": 8.439,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“恋爱、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 100501,
-        "type": 2,
-        "name": "スペース☆ダンディ シーズン2",
-        "nameCn": "太空丹迪 第二季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/8e/30/100501_M7o32.jpg",
-        "tags": [
-          "bones",
-          "渡边信一郎",
-          "原创",
-          "tv",
-          "科幻",
-          "2014年7月",
-          "2014",
-          "菅野洋子",
-          "搞笑",
-          "space☆dandy",
-          "夏目真悟",
-          "渡辺信一郎"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 3821
-        }
-      },
-      "predicted": 8.435,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、原创”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“恋爱、原创”相关作品通常比站内评价更偏爱。"
       ]
     }
   ]
@@ -2167,7 +2143,6 @@ globalThis.BangumiInitialRecommendationFeed = {
 
   const DEFAULT_USER = "wylt";
   const API_BASE = "https://api.bgm.tv";
-  const COLLECTION_TTL = 12 * 60 * 60 * 1000;
   const ENTITY_TTL = 90 * 24 * 60 * 60 * 1000;
   const ENTITY_CONCURRENCY = 1;
   const ENTITY_DELAY = 850;
@@ -2175,7 +2150,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.11.0";
+  const APP_VERSION = "0.11.1";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2226,6 +2201,27 @@ globalThis.BangumiInitialRecommendationFeed = {
         transaction.onerror = () => reject(transaction.error);
       });
     }
+    async getMany(keys) {
+      const database = await this.open();
+      return new Promise((resolve, reject) => {
+        const result = {};
+        const transaction = database.transaction("kv", "readonly");
+        const store = transaction.objectStore("kv");
+        for (const key of keys) {
+          const request = store.get(key);
+          request.onsuccess = () => { result[key] = request.result; };
+        }
+        transaction.oncomplete = () => resolve(result);
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    }
+  }
+
+  function validCollections(cached) {
+    return Number.isFinite(cached?.storedAt) && Array.isArray(cached.value) && cached.value.every(row =>
+      Number.isSafeInteger(row?.subjectId) && row.subjectId > 0 && [1, 2, 3, 4, 5].includes(row.status) &&
+      Number.isFinite(row.rate) && Array.isArray(row.tags) && row.subject?.id === row.subjectId);
   }
 
   class Client {
@@ -2249,22 +2245,28 @@ globalThis.BangumiInitialRecommendationFeed = {
     async collections(force, onProgress) {
       const key = this.key("collections:api");
       const cached = await this.store.get(key);
-      if (!force && cached && Date.now() - cached.storedAt < COLLECTION_TTL) return cached.value;
+      if (!force && validCollections(cached)) return cached;
       const rows = [];
       let offset = 0;
       let total = Infinity;
       while (offset < total) {
         const page = await this.fetchJson(`/v0/users/${encodeURIComponent(this.username)}/collections?subject_type=2&limit=100&offset=${offset}`);
-        const data = Array.isArray(page.data) ? page.data : [];
-        total = number(page.total);
+        const data = page.data;
+        const count = Number(page.total);
+        if (!Array.isArray(data) || !Number.isSafeInteger(count) || count < 0 ||
+            (total !== Infinity && total !== count) || data.length > 100 ||
+            (offset < count && !data.length) || offset + data.length > count) throw new Error("收藏分页无效或不完整");
+        total = count;
         rows.push(...data);
         offset += data.length;
         onProgress?.("正在同步动画收藏…", Math.min(offset, total), total);
         if (!data.length) break;
       }
       const value = rows.map(Core.compactCollection);
-      await this.store.set(key, { storedAt: Date.now(), value });
-      return value;
+      const next = { storedAt: Date.now(), value };
+      if (rows.length !== total || !validCollections(next) || new Set(value.map(row => row.subjectId)).size !== value.length) throw new Error("收藏条目无效或分页重复");
+      await this.store.set(key, next);
+      return next;
     }
     async entity(kind, subjectId) {
       const key = this.key(`${kind}:${subjectId}`);
@@ -2282,12 +2284,14 @@ globalThis.BangumiInitialRecommendationFeed = {
       await this.store.set(key, { storedAt: Date.now(), value });
       return value;
     }
-    async entityMap(kind, ids) {
+    async entityMap(kind, ids, fresh = false) {
       const result = {};
-      await Promise.all(ids.map(async (id) => {
-        const cached = await this.store.get(this.key(`${kind}:${id}`));
-        if (cached && Date.now() - cached.storedAt < ENTITY_TTL && Array.isArray(cached.value)) result[id] = cached.value;
-      }));
+      const keys = ids.map(id => this.key(`${kind}:${id}`));
+      const records = await this.store.getMany(keys);
+      ids.forEach((id, index) => {
+        const cached = records[keys[index]];
+        if (cached && (!fresh || Date.now() - cached.storedAt < ENTITY_TTL) && Array.isArray(cached.value)) result[id] = cached.value;
+      });
       return result;
     }
     async enrichmentState() {
@@ -2354,7 +2358,7 @@ globalThis.BangumiInitialRecommendationFeed = {
       updateTheme();
       new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
       matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", updateTheme);
-      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
+      this.open();
     }
     detectTheme() { return globalThis.BangumiProfileUI.theme(); }
     $(selector) { return this.shadow.querySelector(selector); }
@@ -2390,8 +2394,9 @@ globalThis.BangumiInitialRecommendationFeed = {
       this.progress(`${prefix}：创作人员 ${formatNumber(people.cached)} / ${formatNumber(people.total)} · 声优 ${formatNumber(cast.cached)} / ${formatNumber(cast.total)}${failedText}`, current, total, total ? `${percent}%` : "");
     }
     async open() {
+      if (this.state.open) return;
       this.state.open = true;
-      if (!this.state.collections.length && !this.isBusy()) await this.sync(false);
+      await this.sync(false);
     }
     close() {}
     progress(label, current = 0, total = 0, countText = null) {
@@ -2410,24 +2415,29 @@ globalThis.BangumiInitialRecommendationFeed = {
       this.state.cancel = false;
       this.render();
       this.progress("正在同步动画收藏…", 0, 1);
-      let shouldResume = false;
       try {
-        const allCollections = await this.client.collections(force, (label, current, total) => this.progress(label, current, total));
-        this.state.collections = allCollections.filter((row) => row.status === 2);
+        const saved = await this.client.collections(force, (label, current, total) => this.progress(label, current, total));
+        this.state.collections = saved.value.filter((row) => row.status === 2);
+        this.state.lastSync = saved.storedAt;
+        this.statsSignature = null;
+        // Show local collection statistics before reading the larger entity caches.
+        this.render();
         const ids = this.state.collections.map((row) => row.subjectId);
         [this.state.people, this.state.cast] = await Promise.all([this.client.entityMap("people", ids), this.client.entityMap("cast", ids)]);
         this.initializeEntityProgress();
-        this.state.lastSync = Date.now();
-        const enrichmentState = await this.client.enrichmentState();
-        shouldResume = Boolean(enrichmentState.enabled && Date.now() >= number(enrichmentState.nextAt));
+        this.statsSignature = null;
         this.refreshEntityProgress("已同步收藏");
       } catch (error) { this.progress(`同步失败：${error.message || "网络异常"}`, 0, 0); }
       finally { this.state.syncing = false; this.render(); }
-      if (shouldResume && !this.state.cancel) this.enrichAll(false);
     }
     async enrichAll(userInitiated = true) {
-      if (!this.state.collections.length || this.state.syncing) return;
-      if (userInitiated) await this.client.setEnrichmentState({ enabled: true, nextAt: Date.now() });
+      if (!this.state.collections.length || this.isBusy()) return;
+      if (userInitiated) {
+        await this.client.setEnrichmentState({ enabled: true, nextAt: Date.now() });
+        const ids = this.state.collections.map(row => row.subjectId);
+        [this.state.people, this.state.cast] = await Promise.all([this.client.entityMap("people", ids, true), this.client.entityMap("cast", ids, true)]);
+        this.statsSignature = null;
+      }
       await Promise.all([this.enrich("people"), this.enrich("cast")]);
       const people = this.state.entityProgress.people;
       const cast = this.state.entityProgress.cast;
@@ -2752,10 +2762,10 @@ globalThis.BangumiInitialRecommendationFeed = {
   const Feed = globalThis.BangumiRecommendationFeed;
   if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.11.0";
+  const APP_VERSION = "0.11.1";
   const OWNER = Feed.OWNER;
   const PAGE_SIZE = 5;
-  const CACHE_TTL = 6 * 60 * 60 * 1000;
+  const FEED_TTL = 6 * 60 * 60 * 1000;
   const FEED_URL = "https://raw.githubusercontent.com/wylt-bupt/bangumi-personal-recommender/main/public/recommendations.json";
 
   function escapeHtml(value) {
@@ -2775,9 +2785,26 @@ globalThis.BangumiInitialRecommendationFeed = {
     catch { return null; }
   }
 
-  function cache(key, value) {
-    try { localStorage.setItem(`bgmpr:v2:${key}`, JSON.stringify({ storedAt: Date.now(), value })); }
+  function cache(key, value, storedAt = Date.now()) {
+    try { localStorage.setItem(`bgmpr:v2:${key}`, JSON.stringify({ storedAt, value })); }
     catch { /* Storage may be unavailable in private mode. */ }
+  }
+
+  function savedCollections() {
+    const saved = cached("collections");
+    if (!Number.isFinite(saved?.storedAt) || !Array.isArray(saved.value) ||
+        !saved.value.every(row => Number.isSafeInteger(row?.subject_id) && row.subject_id > 0 && Number.isFinite(row.rate))) return null;
+    return saved;
+  }
+
+  function localFeed() {
+    const saved = cached("feed");
+    try {
+      if (Number.isFinite(saved?.storedAt)) return { feed: Feed.parseFeed(saved.value), raw: saved.value, source: "cache", storedAt: saved.storedAt };
+    } catch { /* Ignore incompatible cached feeds and use the bundled fallback. */ }
+    try {
+      return { feed: Feed.parseFeed(globalThis.BangumiInitialRecommendationFeed), source: "bundle", storedAt: 0 };
+    } catch { return null; }
   }
 
   async function requestJson(url) {
@@ -2798,6 +2825,7 @@ globalThis.BangumiInitialRecommendationFeed = {
       };
       this.excludedBatch = new Set();
       this.toastTimer = null;
+      this.revision = 0;
     }
 
     mount() {
@@ -2817,7 +2845,13 @@ globalThis.BangumiInitialRecommendationFeed = {
       const updateTheme = () => { this.host.dataset.theme = globalThis.BangumiProfileUI.theme(); };
       new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
       matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", updateTheme);
-      globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
+      const collections = savedCollections();
+      const feed = localFeed();
+      if (collections && feed) {
+        this.state.open = true;
+        this.applyData(feed, collections.value, collections.storedAt);
+        globalThis.BangumiProfileUI.lazy(this.host, () => this.refreshFeed());
+      } else globalThis.BangumiProfileUI.lazy(this.host, () => this.open());
     }
 
     $(selector) { return this.shadow.querySelector(selector); }
@@ -2858,82 +2892,97 @@ globalThis.BangumiInitialRecommendationFeed = {
     }
 
     async getFeed(force) {
-      const saved = cached("feed");
-      if (!force && saved && Date.now() - saved.storedAt < CACHE_TTL) {
-        this.feedSource = "cache";
-        return Feed.parseFeed(saved.value);
-      }
+      const saved = localFeed();
+      if (!force && saved?.source === "cache" && Date.now() - saved.storedAt < FEED_TTL) return saved;
       try {
         const raw = await requestJson(FEED_URL);
-        const parsed = Feed.parseFeed(raw);
-        cache("feed", raw);
-        this.feedSource = "remote";
-        return parsed;
+        return { feed: Feed.parseFeed(raw), raw, source: "remote", storedAt: Date.now() };
       } catch (error) {
-        if (saved?.value) {
-          this.feedSource = "cache";
-          return Feed.parseFeed(saved.value);
-        }
-        if (globalThis.BangumiInitialRecommendationFeed) {
-          this.feedSource = "bundle";
-          return Feed.parseFeed(globalThis.BangumiInitialRecommendationFeed);
-        }
+        if (saved) return { ...saved, error };
         throw new Error(`推荐数据读取失败：${error.message}`);
       }
     }
 
-    async getCollections(force) {
-      const saved = cached("collections");
-      if (!force && saved && Date.now() - saved.storedAt < CACHE_TTL) {
-        this.collectionCheckedAt = saved.storedAt;
-        return saved.value;
+    applyData(next, collections, checkedAt, reset = true) {
+      this.state.feed = next.feed;
+      this.feedSource = next.source;
+      this.state.collections = collections;
+      this.collectionCheckedAt = checkedAt;
+      this.state.profile = { collectionCount: collections.length, ratedCount: collections.filter(row => row.rate > 0).length };
+      this.state.pageOrder = Feed.unmarkedCandidates(next.feed, collections);
+      this.state.eligibleCandidateCount = this.state.pageOrder.length;
+      if (reset) {
+        this.excludedBatch.clear();
+        this.state.currentPage = 1;
       }
+      this.renderFromPool();
+    }
+
+    notice(message) {
+      this.$(".error").hidden = false;
+      this.$(".error-message").textContent = message;
+    }
+
+    async refreshFeed() {
+      const saved = localFeed();
+      if (saved?.source === "cache" && Date.now() - saved.storedAt < FEED_TTL) return;
+      const revision = this.revision;
       try {
-        const rows = [];
-        let total = Infinity;
-        for (let offset = 0; offset < total; offset += 50) {
-          const page = await requestJson(`https://api.bgm.tv/v0/users/${OWNER}/collections?subject_type=2&limit=50&offset=${offset}`);
-          const batch = Array.isArray(page.data) ? page.data : [];
-          total = Number(page.total);
-          if (!Number.isFinite(total)) throw new Error("收藏分页信息无效");
-          rows.push(...batch.map((row) => ({ subject_id: Number(row.subject_id), rate: Number(row.rate) || 0 })));
-          this.$(".progress").textContent = `正在核对已标记动画… ${Math.min(rows.length, total)}/${total}`;
-          if (!batch.length) break;
-          if (offset + batch.length < total) await new Promise((resolve) => setTimeout(resolve, 180));
+        const next = await this.getFeed(false);
+        if (revision !== this.revision) return;
+        if (next.error) {
+          this.notice("推荐清单更新失败，保留已有结果。可点击更新重试。");
+          return;
         }
-        if (!rows.length) throw new Error("没有读取到公开收藏");
-        cache("collections", rows);
-        this.collectionCheckedAt = Date.now();
-        return rows;
-      } catch (error) {
-        if (!force && saved?.value?.length) {
-          this.collectionCheckedAt = saved.storedAt;
-          return saved.value;
+        if (next.source === "remote") cache("feed", next.raw);
+        this.applyData(next, this.state.collections, this.collectionCheckedAt, false);
+      } catch { if (revision === this.revision) this.notice("推荐清单更新失败，保留已有结果。可点击更新重试。"); }
+    }
+
+    async getCollections(force) {
+      const saved = savedCollections();
+      if (!force && saved) return saved;
+      const rows = [];
+      const seen = new Set();
+      let total = Infinity;
+      for (let offset = 0; offset < total; offset += 50) {
+        const page = await requestJson(`https://api.bgm.tv/v0/users/${OWNER}/collections?subject_type=2&limit=50&offset=${offset}`);
+        const batch = page.data;
+        const count = Number(page.total);
+        if (!Array.isArray(batch) || !Number.isSafeInteger(count) || count < 0 ||
+            (total !== Infinity && total !== count) || batch.length > 50 ||
+            (offset < count && !batch.length) || offset + batch.length > count) throw new Error("收藏分页信息无效或不完整");
+        total = count;
+        for (const row of batch) {
+          const id = Number(row.subject_id);
+          if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) throw new Error("收藏分页重复或条目无效");
+          seen.add(id);
         }
-        throw new Error(`收藏读取失败：${error.message}`);
+        rows.push(...batch.map((row) => ({ subject_id: Number(row.subject_id), rate: Number(row.rate) || 0 })));
+        this.$(".progress").textContent = `正在核对已标记动画… ${Math.min(rows.length, total)}/${total}`;
+        if (!batch.length) break;
+        if (offset + batch.length < total) await new Promise((resolve) => setTimeout(resolve, 180));
       }
+      if (rows.length !== total) throw new Error("收藏分页不完整");
+      return { value: rows, storedAt: Date.now() };
     }
 
     async ensureRecommendations({ force = false } = {}) {
       if (this.state.busy) return;
+      this.revision += 1;
       this.setBusy(true, "正在读取推荐数据…");
       this.$(".error").hidden = true;
       try {
         const [feed, collections] = await Promise.all([this.getFeed(force), this.getCollections(force)]);
-        this.state.feed = feed;
-        this.state.collections = collections;
-        this.state.profile = { collectionCount: collections.length, ratedCount: collections.filter((row) => row.rate > 0).length };
-        this.state.pageOrder = Feed.unmarkedCandidates(feed, collections);
-        this.state.eligibleCandidateCount = this.state.pageOrder.length;
-        if (!this.state.pageOrder.length) throw new Error("暂时没有未标记的候选动画。");
-        this.excludedBatch.clear();
-        this.state.currentPage = 1;
-        this.renderFromPool();
+        if (force || !savedCollections()) cache("collections", collections.value, collections.storedAt);
+        if (feed.source === "remote") cache("feed", feed.raw);
+        this.applyData(feed, collections.value, collections.storedAt);
+        if (feed.error) this.notice("收藏已核对；推荐清单更新失败，保留已有清单。");
       } catch (error) {
-        this.$(".results").hidden = true;
+        if (!this.state.feed) this.$(".results").hidden = true;
         this.$(".welcome").hidden = true;
         this.$(".error").hidden = false;
-        this.$(".error-message").textContent = `${error.message}。可稍后重试；组件不会修改你的 Bangumi 数据。`;
+        this.$(".error-message").textContent = `${error.message}。${this.state.feed ? "保留已有结果；" : ""}可稍后重试。`;
       } finally { this.setBusy(false); }
     }
 
@@ -2956,6 +3005,7 @@ globalThis.BangumiInitialRecommendationFeed = {
       const fallback = this.feedSource === "bundle" ? " · 使用内置 50 条快照" : "";
       const neighbor = feed?.neighborCount ? `（${feed.neighborCount} 位近邻召回）` : "";
       this.$(".summary").textContent = `分析 ${feed?.ratedCount || this.state.profile?.ratedCount || 0} 条个人评分、${feed?.peerCount || 0} 位公开用户${neighbor} · ${model} · 数据 ${date} · 收藏核对 ${checked}${fallback}`;
+      if (!available.length) this.$(".summary").textContent += " · 暂无未标记的候选动画";
       this.$(".recommendation-list").innerHTML = this.state.current.map((item) => this.card(item)).join("");
       const options = Array.from({ length: pages }, (_, index) => `<option value="${index + 1}" ${index + 1 === page ? "selected" : ""}>${index + 1}</option>`).join("");
       this.$(".pagination").innerHTML = `<button type="button" data-page-direction="-1" ${page === 1 ? "disabled" : ""}>上一页</button><label>第 <select data-page-select aria-label="跳转到推荐页">${options}</select> / ${pages} 页</label><button type="button" data-page-direction="1" ${page === pages ? "disabled" : ""}>下一页</button>`;
