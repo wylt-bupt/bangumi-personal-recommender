@@ -26,11 +26,16 @@
   `;
   shadow.innerHTML = `<style>${css}</style><section class="panel" aria-label="我的放送表"><div class="toolbar"><div class="heading"><h2>我的放送表</h2><nav class="today-nav" aria-label="今天定位" hidden><button class="today-jump"></button></nav></div><button class="refresh" aria-live="polite">刷新核对个人收藏</button></div><p class="message" role="status" aria-live="polite"></p><nav class="week-nav" aria-label="放送日期" hidden><button class="arrow prev" aria-label="前一天">‹</button><div class="days"></div><button class="arrow next" aria-label="后一天">›</button></nav><div class="board" hidden></div></section>`;
   const $ = selector => shadow.querySelector(selector);
-  let calendar, collections, source = 'public', selectedDate = C.dateKey(), columns = 0, ready = false, busy = false, navChanged = false;
+  let calendar, collections, source = 'public', selectedDate = C.dateKey(), columns = 0, ready = false, busy = false, navChanged = false, revision = 0;
   const prefix = `bgm-personal-calendar:v1:${username}:`;
   function read(key) { try { return JSON.parse(localStorage.getItem(prefix + key)); } catch { return null; } }
   function save(key, value) { try { localStorage.setItem(prefix + key, JSON.stringify(value)); } catch {} }
   function fresh(saved, ttl) { return saved && Number.isFinite(saved.at) && saved.at <= Date.now() && Date.now() - saved.at < ttl; }
+  function cachedCollections(mode) {
+    const saved = read(`collections:${mode}`);
+    if (!saved || !Number.isFinite(saved.at)) return null;
+    try { return { rows: C.normalizeCollections(saved.value), at: saved.at }; } catch { return null; }
+  }
   function restore(show) {
     originals.forEach(({ el, hidden, display }) => { el.hidden = show ? hidden : true; el.style.display = show ? display : 'none'; });
     $('.board').hidden = show || !ready; $('.week-nav').hidden = show || !ready; $('.today-nav').hidden = show || !ready;
@@ -101,7 +106,7 @@
   }
   async function getCalendar(force) {
     const saved = read('calendar');
-    if (!full && !force && fresh(saved, 3600000)) { try { return C.normalizeCalendar(saved.value); } catch {} }
+    if (!full && !force && fresh(saved, 3600000)) { try { return { rows: C.normalizeCalendar(saved.value), at: saved.at }; } catch {} }
     // On the calendar page the document itself is the canonical weekly list.
     let value;
     if (full && !demo) value = C.parseCalendarDocument(force ? await request('/calendar', true) : document);
@@ -109,7 +114,7 @@
       try { value = C.normalizeCalendar(await request('https://api.bgm.tv/calendar')); }
       catch (error) { if (demo) throw error; value = C.parseCalendarDocument(await request('/calendar', true)); }
     }
-    save('calendar', { at: Date.now(), value }); return value;
+    return { rows: value, at: Date.now() };
   }
   async function siteCollections() {
     const all = [];
@@ -132,8 +137,8 @@
     return C.normalizeCollections(all);
   }
   async function getCollections(force, mode) {
-    const saved = read(`collections:${mode}`);
-    if (!force && fresh(saved, 21600000)) { try { return { rows: C.normalizeCollections(saved.value), at: saved.at }; } catch {} }
+    const saved = cachedCollections(mode);
+    if (!force && saved) return saved;
     const rows = mode === 'site' ? await siteCollections() : await C.collectPublic(async offset => {
       if (offset) await pause();
       return request(`https://api.bgm.tv/v0/users/${username}/collections?subject_type=2&limit=100&offset=${offset}`);
@@ -143,24 +148,47 @@
   function pause() {
     return new Promise(resolve => setTimeout(resolve, 180));
   }
+  function showCalendar(next) {
+    calendar = next.rows; ready = true;
+    save('calendar', { at: next.at, value: calendar });
+    restore(false); render();
+  }
+  async function initialize() {
+    const savedCollection = cachedCollections(source);
+    if (!savedCollection) { sync(); return; } // First use or damaged storage requires one complete sync.
+    collections = savedCollection.rows;
+    const savedCalendar = read('calendar');
+    let next, fromDocument = false;
+    if (full && !demo) {
+      try { next = { rows: C.parseCalendarDocument(document), at: Date.now() }; fromDocument = true; } catch {}
+    }
+    if (!next && savedCalendar && Number.isFinite(savedCalendar.at)) {
+      try { next = { rows: C.normalizeCalendar(savedCalendar.value), at: savedCalendar.at }; } catch {}
+    }
+    // Paint saved results before starting any network request, even when the schedule is old.
+    if (next) showCalendar(next);
+    if (fromDocument || (!full && fresh(next, 3600000))) return;
+    const current = revision;
+    try {
+      next = await getCalendar(false);
+      if (current !== revision) return; // A manual refresh owns all later UI and cache writes.
+      showCalendar(next); status('');
+    } catch (error) {
+      if (current !== revision) return;
+      if (!ready) restore(true);
+      status(ready ? `放送表更新失败，保留上次放送：${error.message}` : `放送表读取失败，显示原始放送表：${error.message}`, true);
+    }
+  }
   async function sync(force = false, mode = source) {
     if (busy) return;
+    revision++;
     busy = true; $('.refresh').disabled = true; $('.refresh').textContent = '核对中…';
     try {
       const nextCalendar = await getCalendar(force), nextCollection = await getCollections(force, mode);
-      if (!ready) restore(false);
-      calendar = nextCalendar; collections = nextCollection.rows; source = mode; ready = true;
+      collections = nextCollection.rows; source = mode;
       save(`collections:${mode}`, { at: nextCollection.at, value: collections }); save('mode', mode);
-      status(''); render();
+      status(''); showCalendar(nextCalendar);
     } catch (error) {
-      if (!ready) {
-        try {
-          const savedCalendar = read('calendar'), savedCollection = read(`collections:${mode}`);
-          if (savedCalendar?.value && savedCollection?.value && Number.isFinite(savedCollection.at)) {
-            calendar = C.normalizeCalendar(savedCalendar.value); collections = C.normalizeCollections(savedCollection.value); source = mode; ready = true; restore(false); render();
-          }
-        } catch {}
-      }
       if (!ready) restore(true);
       status(ready ? `核对失败，保留上次收藏：${error.message}` : `核对失败，显示原始放送表：${error.message}`, true);
     } finally { busy = false; $('.refresh').disabled = false; $('.refresh').textContent = '刷新核对个人收藏'; }
@@ -197,5 +225,5 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) updateDay(); });
   watchMidnight();
   source = read('mode') === 'site' ? 'site' : 'public';
-  sync();
+  initialize();
 })();

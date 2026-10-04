@@ -31,14 +31,23 @@ function collectionHTML(type, page, options) {
   async function fixture(options = {}) {
     const context = await browser.newContext({ viewport: { width: options.width || 1200, height: 1000 }, timezoneId: 'Asia/Shanghai' });
     const page = await context.newPage(), requests = [], errors = [];
+    let releaseCalendar, calendarRequests = 0;
+    const calendarGate = new Promise(resolve => { releaseCalendar = resolve; });
     if (options.time) await page.clock.install({ time: new Date(options.time) });
     page.on('pageerror', e => errors.push(e.message));
     await context.route('**/*', async route => {
       const url = new URL(route.request().url()); requests.push(url.href);
       if (url.hostname === 'lain.bgm.tv') return route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="100"><rect width="72" height="100" fill="#c1b4ae"/></svg>' });
       if (url.hostname === 'api.bgm.tv') {
+        if (url.pathname === '/calendar') {
+          const index = ++calendarRequests;
+          // Capture the old response before a later forced refresh can finish.
+          const value = options.scheduleTitles ? calendar.map(day => ({ ...day, items: day.items.map(item => ({ ...item, name_cn: `${index === 1 ? '后台旧响应' : '手动新响应'} ${item.id}` })) })) : calendar;
+          if (options.holdCalendar && index === 1) await calendarGate;
+          if (options.fail) return route.fulfill({ status: 503, body: '{}' });
+          return route.fulfill({ json: value });
+        }
         if (options.fail) return route.fulfill({ status: 503, body: '{}' });
-        if (url.pathname === '/calendar') return route.fulfill({ json: calendar });
         const offset = Number(url.searchParams.get('offset'));
         const data = options.empty ? [] : rows.map(row => ({ ...row, type: options.completed && row.subject_id === today * 10 + 1 ? 2 : row.type }));
         return route.fulfill({ json: { total: data.length, offset, data: options.partial && offset ? [] : data.slice(offset, offset + 7) } });
@@ -52,11 +61,75 @@ function collectionHTML(type, page, options) {
       return route.abort();
     });
     if (options.siteMode) await page.addInitScript(() => localStorage.setItem('bgm-personal-calendar:v1:test-user:mode', '"site"'));
+    if (options.cached) await page.addInitScript(({ rows, calendar, privateId, options }) => {
+      const prefix = 'bgm-personal-calendar:v1:test-user:', mode = options.siteMode ? 'site' : 'public';
+      const at = Date.now() - (options.cacheAge ?? 10 * 86400000);
+      if (!localStorage.getItem(prefix + `collections:${mode}`)) localStorage.setItem(prefix + `collections:${mode}`, options.corrupt ? '{broken' : JSON.stringify({ at, value: options.empty ? [] : [...rows.map(row => ({ id: row.subject_id, type: row.type })), ...(options.siteMode ? [{ id: privateId, type: 3 }] : []), ...Array.from({ length: options.large ? 5000 : 0 }, (_, n) => ({ id: 10000 + n, type: 2 }))] }));
+      if (!localStorage.getItem(prefix + 'calendar')) localStorage.setItem(prefix + 'calendar', JSON.stringify({ at, value: calendar }));
+    }, { rows, calendar, privateId, options });
     await page.goto(`https://bgm.tv/${options.full ? 'calendar' : ''}${options.off ? '?personal=off' : ''}`);
     await page.addScriptTag({ content: release });
-    return { context, page, requests, errors, options };
+    return { context, page, requests, errors, options, releaseCalendar };
   }
   try {
+    for (const options of [
+      { cached: true, cacheAge: 0, large: true },
+      { cached: true, holdCalendar: true },
+      { cached: true, siteMode: true, holdCalendar: true },
+      { cached: true, empty: true, holdCalendar: true },
+      { cached: true, full: true }
+    ]) {
+      const f = await fixture(options), p = f.page;
+      // The schedule request is still blocked: the first view must already exist.
+      assert.equal(await p.locator('.board').isVisible(), true);
+      assert.equal(await p.locator('.refresh').innerText(), '刷新核对个人收藏');
+      assert.equal(await p.locator('.refresh').isEnabled(), true);
+      assert.equal(f.requests.filter(u => /\/collections\?|\/anime\/list\//.test(u)).length, 0);
+      if (options.full) assert.ok((await p.locator('.title').first().innerText()).startsWith('站内标题'));
+      if (options.siteMode) assert.equal(await p.locator(`.subject[href="/subject/${privateId}"]`).count(), 1);
+      if (options.empty) assert.equal(await p.locator('.subject').count(), 0);
+      const stored = await p.evaluate(() => Object.entries(localStorage).find(([key]) => key.includes('collections:')));
+      if (options.holdCalendar) {
+        const response = p.waitForResponse('https://api.bgm.tv/calendar');
+        f.releaseCalendar(); await response;
+        await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      }
+      await p.reload(); await p.addScriptTag({ content: release });
+      assert.equal(await p.locator('.board').isVisible(), true);
+      assert.equal(f.requests.filter(u => /\/collections\?|\/anime\/list\//.test(u)).length, 0);
+      assert.deepEqual(await p.evaluate(() => Object.entries(localStorage).find(([key]) => key.includes('collections:'))), stored);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push(`cached ${options.full ? 'full page' : options.siteMode ? 'site' : options.empty ? 'empty' : options.large ? '5014 entries' : '10-day-old'}: immediate display, no collection requests or timestamp changes`);
+    }
+    {
+      const f = await fixture({ cached: true, fail: true }), p = f.page;
+      assert.equal(await p.locator('.board').isVisible(), true);
+      await p.locator('.message.error').waitFor();
+      assert.equal(await p.locator('.board').isVisible(), true);
+      assert.ok((await p.locator('.message').innerText()).includes('保留上次放送'));
+      assert.equal(f.requests.filter(u => /\/collections\?|\/anime\/list\//.test(u)).length, 0);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('failed schedule revalidation preserves the immediately displayed collection without a full collection sync');
+    }
+    {
+      const f = await fixture({ cached: true, corrupt: true }), p = f.page;
+      await p.locator('.board').waitFor({ state: 'visible' });
+      assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 2);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('damaged collection storage is repaired by a complete first sync');
+    }
+    {
+      const f = await fixture({ cached: true, holdCalendar: true, scheduleTitles: true }), p = f.page;
+      assert.equal(await p.locator('.board').isVisible(), true);
+      await p.getByRole('button', { name: '刷新核对个人收藏' }).click();
+      await p.locator('.title').first().filter({ hasText: '手动新响应' }).waitFor();
+      await p.waitForFunction(() => !document.querySelector('#bgm-personal-calendar').shadowRoot.querySelector('.refresh').disabled);
+      const storedCalendar = await p.evaluate(() => localStorage.getItem('bgm-personal-calendar:v1:test-user:calendar'));
+      const response = p.waitForResponse('https://api.bgm.tv/calendar');
+      f.releaseCalendar(); await response;
+      await p.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.ok((await p.locator('.title').first().innerText()).startsWith('手动新响应'));
+      assert.equal(await p.evaluate(() => localStorage.getItem('bgm-personal-calendar:v1:test-user:calendar')), storedCalendar);
+      assert.equal(f.requests.filter(u => u.includes('/collections?')).length, 2);
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('late background schedule response cannot overwrite a successful manual refresh or its cache');
+    }
     for (const [width, full, theme] of [[1200, false, 'light'], [667, false, 'light'], [375, false, 'light'], [1200, true, 'light'], [375, true, 'dark'], [1200, false, 'dark']]) {
       const f = await fixture({ width, full, theme }); const p = f.page;
       await p.locator('.board').waitFor({ state: 'visible' });
