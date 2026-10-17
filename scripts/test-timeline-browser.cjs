@@ -141,6 +141,24 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(await page.locator('.hm-trend-area polyline').isVisible(), 'the 7-day average line is drawn');
     assert.match(await page.locator('.hm-trend-total').textContent(), /共\s*3\s*集/);
     assert.equal(await page.locator('.hm-trend-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
+    // 零安全对数轴的意义：1 集的日子不能被偶尔的高峰压成发丝。
+    const heights = await page.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('height'))));
+    assert.ok(Math.min(...heights) >= 20, `the log scale must lift ordinary days, got ${heights.join(', ')}`);
+    // 读数条取代原生 tooltip：悬到最右侧应读到今天（或最后一天）的日期与均线。
+    const plot = page.locator('.hm-trend-plot');
+    await plot.scrollIntoViewIfNeeded();
+    const box = await plot.boundingBox();
+    await page.mouse.move(box.x + box.width - 6, box.y + box.height / 2);
+    await page.locator('.hm-readout').waitFor({ state: 'visible' });
+    const readout = await page.locator('.hm-readout').textContent();
+    assert.match(readout, new RegExp(core.dayKey(now).replace(/-/g, '/')), `readout should show the hovered date: ${readout}`);
+    assert.match(readout, /7日均/);
+    // 图例可以关掉任一序列，但网格框架必须留着。
+    await page.locator('.hm-legend-key[data-series=count]').click();
+    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 0, 'hiding the bars leaves only the average');
+    assert.ok(await page.locator('.hm-trend-area .hm-grid-line').count() >= 2, 'the grid survives with a series hidden');
+    await page.locator('.hm-legend-key[data-series=count]').click();
+    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 3, 'bringing the bars back restores them');
 
     // Selecting "all" backfills history beyond the one-year sync cutoff.
     const beforeDeep = requests.length;
@@ -153,10 +171,8 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(deepDone, 'the full-history backfill must complete');
     const deepRequests = requests.slice(beforeDeep).map(value => new URL(value));
     assert.ok(deepRequests.some(url => url.searchParams.get('page') === '3'), `selecting all must backfill pages beyond the year cutoff: ${deepRequests.map(url => url.href).join(', ')}`);
-    const oldestTrendDay = core.dayKey(now - 500 * core.DAY).slice(5).replace('-', '/');
-    const trendTitles = await page.locator('.hm-trend-area .hm-bar title').allTextContents();
-    assert.ok(trendTitles.some(title => title.startsWith(oldestTrendDay)), `the all view must include bars older than one year: ${trendTitles.join(' | ')}`);
-    assert.ok(trendTitles.length >= 5, `the all view must keep every active day: ${trendTitles.length}`);
+    assert.ok(await page.locator('.hm-trend-area .hm-bar').count() >= 5, 'the all view must keep every active day');
+    assert.match(await page.locator('.hm-trend-total').textContent(), /共\s*5\s*集/, 'the all view counts the backfilled days too');
     assert.equal(await page.locator('.hm-trend-hint').count(), 0, 'the backfill hint disappears once history is complete');
     assert.equal(await page.evaluate(() => localStorage.getItem('bgmtl-chart-range')), 'all');
     await page.locator('.hm-trend-toggle button[data-range=year]').click();

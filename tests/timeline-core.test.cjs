@@ -125,9 +125,49 @@ test('daily series mirrors the heatmap window for a year and stretches back for 
   assert.equal(all.total, 3);
   assert.equal(all.oldestTime, now - C.DAY * 400);
   const empty = C.dailySeries(C.freshState('wylt'), now, 'all');
-  assert.equal(empty.days.length, 365);
+  assert.equal(empty.days.length, 0, 'no progress records means nothing to plot');
   assert.equal(empty.total, 0);
   assert.equal(empty.oldestTime, null);
+});
+test('daily series carries a trailing mean that survives window slicing', () => {
+  const state = C.freshState('wylt');
+  // 一年窗口外还有两条记录：窗口内的均线必须已经“预热”，不是从首日重新起算。
+  state.events = [event(1, now - C.DAY * 366), event(2, now - C.DAY * 400), event(3, now - C.DAY * 2)];
+  const year = C.dailySeries(state, now);
+  assert.equal(year.days.length, 365);
+  assert.equal(year.total, 1);
+  const active = year.days.find(day => day.key === '2026-09-03');
+  assert.equal(active.count, 1);
+  assert.ok(Math.abs(active.mean - 1 / 7) < 1e-9, 'mean spreads a single episode over the full window');
+  assert.ok(year.days.every(day => day.mean <= Math.max(1, ...year.days.map(d => d.count))), 'mean never exceeds the peak');
+  const all = C.dailySeries(state, now, 'all');
+  const firstAll = all.days[0];
+  assert.equal(firstAll.count, 1);
+  assert.ok(Math.abs(firstAll.mean - 1) < 1e-9, 'the oldest day averages only itself');
+  // 均线与逐日值一一对应，长度必须一致，否则连线会错位。
+  assert.equal(all.days.filter(day => typeof day.mean === 'number').length, all.days.length);
+});
+test('rolling mean uses the full window and never exceeds it', () => {
+  assert.deepEqual(C.rollingMean([1, 2, 3]), [1, 1.5, 2]);
+  // 窗口未满时按已有天数取平均（首日就是它自己），不会把未来补齐成 0。
+  assert.deepEqual(C.rollingMean([6, 0, 0, 0, 0, 0, 0], 7), [6, 3, 2, 1.5, 1.2, 1, 6 / 7]);
+  assert.deepEqual(C.rollingMean([0, 0, 0, 0, 0, 0, 0, 7], 7)[7], 1, 'the eighth day drops the first slot');
+  assert.deepEqual(C.rollingMean([], 7), []);
+});
+test('count axis keeps integer ticks, a zero floor and headroom above the peak', () => {
+  const flat = C.countAxis([0, 0, 0]);
+  assert.equal(flat.lo, 0);
+  assert.ok(flat.hi >= 1, 'an all-zero series still needs a non-degenerate axis');
+  assert.ok(flat.ticks.every(Number.isInteger));
+  const spiky = C.countAxis([1, 1, 2, 1, 24, 1, 3]);
+  assert.equal(spiky.lo, 0);
+  assert.ok(spiky.hi >= 24, `the peak must fit inside the axis, got ${spiky.hi}`);
+  assert.ok(spiky.ticks.every(Number.isInteger), 'episode ticks stay whole numbers');
+  assert.ok(spiky.position(0) === 0 && Math.abs(spiky.position(spiky.hi) - 1) < 1e-9);
+  // 对数刻度的意义：1 集不再只占最高日的 1/24，而是明显抬起。
+  assert.ok(spiky.position(1) > 1 / 24, `one episode should be clearly visible, got ${spiky.position(1)}`);
+  let previous = -1;
+  for (const tick of spiky.ticks) { assert.ok(tick > previous, 'ticks ascend'); previous = tick; }
 });
 test('deep backfill keeps sync due until the stream reaches the oldest record', () => {
   const state = C.freshState('wylt');

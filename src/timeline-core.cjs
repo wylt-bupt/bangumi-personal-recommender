@@ -136,8 +136,43 @@
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
     return { days, hourly, weekly, platform, total, complete: stream.complete, start, end, average30 };
   }
+  // Trailing mean over the whole series. Callers slice afterwards: computing it
+  // on a visible window would restart the sum and understate the first days.
+  function rollingMean(values, window = 7) {
+    const size = Math.max(1, Math.floor(window));
+    let sum = 0;
+    return values.map((value, index) => {
+      sum += value;
+      if (index >= size) sum -= values[index - size];
+      return sum / Math.min(index + 1, size);
+    });
+  }
+  function niceStep(value) {
+    const power = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1))));
+    const fraction = value / power;
+    return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power;
+  }
+  /* ── 纵轴：零安全对数刻度（与账本日支出图同一套视觉语言）──
+     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下
+     普通日子全部被压成看不见的发丝，只剩几根孤零零的柱子。这里用
+     sign(v)·log1p(|v|/c) 把顶部压下去、底部抬起来，刻度仍取整数——
+     图给形状，读数交给指针读数条。 */
+  function countAxis(values, constant = 3) {
+    const finite = (values || []).filter(value => Number.isFinite(value));
+    const max = finite.length ? Math.max(...finite) : 0;
+    const unit = Math.max(1, niceStep(max / 5 || 1));
+    // +0.5：最大值正好落在刻度上时也要留出头顶的一点空隙，否则最高的柱子贴边。
+    const hi = Math.max(unit, Math.ceil((max + 0.5) / unit) * unit);
+    const c = Math.max(1, constant);
+    const transform = value => Math.sign(value) * Math.log1p(Math.abs(value) / c);
+    const top = transform(hi);
+    const ticks = [];
+    for (let value = 0; value <= hi + 1e-9; value += unit) ticks.push(Math.round(value));
+    return { lo: 0, hi, unit, ticks, position: value => transform(value) / top };
+  }
   // Continuous daily series for the trend chart: "year" mirrors the heatmap
-  // window, "all" stretches back to the oldest synced progress record.
+  // window, "all" stretches back to the oldest synced progress record. Each day
+  // carries its own trailing mean so the line never restarts mid-window.
   function dailySeries(state, now = Date.now(), range = 'year') {
     const events = state.events.filter(e => e.type === 'progress' && e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
     const progress = new Map();
@@ -153,15 +188,20 @@
     const end = dayStart(now);
     let start = end - 364 * DAY;
     if (range === 'all' && Number.isFinite(oldestTime)) start = Math.min(start, dayStart(oldestTime));
-    const days = [];
-    let total = 0;
-    for (let time = start; time <= end; time += DAY) {
-      const key = dayKey(time);
-      const count = daily[key] || 0;
-      total += count;
-      days.push({ key, time, count });
-    }
-    return { days, total, oldestTime: Number.isFinite(oldestTime) ? oldestTime : null };
+    if (!Number.isFinite(oldestTime)) return { days: [], total: 0, oldestTime: null };
+    // 均线要看得到窗口之前的日子：只拿可见段求平均会让头 6 天整体偏低。
+    const fullStart = Math.min(start, dayStart(oldestTime));
+    const counts = [];
+    for (let time = fullStart; time <= end; time += DAY) counts.push(daily[dayKey(time)] || 0);
+    const means = rollingMean(counts, 7);
+    const offset = Math.round((start - fullStart) / DAY);
+    const days = counts.slice(offset).map((count, index) => ({
+      key: dayKey(start + index * DAY),
+      time: start + index * DAY,
+      count,
+      mean: means[offset + index],
+    }));
+    return { days, total: days.reduce((sum, day) => sum + day.count, 0), oldestTime };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, rollingMean, countAxis, importBackup, normalizeEvent, progressUnits };
 });

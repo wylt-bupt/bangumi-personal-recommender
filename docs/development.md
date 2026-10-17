@@ -69,6 +69,10 @@ legacy/                     旧推荐源码、测试与备份
 
 ## 2026-10-18 维护记录
 
+独立活跃度热力图 `1.0.17`：用户反馈 1.0.16 的柱状图"压根不适合展示"，改以账本模块（wylt-bupt-ruc-gl.web.app 的 `charts.tsx` / `chartModel.ts`，日支出图）的视觉语言重画。核心层新增 `rollingMean(values, window)` 与 `countAxis(values, constant = 3)`：后者是零安全对数刻度 `sign(v)·log1p(|v|/c)`，刻度取 `niceStep(max/5)` 的整数倍并给峰值留 0.5 的头顶空隙——逐日集数是脉冲序列，线性轴会把普通日子压成发丝。`dailySeries` 改为在完整历史上滚动求 7 日均值后按窗口切片（与账本 `rollingMeanTail` 同理），每天携带自己的 `mean`；无进度记录时返回空 `days` 而不是全零年窗。UI 层重写 `drawTrend`：绘图区高度随视宽自适应（140–220px），柱按等宽槽位整体居中（`barGroupWidth = .55`，不足 1px 取 1px），发丝虚线网格 + 实线零线；去掉每柱原生 `<title>`（窄柱悬不准），换成右上角 `.hm-readout` 读数条 + 虚线竖向指示线，指针移动与键盘左右方向键都能逐日查看；图例改为 `data-series` 开关（关掉任一序列时值域退回全部序列，框架不消失），重绘签名 `trendKey()` 纳入隐藏集合。横轴标签抽稀间距 32px → 44px。
+
+验证：`npm run verify` 通过（65 项当前测试 + 25 项历史兼容）。`tests/timeline-core.test.cjs` 新增 rollingMean 窗口语义、countAxis 整数刻度/零下界/峰值留空/对数抬升、dailySeries 均线随窗口切片三例；`test-timeline-browser.cjs` 改为断言对数轴下普通日子柱高 ≥20px、悬停读数条内容、图例开关后网格保留。截图 `artifacts/trend-profile-820.png`、`trend-home-375.png`、`trend-dark-820.png`（合成两年数据）。
+
 独立活跃度热力图 `1.0.16`：应用户要求，在热力图模块下方新增"每日活跃"图表——每日观看集数柱状图叠加 7 日均线（参考用户提供的示意图），时间范围可切换"近一年 / 全部"。核心层新增 `Core.dailySeries(state, now, range)`：`year` 与热力图同窗口，`all` 从最早进度记录日起（无记录时回退一年窗）；`total` 按窗口汇总。同步层新增深回溯：`state.deep`（用户请求过全量）与 `stream.deep`（已回溯到最早记录）两个标记，`nextSyncAt` 在回溯未完成时保持 0（30 秒轮询持续推进，每轮至多 24 页），同步循环在 `state.deep` 时取消 364 天截止，仅以 `next === null` 作为回溯完成标志并写入 `stream.deep`；首次点"全部"由 UI 写入 `state.deep` 并触发 `run()`，范围选择记忆在 `localStorage`（`bgmtl-chart-range`）。UI 层在 `#hm-dashboard` 内追加 `.hm-trend-area`：标题行（每日活跃 / 图例 / 共 N 集 / 范围切换）、SVG 柱状图（零活跃日不画柱，≤800 天时每柱带 `<title>`：日期 · N 集 · 7日均 X.X）、7 日均线 `polyline`（不足 7 天用部分窗口）、y 轴取整刻度网格、每月 1 号的 M/D 横轴标签（32px 防重叠），回溯未完成时显示"正在回溯更早的记录，已回溯到 YYYY-MM-DD…"；样式沿用热力图 CSS 变量，明暗主题自动适配；双布局各挂独立 `ResizeObserver`，绘制返回布尔值避免零宽容器吞掉首绘签名。
 
 验证：`npm run verify` 通过（62 项当前测试 + 25 项历史兼容）。`tests/timeline-core.test.cjs` 新增 dailySeries 年/全窗口与深回溯调度两例。`test-timeline-browser.cjs` fixture 扩展为 3 页（第 2 页越过一年截止且带下一页），新增断言：年视图恰 3 根柱、均线可见、共 3 集、年按钮按下态；点"全部"后回溯抓取第 3 页、`stream.deep` 置位、柱标题含 500 天前日期、回溯提示消失、localStorage 记忆 'all'；切回"近一年"旧柱消失。
