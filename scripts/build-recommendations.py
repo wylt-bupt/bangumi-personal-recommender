@@ -37,9 +37,42 @@ def meaningful_tag(tag):
     return not re.match(r"^(?:19|20)\d{2}(?:年)?(?:[-./年](?:0?[1-9]|1[0-2])(?:月)?(?:番|新番)?)?$", tag)
 
 
+def tag_key(tag):
+    """Punctuation-normalized identity used to collapse tag spelling variants."""
+    return re.sub(r"[\s_·]+", "", tag).casefold()
+
+
+# Observed duplicates that differ beyond punctuation; map to one display form.
+# Keys are `tag_key()`-normalized (spaces/underscores removed, casefolded).
+TAG_DISPLAY = {
+    "京都アニメーション": "京阿尼",
+    "kyotoanimation": "京阿尼",
+    "a-1pictures": "A-1 Pictures",
+    "a1pictures": "A-1 Pictures",
+    "cloverworks": "CloverWorks",
+}
+
+
+def display_tag(tag):
+    return TAG_DISPLAY.get(tag_key(tag), tag)
+
+
 def site_score(subject):
-    value = float((subject.get("rating") or {}).get("score") or 0)
-    return value if value > 0 else 6.8
+    """Bayesian site score: evidence scales with the number of actual raters.
+
+    Bangumi exposes a legacy ``score`` even when ``total`` is zero (it need not
+    come from a single live rating), and a few public notes can carry a 10.0 —
+    so candidate scores shrink toward the site prior with the rater count.
+    Shrinking ``own`` scores with the same estimator keeps the residual
+    decomposition consistent between the training rows and the candidates.
+    """
+    rating = subject.get("rating") or {}
+    total = int(rating.get("total") or 0)
+    value = float(rating.get("score") or 0)
+    prior, weight = 6.8, 10
+    if value <= 0 or total <= 0:
+        return prior
+    return (value * total + prior * weight) / (total + weight)
 
 
 def ndcg(truth, predicted, count=20):
@@ -60,6 +93,12 @@ def train_model(input_data):
     site_coverage = sum(float((row["subject"].get("rating") or {}).get("score") or 0) > 0 for row in own) / len(own)
     if site_coverage < 0.8:
         raise ValueError(f"Site-rating coverage {site_coverage:.1%} is too low; ranked metadata may be missing")
+    # Rater counts feed the shrinkage estimator; a scoped sync that skips the
+    # ranked-metadata enrichment leaves every count at zero and silently
+    # flattens the score signal. Fail loudly instead.
+    rater_coverage = sum(int((row["subject"].get("rating") or {}).get("total") or 0) > 0 for row in own) / len(own)
+    if rater_coverage < 0.5:
+        raise ValueError(f"Own rater-count coverage is {rater_coverage:.1%}; ranked metadata is missing")
     own_subjects = [row["subject"] for row in own]
 
     frequency = Counter(tag for subject in own_subjects for tag in set(tags(subject)) if meaningful_tag(tag))
@@ -171,6 +210,16 @@ def train_model(input_data):
     candidate_ids = sorted(set(item_id for _, column in neighbors for item_id in peers[column])
                            - {identifier(row) for row in input_data["own"]})
     candidate_ids = [item_id for item_id in candidate_ids if item_id in subjects and int(subjects[item_id].get("type") or 2) == 2]
+    eligibility = json.loads(subprocess.check_output(
+        ["node", str(ROOT / "scripts/candidate-eligibility.cjs"), str(input_data["inputPath"])], text=True
+    ))
+    if eligibility.get("markedFranchiseCount", 0) < 10:
+        raise ValueError(f"Only {eligibility.get('markedFranchiseCount', 0)} marked franchises; eligibility input is stale")
+    excluded_by = Counter(eligibility["exclusions"].get(str(item_id), "") for item_id in candidate_ids)
+    exclusion_stats = {key: int(excluded_by.get(key, 0)) for key in ("origin", "watchedFranchise")}
+    candidate_ids = [item_id for item_id in candidate_ids if str(item_id) not in eligibility["exclusions"]]
+    if len(candidate_ids) < 150:
+        raise ValueError(f"Eligibility rules left only {len(candidate_ids)} candidates; refusing a thin feed")
     candidate_subjects = [subjects[item_id] for item_id in candidate_ids]
     candidate_site = np.array([site_score(subject) for subject in candidate_subjects])
     candidate_content = content_matrix(candidate_subjects)
@@ -188,20 +237,49 @@ def train_model(input_data):
     lift = candidate_peer @ weights[len(vocabulary) + 1:] if candidate_peer is not None else np.zeros(len(candidate_ids))
 
     rows = []
+    citation_pool = [(row["subject"], int(row["rate"])) for row in own if int(row.get("rate") or 0) > 0]
     for index in np.argsort(-predictions):
         subject = candidate_subjects[index]
         title = subject.get("name_cn") or subject.get("nameCn") or subject.get("name")
         if not title:
             continue
+        # Weights already express net preference over the site baseline for
+        # each tag; dedupe spelling variants so one studio never explains the
+        # same candidate twice, and pick the strongest two distinct markers.
         tagged = [(weights[columns[tag]], tag) for tag in tags(subject) if tag in columns]
-        positive = [tag for score, tag in sorted(tagged, reverse=True) if score > 0.03][:2]
+        positive, seen_keys = [], set()
+        for score, tag in sorted(tagged, reverse=True):
+            key = tag_key(display_tag(tag))
+            if key in seen_keys:
+                continue
+            if score <= 0.03:
+                break
+            seen_keys.add(key)
+            positive.append(display_tag(tag))
+            if len(positive) == 2:
+                break
         reasons = []
         if positive:
             reasons.append("你的评分显示，对“" + "、".join(positive) + "”相关作品通常比站内评价更偏爱。")
         if lift[index] > 0.05:
             reasons.append("公开用户评分的协同信号提高了这部作品的排序。")
         if not reasons:
-            reasons.append("综合你的评分基线与作品口碑进入候选。")
+            # The pool only ever contains titles the closest public raters
+            # actually rated, so say that instead of a pseudo-explanation, and
+            # cite the single most similar work from the user's public list
+            # when one exists in the cached snapshot.
+            candidate_tags = {tag_key(display_tag(tag)) for tag in tags(subject)}
+            best, best_score = None, 0.0
+            for own_subject, rate in citation_pool:
+                own_tags = {tag_key(display_tag(tag)) for tag in tags(own_subject)}
+                shared, union = len(candidate_tags & own_tags), len(candidate_tags | own_tags)
+                similarity = shared / union if union else 0.0
+                if similarity > best_score or (similarity == best_score and best and rate > best[1]):
+                    best, best_score = (own_subject, rate), similarity
+            if best is not None and best_score >= 0.34 and (best[0].get("name_cn") or best[0].get("name")):
+                reasons.append(f"与你评过 {best[1]} 分的《{best[0].get('name_cn') or best[0].get('name')}》题材相近。")
+            else:
+                reasons.append("来自与你观看轨迹最接近、评分倾向一致的公开用户的共同作品。")
         rating = subject.get("rating") or {}
         image = subject.get("image") or (subject.get("images") or {}).get("common") or (subject.get("images") or {}).get("medium") or ""
         rows.append({
@@ -228,6 +306,7 @@ def train_model(input_data):
         "rated": len(own), "peers": len(peers), "positiveNeighbors": len(neighbors), "candidatePool": len(candidate_ids),
         "publishedCandidates": len(rows), "siteCoverage": round(site_coverage, 4),
         "selected": f"{model}:{alpha}", "jointFoldWins": fold_wins,
+        "eligibilityExcluded": exclusion_stats, "markedFranchiseCount": eligibility["markedFranchiseCount"],
         "neighborHeldoutRecall": round(float(np.mean([row["all"] for row in retrieval])), 4),
         "neighborHeldoutHighRecall": round(float(np.mean([row["high"] for row in retrieval])), 4),
         "cv": {f"{name}:{regularization}": {key: round(value, 4) for key, value in result.items() if key != "folds"}

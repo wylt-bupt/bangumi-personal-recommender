@@ -23,6 +23,16 @@ test('published feed is aggregate-only, bounded, sorted and displayable', () => 
   }
 });
 
+test('published candidates pass the Japanese-origin check without pseudo explanations', () => {
+  const eligibility = require('../src/candidate-eligibility.cjs');
+  const raw = JSON.parse(fs.readFileSync('public/recommendations.json', 'utf8'));
+  for (const row of raw.candidates) {
+    assert.equal(eligibility.isJapaneseOrigin(row.subject), true,
+      `${row.subject.id} ${(row.subject.nameCn || row.subject.name)} must be Japanese-origin`);
+    assert.ok(!row.reasons[0].startsWith('综合你的评分基线'), `pseudo-explanation returned for ${row.subject.id}`);
+  }
+});
+
 test('shipped recommender is disconnected from the legacy hard filters and score weights', () => {
   const build = fs.readFileSync('scripts/build.mjs', 'utf8');
   assert.match(build, /src\/recommender-v2\.js/);

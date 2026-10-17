@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.11.2
+// @version      0.11.3
 // @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -143,34 +143,12 @@
 globalThis.BangumiInitialRecommendationFeed = {
   "schema": 1,
   "owner": "wylt",
-  "generatedAt": "2026-10-01T10:52:49.714777+00:00",
-  "peerCount": 98,
+  "generatedAt": "2026-10-17T09:50:36.511863+00:00",
+  "peerCount": 100,
   "neighborCount": 40,
-  "ratedCount": 1327,
+  "ratedCount": 1345,
   "model": "content",
   "candidates": [
-    {
-      "subject": {
-        "id": 531924,
-        "type": 2,
-        "name": "Miraculous World: London, At the Edge of Tim",
-        "nameCn": "瓢虫雷迪伦敦篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/9c/34/531924_a7D77.jpg",
-        "tags": [
-          "瓢虫雷迪",
-          "欧美"
-        ],
-        "rating": {
-          "score": 10,
-          "total": 0
-        }
-      },
-      "predicted": 10,
-      "collaborativeLift": 0,
-      "reasons": [
-        "综合你的评分基线与作品口碑进入候选。"
-      ]
-    },
     {
       "subject": {
         "id": 253,
@@ -194,37 +172,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 9.1,
-          "total": 19648
+          "total": 19750
         }
       },
-      "predicted": 9.717,
+      "predicted": 9.733,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 358634,
-        "type": 2,
-        "name": "疾风竞速",
-        "nameCn": "",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1d/1b/358634_hhvpW.jpg",
-        "tags": [
-          "中国",
-          "动画",
-          "国产",
-          "web"
-        ],
-        "rating": {
-          "score": 10,
-          "total": 0
-        }
-      },
-      "predicted": 9.577,
-      "collaborativeLift": 0,
-      "reasons": [
-        "综合你的评分基线与作品口碑进入候选。"
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -250,425 +204,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.4,
-          "total": 5757
+          "total": 5794
         }
       },
-      "predicted": 8.965,
+      "predicted": 9.06,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 72299,
-        "type": 2,
-        "name": "東方幼霊夢",
-        "nameCn": "东方幼灵梦",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e7/e7/72299_NrGG3.jpg",
-        "tags": [
-          "东方",
-          "同人",
-          "手书",
-          "治愈",
-          "让人哭泣程度的动画",
-          "東方",
-          "东方手书",
-          "致郁",
-          "前传",
-          "催泪"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 0
-        }
-      },
-      "predicted": 8.945,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“致郁、催泪”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2907,
-        "type": 2,
-        "name": "銀河英雄伝説",
-        "nameCn": "银河英雄传说",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c7/55/2907_8xX82.jpg",
-        "tags": [
-          "银河英雄传说",
-          "田中芳树",
-          "科幻",
-          "经典",
-          "ova",
-          "小说改",
-          "1989",
-          "补旧番",
-          "银英",
-          "tv",
-          "皆杀的田中",
-          "世界观"
-        ],
-        "rating": {
-          "score": 8.8,
-          "total": 2954
-        }
-      },
-      "predicted": 8.934,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“小说改、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1728,
-        "type": 2,
-        "name": "るろうに剣心 -明治剣客浪漫譚- 追憶編",
-        "nameCn": "浪客剑心 追忆篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/71/37/1728_HLsCr.jpg",
-        "tags": [
-          "ova",
-          "剑心",
-          "浪客剑心",
-          "追忆篇",
-          "雪代巴",
-          "1999",
-          "悲剧",
-          "十字伤",
-          "studiodeen",
-          "漫画改",
-          "古桥一浩",
-          "明治维新"
-        ],
-        "rating": {
-          "score": 8.9,
-          "total": 9701
-        }
-      },
-      "predicted": 8.922,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“恋爱、催泪”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 11577,
-        "type": 2,
-        "name": "THE IDOLM@STER",
-        "nameCn": "偶像大师",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a8/6a/11577_5U5G1.jpg",
-        "tags": [
-          "偶像大师",
-          "a-1pictures",
-          "偶像",
-          "tv",
-          "2011年7月",
-          "游戏改",
-          "励志",
-          "锦织敦史",
-          "2011",
-          "神前暁",
-          "骗钱大师",
-          "音乐"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 8838
-        }
-      },
-      "predicted": 8.882,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、a-1pictures”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1015,
-        "type": 2,
-        "name": "機動戦士ガンダム0080 ポケットの中の戦争",
-        "nameCn": "机动战士高达0080 口袋里的战争",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/29/89/1015_Z2xoh.jpg",
-        "tags": [
-          "高达",
-          "ova",
-          "sunrise",
-          "战争",
-          "0080",
-          "1989",
-          "萝卜",
-          "原创",
-          "美树本晴彦",
-          "科幻",
-          "高山文彦",
-          "是爷们就开扎古"
-        ],
-        "rating": {
-          "score": 8.6,
-          "total": 6055
-        }
-      },
-      "predicted": 8.834,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 495562,
-        "type": 2,
-        "name": "デッドデッドデーモンズデデデデデストラクション",
-        "nameCn": "DDDD 恶魔的破坏",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f5/85/495562_onpMR.jpg",
-        "tags": [
-          "科幻",
-          "漫画改",
-          "production+h.",
-          "末世",
-          "2024",
-          "2024年4月",
-          "日常",
-          "tv",
-          "web",
-          "漫改",
-          "日本",
-          "剧情"
-        ],
-        "rating": {
-          "score": 7.6,
-          "total": 3503
-        }
-      },
-      "predicted": 8.829,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“电波、百合”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 28205,
-        "type": 2,
-        "name": "日常 Eテレ版",
-        "nameCn": "日常 ETV版",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/19/6b/28205_AAqG1.jpg",
-        "tags": [
-          "日常",
-          "京阿尼",
-          "搞笑",
-          "2012年1月",
-          "tv",
-          "爆笑",
-          "电波",
-          "吐槽向",
-          "重制版",
-          "石原立也",
-          "2012",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 2583
-        }
-      },
-      "predicted": 8.824,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“电波、百合”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 7056,
-        "type": 2,
-        "name": "よりぬき銀魂さん",
-        "nameCn": "银魂精选集",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/ce/d9/7056_845CC.jpg",
-        "tags": [
-          "银他妈",
-          "精选集",
-          "银魂",
-          "杉田智和",
-          "sunrise",
-          "等于没有",
-          "tv",
-          "gintama",
-          "jump",
-          "吐槽"
-        ],
-        "rating": {
-          "score": 7.9,
-          "total": 0
-        }
-      },
-      "predicted": 8.808,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、吐槽”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 14878,
-        "type": 2,
-        "name": "おジャ魔女どれみドッカ～ン!",
-        "nameCn": "小魔女DoReMi 大合奏",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0e/e8/14878_1hWbu.jpg",
-        "tags": [
-          "tv",
-          "2002",
-          "魔法少女",
-          "原创",
-          "五十岚卓哉",
-          "东映",
-          "童年",
-          "東映アニメーション",
-          "细田守",
-          "tvb",
-          "马越嘉彦",
-          "doremi"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 403
-        }
-      },
-      "predicted": 8.799,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 9622,
-        "type": 2,
-        "name": "機動戦士Ζガンダム",
-        "nameCn": "机动战士Z高达",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/97/c8/9622_2P229.jpg",
-        "tags": [
-          "高达",
-          "富野由悠季",
-          "sunrise",
-          "tv",
-          "gundam",
-          "1985",
-          "原创",
-          "时代的眼泪",
-          "科幻",
-          "高达z",
-          "机战",
-          "萝卜"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 5383
-        }
-      },
-      "predicted": 8.796,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 37183,
-        "type": 2,
-        "name": "太陽の牙ダグラム",
-        "nameCn": "太阳之牙达格拉姆",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
-        "tags": [
-          "sunrise",
-          "tv",
-          "原创",
-          "1981",
-          "萝卜",
-          "高桥良辅",
-          "科幻",
-          "神田武幸",
-          "真实系",
-          "政治",
-          "高橋良輔",
-          "机战"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 295
-        }
-      },
-      "predicted": 8.793,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 860,
-        "type": 2,
-        "name": "カウボーイビバップ 天国の扉",
-        "nameCn": "星际牛仔 天国之扉",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
-        "tags": [
-          "剧场版",
-          "渡边信一郎",
-          "星际牛仔",
-          "sunrise",
-          "菅野よう子",
-          "bones",
-          "2001",
-          "原创",
-          "科幻",
-          "菅野洋子",
-          "cowboy",
-          "cowboy_bebop"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 7233
-        }
-      },
-      "predicted": 8.768,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 296659,
-        "type": 2,
-        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会",
-        "nameCn": "Love Live! 虹咲学园校园偶像同好会",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a7/35/296659_o709D.jpg",
-        "tags": [
-          "偶像",
-          "百合",
-          "sunrise",
-          "原创",
-          "lovelive",
-          "2020年10月",
-          "tv",
-          "音乐",
-          "校园",
-          "2020",
-          "扭曲",
-          "河村智之"
-        ],
-        "rating": {
-          "score": 7.5,
-          "total": 6079
-        }
-      },
-      "predicted": 8.757,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -694,10 +236,10 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.2,
-          "total": 1564
+          "total": 1576
         }
       },
-      "predicted": 8.737,
+      "predicted": 8.944,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
@@ -705,34 +247,258 @@ globalThis.BangumiInitialRecommendationFeed = {
     },
     {
       "subject": {
-        "id": 4583,
+        "id": 37183,
         "type": 2,
-        "name": "機動戦士ガンダム 逆襲のシャア",
-        "nameCn": "机动战士高达 逆袭的夏亚",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/33/80/4583_RvVeE.jpg",
+        "name": "太陽の牙ダグラム",
+        "nameCn": "太阳之牙达格拉姆",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
         "tags": [
-          "高达",
-          "剧场版",
-          "富野由悠季",
           "sunrise",
-          "1988",
-          "gundam",
+          "tv",
           "原创",
+          "1981",
           "萝卜",
+          "高桥良辅",
           "科幻",
-          "机战",
-          "14年的基情",
-          "nt大战"
+          "神田武幸",
+          "真实系",
+          "政治",
+          "高橋良輔",
+          "机战"
         ],
         "rating": {
-          "score": 8.5,
-          "total": 5215
+          "score": 8.3,
+          "total": 299
         }
       },
-      "predicted": 8.737,
+      "predicted": 8.937,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 495562,
+        "type": 2,
+        "name": "デッドデッドデーモンズデデデデデストラクション",
+        "nameCn": "DDDD 恶魔的破坏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f5/85/495562_onpMR.jpg",
+        "tags": [
+          "科幻",
+          "漫画改",
+          "production+h.",
+          "末世",
+          "2024",
+          "2024年4月",
+          "日常",
+          "tv",
+          "web",
+          "漫改",
+          "日本",
+          "剧情"
+        ],
+        "rating": {
+          "score": 7.6,
+          "total": 3543
+        }
+      },
+      "predicted": 8.917,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2907,
+        "type": 2,
+        "name": "銀河英雄伝説",
+        "nameCn": "银河英雄传说",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c7/55/2907_8xX82.jpg",
+        "tags": [
+          "银河英雄传说",
+          "田中芳树",
+          "科幻",
+          "经典",
+          "ova",
+          "小说改",
+          "1989",
+          "补旧番",
+          "银英",
+          "tv",
+          "皆杀的田中",
+          "世界观"
+        ],
+        "rating": {
+          "score": 8.8,
+          "total": 2970
+        }
+      },
+      "predicted": 8.899,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、小说改”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 28205,
+        "type": 2,
+        "name": "日常 Eテレ版",
+        "nameCn": "日常 ETV版",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/19/6b/28205_AAqG1.jpg",
+        "tags": [
+          "日常",
+          "京阿尼",
+          "搞笑",
+          "2012年1月",
+          "tv",
+          "爆笑",
+          "电波",
+          "吐槽向",
+          "重制版",
+          "石原立也",
+          "漫画改",
+          "2012"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 2607
+        }
+      },
+      "predicted": 8.882,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 11577,
+        "type": 2,
+        "name": "THE IDOLM@STER",
+        "nameCn": "偶像大师",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a8/6a/11577_5U5G1.jpg",
+        "tags": [
+          "偶像大师",
+          "a-1pictures",
+          "偶像",
+          "tv",
+          "2011年7月",
+          "游戏改",
+          "励志",
+          "锦织敦史",
+          "2011",
+          "神前暁",
+          "骗钱大师",
+          "音乐"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 8877
+        }
+      },
+      "predicted": 8.878,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、A-1 Pictures”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1728,
+        "type": 2,
+        "name": "るろうに剣心 -明治剣客浪漫譚- 追憶編",
+        "nameCn": "浪客剑心 追忆篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/71/37/1728_HLsCr.jpg",
+        "tags": [
+          "ova",
+          "剑心",
+          "浪客剑心",
+          "追忆篇",
+          "雪代巴",
+          "1999",
+          "悲剧",
+          "十字伤",
+          "studiodeen",
+          "漫画改",
+          "古桥一浩",
+          "明治维新"
+        ],
+        "rating": {
+          "score": 8.9,
+          "total": 9753
+        }
+      },
+      "predicted": 8.845,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“恋爱、催泪”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 296659,
+        "type": 2,
+        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会",
+        "nameCn": "Love Live! 虹咲学园校园偶像同好会",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a7/35/296659_o709D.jpg",
+        "tags": [
+          "偶像",
+          "百合",
+          "sunrise",
+          "原创",
+          "lovelive",
+          "2020年10月",
+          "tv",
+          "音乐",
+          "校园",
+          "2020",
+          "扭曲",
+          "河村智之"
+        ],
+        "rating": {
+          "score": 7.5,
+          "total": 6118
+        }
+      },
+      "predicted": 8.809,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 14878,
+        "type": 2,
+        "name": "おジャ魔女どれみドッカ～ン!",
+        "nameCn": "小魔女DoReMi 大合奏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0e/e8/14878_1hWbu.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "魔法少女",
+          "原创",
+          "五十岚卓哉",
+          "东映",
+          "童年",
+          "東映アニメーション",
+          "细田守",
+          "tvb",
+          "马越嘉彦",
+          "doremi"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 408
+        }
+      },
+      "predicted": 8.795,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -758,45 +524,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8,
-          "total": 4262
+          "total": 4284
         }
       },
-      "predicted": 8.732,
+      "predicted": 8.79,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、a-1_pictures”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 848,
-        "type": 2,
-        "name": "ハチミツとクローバー II",
-        "nameCn": "蜂蜜与四叶草II",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/36/2e/848_RC9L8.jpg",
-        "tags": [
-          "青春",
-          "j.c.staff",
-          "蜂蜜与四叶草ii",
-          "校园",
-          "羽海野千花",
-          "治愈",
-          "tv",
-          "2006",
-          "noitamina",
-          "人生",
-          "治愈系",
-          "大学"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 4510
-        }
-      },
-      "predicted": 8.726,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“百合、A-1 Pictures”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -822,10 +556,10 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 7.4,
-          "total": 4431
+          "total": 4462
         }
       },
-      "predicted": 8.725,
+      "predicted": 8.782,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
@@ -833,34 +567,34 @@ globalThis.BangumiInitialRecommendationFeed = {
     },
     {
       "subject": {
-        "id": 338,
+        "id": 848,
         "type": 2,
-        "name": "フルメタル・パニック? ふもっふ",
-        "nameCn": "全金属狂潮 校园篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
+        "name": "ハチミツとクローバー II",
+        "nameCn": "蜂蜜与四叶草II",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/36/2e/848_RC9L8.jpg",
         "tags": [
-          "京阿尼",
-          "全金属狂潮",
-          "搞笑",
-          "爆笑",
-          "tv",
+          "青春",
+          "j.c.staff",
+          "蜂蜜与四叶草ii",
           "校园",
-          "贺东招二",
-          "2003",
-          "校园篇",
-          "bon太君",
-          "轻小说改",
-          "全金属狂潮2"
+          "羽海野千花",
+          "治愈",
+          "tv",
+          "2006",
+          "noitamina",
+          "人生",
+          "治愈系",
+          "大学"
         ],
         "rating": {
-          "score": 8.1,
-          "total": 6526
+          "score": 8.5,
+          "total": 4527
         }
       },
-      "predicted": 8.723,
+      "predicted": 8.759,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“京阿尼、校园”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -886,141 +620,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.4,
-          "total": 5812
+          "total": 5838
         }
       },
-      "predicted": 8.716,
+      "predicted": 8.749,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3553,
-        "type": 2,
-        "name": "∀ガンダム",
-        "nameCn": "∀高达",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/50/3553_FIw4I.jpg",
-        "tags": [
-          "高达",
-          "富野由悠季",
-          "sunrise",
-          "∀高达",
-          "tv",
-          "菅野洋子",
-          "1999",
-          "原创",
-          "gundam",
-          "科幻",
-          "萝卜",
-          "胡子"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 2833
-        }
-      },
-      "predicted": 8.709,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 25961,
-        "type": 2,
-        "name": "Tom and Jerry",
-        "nameCn": "猫和老鼠（1965年电视版）",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fd/60/25961_WDKz6.jpg",
-        "tags": [
-          "童年",
-          "欧美",
-          "搞笑",
-          "童年的经典",
-          "经典",
-          "神作",
-          "tom&jerry",
-          "tv",
-          "美国",
-          "原创",
-          "爆笑",
-          "汤姆杰瑞好基友"
-        ],
-        "rating": {
-          "score": 9.1,
-          "total": 14209
-        }
-      },
-      "predicted": 8.709,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1029,
-        "type": 2,
-        "name": "ef - a tale of melodies.",
-        "nameCn": "悠久之翼2",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
-        "tags": [
-          "新房昭之",
-          "大沼心",
-          "ef",
-          "shaft",
-          "gal改",
-          "催泪",
-          "tv",
-          "minori",
-          "天门",
-          "2008年10月",
-          "ef_a_tale_of_melodies.",
-          "2008"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 6061
-        }
-      },
-      "predicted": 8.695,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“致郁、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 254,
-        "type": 2,
-        "name": "サムライチャンプルー",
-        "nameCn": "混沌武士",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
-        "tags": [
-          "渡边信一郎",
-          "混沌武士",
-          "tv",
-          "manglobe",
-          "原创",
-          "2004",
-          "武士",
-          "动作",
-          "hiphop",
-          "神作",
-          "战斗",
-          "向日葵味道"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 11405
-        }
-      },
-      "predicted": 8.69,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“原创、音乐”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1046,10 +652,138 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.6,
-          "total": 9436
+          "total": 9462
         }
       },
-      "predicted": 8.69,
+      "predicted": 8.749,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 23304,
+        "type": 2,
+        "name": "伝説巨神イデオン 発動篇",
+        "nameCn": "传说巨神伊迪安 发动篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
+        "tags": [
+          "富野由悠季",
+          "剧场版",
+          "sunrise",
+          "1982",
+          "萝卜",
+          "原创",
+          "科幻",
+          "全灭",
+          "传说巨神伊迪安",
+          "机战",
+          "裸漂",
+          "日本"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 1017
+        }
+      },
+      "predicted": 8.746,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 338,
+        "type": 2,
+        "name": "フルメタル・パニック? ふもっふ",
+        "nameCn": "全金属狂潮 校园篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
+        "tags": [
+          "京阿尼",
+          "全金属狂潮",
+          "搞笑",
+          "爆笑",
+          "tv",
+          "校园",
+          "贺东招二",
+          "2003",
+          "校园篇",
+          "bon太君",
+          "轻小说改",
+          "全金属狂潮2"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6560
+        }
+      },
+      "predicted": 8.724,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“京阿尼、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 860,
+        "type": 2,
+        "name": "カウボーイビバップ 天国の扉",
+        "nameCn": "星际牛仔 天国之扉",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
+        "tags": [
+          "剧场版",
+          "渡边信一郎",
+          "星际牛仔",
+          "sunrise",
+          "菅野よう子",
+          "bones",
+          "2001",
+          "原创",
+          "科幻",
+          "菅野洋子",
+          "cowboy",
+          "cowboy_bebop"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 7264
+        }
+      },
+      "predicted": 8.71,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2741,
+        "type": 2,
+        "name": "タッチ",
+        "nameCn": "棒球英豪",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cd/cb/2741_GPGN2.jpg",
+        "tags": [
+          "安达充",
+          "棒球",
+          "爱情",
+          "touch",
+          "青春",
+          "校园",
+          "经典",
+          "tv",
+          "上杉达也",
+          "1985",
+          "童年",
+          "体育"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 1958
+        }
+      },
+      "predicted": 8.71,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
@@ -1078,10 +812,10 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 7.3,
-          "total": 1860
+          "total": 1867
         }
       },
-      "predicted": 8.689,
+      "predicted": 8.696,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“sunrise、百合”相关作品通常比站内评价更偏爱。"
@@ -1089,98 +823,98 @@ globalThis.BangumiInitialRecommendationFeed = {
     },
     {
       "subject": {
-        "id": 216310,
+        "id": 1270,
         "type": 2,
-        "name": "ヤマノススメ サードシーズン",
-        "nameCn": "向山进发 第三季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/49/a2/216310_ci5yT.jpg",
+        "name": "ARIA The ORIGINATION",
+        "nameCn": "水星领航员 第三季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c8/50/1270_Yo7p2.jpg",
         "tags": [
-          "百合",
-          "漫画改",
-          "tv",
-          "2018年7月",
           "治愈",
-          "8-bit",
-          "2018",
-          "向山进发",
-          "山本裕介",
-          "泡面番",
-          "日常",
-          "8bit"
-        ],
-        "rating": {
-          "score": 7.7,
-          "total": 3961
-        }
-      },
-      "predicted": 8.666,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“扭曲、百合”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1428,
-        "type": 2,
-        "name": "鋼の錬金術師 FULLMETAL ALCHEMIST",
-        "nameCn": "钢之炼金术师 FULLMETAL ALCHEMIST",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/06/63/1428_xwkMI.jpg",
-        "tags": [
-          "钢之炼金术师",
-          "bones",
-          "骨头社",
-          "热血",
+          "aria",
+          "水星领航员",
+          "tv",
+          "治愈系神作",
+          "2008",
           "漫画改",
-          "等价交换",
-          "钢炼",
-          "tv",
-          "2009年4月",
-          "2009",
-          "战斗",
-          "fa"
+          "2008年1月",
+          "halfilmmaker",
+          "治愈系",
+          "日常",
+          "科幻"
         ],
         "rating": {
-          "score": 8.8,
-          "total": 25155
+          "score": 8.7,
+          "total": 2977
         }
       },
-      "predicted": 8.663,
+      "predicted": 8.692,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“奇幻、经典”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“百合、奇幻”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 5694,
+        "id": 3172,
         "type": 2,
-        "name": "プリンセスチュチュ",
-        "nameCn": "萩萩公主",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_EHTE8.jpg",
+        "name": "超時空要塞マクロス 愛・おぼえていますか",
+        "nameCn": "超时空要塞 可曾记得爱",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/5c/3172_F4mZ6.jpg",
         "tags": [
-          "tv",
-          "2002",
+          "剧场版",
+          "超時空要塞",
+          "可曾记得爱",
+          "河森正治",
+          "1984",
+          "林明美",
+          "macross",
           "原创",
-          "童话",
-          "佐藤顺一",
-          "halfilmmaker",
-          "岡崎律子",
-          "芭蕾舞",
-          "萩萩公主",
-          "少女系",
-          "古典音乐",
-          "奇幻"
+          "科幻",
+          "萝卜",
+          "美樹本晴彦",
+          "机战"
         ],
         "rating": {
           "score": 8,
-          "total": 716
+          "total": 2484
         }
       },
-      "predicted": 8.657,
+      "predicted": 8.687,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“恋爱、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1891,
+        "type": 2,
+        "name": "少女革命ウテナ アドゥレセンス黙示録",
+        "nameCn": "少女革命 思春期默示录",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/13/16/1891_qDgl0.jpg",
+        "tags": [
+          "剧场版",
+          "j.c.staff",
+          "几原邦彦",
+          "百合",
+          "1999",
+          "原创",
+          "少女革命",
+          "幾原邦彦",
+          "榎戸洋司",
+          "少女革命ウテナ",
+          "神作",
+          "光宗信吉"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 3157
+        }
+      },
+      "predicted": 8.668,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1206,171 +940,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 7.9,
-          "total": 876
+          "total": 878
         }
       },
-      "predicted": 8.652,
+      "predicted": 8.65,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2979,
-        "type": 2,
-        "name": "勇者王ガオガイガーFINAL",
-        "nameCn": "勇者王GaoGaiGar Final",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2d/71/2979_VygjJ.jpg",
-        "tags": [
-          "ova",
-          "sunrise",
-          "勇者王",
-          "萝卜",
-          "2000",
-          "燃",
-          "热血",
-          "原创",
-          "科幻",
-          "勇者シリーズ",
-          "机战",
-          "童年"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 496
-        }
-      },
-      "predicted": 8.641,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、童年”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 567936,
-        "type": 2,
-        "name": "〈物語〉シリーズ オフ&モンスターシーズン：業物語 かれんオウガ",
-        "nameCn": "物语系列 外传季&怪物季：业物语 火怜逢我",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2d/00/567936_M6zp6.jpg",
-        "tags": [
-          "shaft",
-          "物语系列",
-          "新房昭之",
-          "小说改",
-          "奇幻",
-          "吉泽翠",
-          "web",
-          "日本",
-          "轻小说改",
-          "tv"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 0
-        }
-      },
-      "predicted": 8.635,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“小说改、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 93739,
-        "type": 2,
-        "name": "ピンポン THE ANIMATION",
-        "nameCn": "乒乓",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1e/63/93739_TZ9dS.jpg",
-        "tags": [
-          "汤浅政明",
-          "乒乓",
-          "运动",
-          "漫画改",
-          "tv",
-          "2014年4月",
-          "龙之子production",
-          "松本大洋",
-          "热血",
-          "2014",
-          "漫改",
-          "noitamina"
-        ],
-        "rating": {
-          "score": 8.7,
-          "total": 17677
-        }
-      },
-      "predicted": 8.625,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、群像”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2741,
-        "type": 2,
-        "name": "タッチ",
-        "nameCn": "棒球英豪",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cd/cb/2741_GPGN2.jpg",
-        "tags": [
-          "安达充",
-          "棒球",
-          "爱情",
-          "touch",
-          "青春",
-          "校园",
-          "经典",
-          "tv",
-          "上杉达也",
-          "1985",
-          "童年",
-          "体育"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 1948
-        }
-      },
-      "predicted": 8.612,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 62285,
-        "type": 2,
-        "name": "プリティーリズム・レインボーライブ",
-        "nameCn": "美妙旋律 Rainbow Live",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/da/39/62285_zcb5F.jpg",
-        "tags": [
-          "tv",
-          "偶像",
-          "美妙旋律",
-          "2013",
-          "原创",
-          "龙之子",
-          "2013年4月",
-          "幼女向",
-          "音乐",
-          "菱田正和",
-          "星光少女",
-          "加藤英美里"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 295
-        }
-      },
-      "predicted": 8.607,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1396,10 +972,10 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.7,
-          "total": 11898
+          "total": 11948
         }
       },
-      "predicted": 8.599,
+      "predicted": 8.612,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“奇幻、公路片”相关作品通常比站内评价更偏爱。"
@@ -1407,66 +983,322 @@ globalThis.BangumiInitialRecommendationFeed = {
     },
     {
       "subject": {
-        "id": 14879,
+        "id": 254,
         "type": 2,
-        "name": "おジャ魔女どれみナ・イ・ショ",
-        "nameCn": "小魔女DoReMi 童年秘密篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e9/85/14879_4kRqu.jpg",
+        "name": "サムライチャンプルー",
+        "nameCn": "混沌武士",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
         "tags": [
-          "ova",
-          "2004",
-          "东映",
-          "五十岚卓哉",
+          "渡边信一郎",
+          "混沌武士",
+          "tv",
+          "manglobe",
           "原创",
-          "佐藤顺一",
-          "東映アニメーション",
-          "魔法少女doremi",
-          "马越嘉彦",
-          "山内重保",
-          "doremi",
-          "童年"
+          "2004",
+          "武士",
+          "动作",
+          "hiphop",
+          "神作",
+          "战斗",
+          "向日葵味道"
         ],
         "rating": {
-          "score": 8.2,
-          "total": 333
+          "score": 8.5,
+          "total": 11513
         }
       },
-      "predicted": 8.59,
+      "predicted": 8.609,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“音乐、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
       "subject": {
-        "id": 535669,
+        "id": 1029,
         "type": 2,
-        "name": "氷の城壁",
-        "nameCn": "冰之城墙",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/93/8f/535669_4zoHG.jpg",
+        "name": "ef - a tale of melodies.",
+        "nameCn": "悠久之翼2",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
         "tags": [
-          "恋爱",
-          "2026年4月",
-          "漫画改",
-          "校园",
+          "新房昭之",
+          "大沼心",
+          "ef",
+          "shaft",
+          "gal改",
+          "催泪",
           "tv",
-          "studiokai",
-          "2026",
-          "青春",
-          "漫改",
-          "日本",
-          "まんきゅう",
-          "日常"
+          "minori",
+          "天门",
+          "2008年10月",
+          "ef_a_tale_of_melodies.",
+          "2008"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6089
+        }
+      },
+      "predicted": 8.6,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“致郁、校园”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 10379,
+        "type": 2,
+        "name": "装甲騎兵ボトムズ",
+        "nameCn": "装甲骑兵VOTOMS",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c1/ba/10379_y3cGG.jpg",
+        "tags": [
+          "sunrise",
+          "高桥良辅",
+          "tv",
+          "1983",
+          "萝卜",
+          "原创",
+          "真实系",
+          "科幻",
+          "装甲骑兵",
+          "机战",
+          "激励哥",
+          "高橋良輔"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 646
+        }
+      },
+      "predicted": 8.598,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1428,
+        "type": 2,
+        "name": "鋼の錬金術師 FULLMETAL ALCHEMIST",
+        "nameCn": "钢之炼金术师 FULLMETAL ALCHEMIST",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/06/63/1428_xwkMI.jpg",
+        "tags": [
+          "钢之炼金术师",
+          "bones",
+          "骨头社",
+          "热血",
+          "漫画改",
+          "等价交换",
+          "钢炼",
+          "tv",
+          "2009年4月",
+          "2009",
+          "战斗",
+          "fa"
+        ],
+        "rating": {
+          "score": 8.8,
+          "total": 25298
+        }
+      },
+      "predicted": 8.583,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、剧情”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3128,
+        "type": 2,
+        "name": "デジモンアドベンチャー",
+        "nameCn": "数码宝贝大冒险",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/df/f8/3128_4QNAH.jpg",
+        "tags": [
+          "童年",
+          "数码暴龙",
+          "永远的回忆",
+          "tv",
+          "1999",
+          "热血",
+          "butterfly神曲",
+          "无限大的梦想",
+          "数码宝贝",
+          "原创",
+          "东映",
+          "butterfly"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 8629
+        }
+      },
+      "predicted": 8.573,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 62285,
+        "type": 2,
+        "name": "プリティーリズム・レインボーライブ",
+        "nameCn": "美妙旋律 Rainbow Live",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/da/39/62285_zcb5F.jpg",
+        "tags": [
+          "tv",
+          "偶像",
+          "美妙旋律",
+          "2013",
+          "原创",
+          "龙之子",
+          "2013年4月",
+          "幼女向",
+          "音乐",
+          "菱田正和",
+          "星光少女",
+          "加藤英美里"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 302
+        }
+      },
+      "predicted": 8.57,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1333,
+        "type": 2,
+        "name": "劇場版 空の境界 第五章 矛盾螺旋",
+        "nameCn": "剧场版 空之境界 第五章 矛盾螺旋",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/ff/49/1333_0Dn08.jpg",
+        "tags": [
+          "空之境界",
+          "type-moon",
+          "剧场版",
+          "ufotable",
+          "两仪式",
+          "奈须きのこ",
+          "矛盾螺旋",
+          "2008",
+          "空の境界",
+          "坂本真绫",
+          "奇幻",
+          "战斗"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 12591
+        }
+      },
+      "predicted": 8.558,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、梶浦由记”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 5694,
+        "type": 2,
+        "name": "プリンセスチュチュ",
+        "nameCn": "萩萩公主",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_MdZo5.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "原创",
+          "童话",
+          "佐藤顺一",
+          "halfilmmaker",
+          "岡崎律子",
+          "芭蕾舞",
+          "萩萩公主",
+          "少女系",
+          "古典音乐",
+          "奇幻"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 720
+        }
+      },
+      "predicted": 8.556,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 207168,
+        "type": 2,
+        "name": "結城友奈は勇者である -鷲尾須美の章- 第3章 やくそく",
+        "nameCn": "结城友奈是勇者 -鹫尾须美之章- 第3章 约定",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d9/2c/207168_jk2kY.jpg",
+        "tags": [
+          "剧场版",
+          "百合",
+          "studio五组",
+          "原创",
+          "结城友奈是勇者",
+          "2017",
+          "战斗",
+          "2017年7月",
+          "魔法少女",
+          "岸诚二",
+          "-鹫尾须美之章-",
+          "致郁"
         ],
         "rating": {
           "score": 7.3,
-          "total": 2955
+          "total": 1294
         }
       },
-      "predicted": 8.586,
+      "predicted": 8.554,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“扭曲、校园”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“致郁、百合”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3324,
+        "type": 2,
+        "name": "マインド・ゲーム",
+        "nameCn": "心灵游戏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3c/e6/3324_y2yg1.jpg",
+        "tags": [
+          "汤浅政明",
+          "剧场版",
+          "studio4℃",
+          "2004",
+          "原创",
+          "湯浅政明",
+          "想像力",
+          "人生",
+          "渡辺信一郎",
+          "菅野洋子",
+          "渡边信一郎",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 2374
+        }
+      },
+      "predicted": 8.549,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“奇幻、科幻”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1492,173 +1324,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 8.2,
-          "total": 17696
+          "total": 17823
         }
       },
-      "predicted": 8.582,
+      "predicted": 8.532,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 343607,
-        "type": 2,
-        "name": "VOY@GER",
-        "nameCn": "",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/04/14/343607_XRvUF.jpg",
-        "tags": [
-          "短片",
-          "cloverworks",
-          "2021",
-          "偶像大师",
-          "錦織敦史",
-          "khara",
-          "锦织敦史",
-          "web",
-          "偶像",
-          "im@s",
-          "游戏改",
-          "mv"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 2068
-        }
-      },
-      "predicted": 8.575,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“cloverworks、a-1pictures”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 23304,
-        "type": 2,
-        "name": "伝説巨神イデオン 発動篇",
-        "nameCn": "传说巨神伊迪安 发动篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
-        "tags": [
-          "富野由悠季",
-          "剧场版",
-          "sunrise",
-          "1982",
-          "萝卜",
-          "原创",
-          "科幻",
-          "全灭",
-          "传说巨神伊迪安",
-          "机战",
-          "裸漂",
-          "日本"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 1013
-        }
-      },
-      "predicted": 8.563,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 262897,
-        "type": 2,
-        "name": "ゆるキャン△ SEASON 2",
-        "nameCn": "摇曳露营△ 第二季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0f/50/262897_d3555.jpg",
-        "tags": [
-          "芳文社",
-          "日常",
-          "治愈",
-          "2021年1月",
-          "漫画改",
-          "轻百合",
-          "tv",
-          "百合",
-          "摇曳露营δ",
-          "c-station",
-          "2021",
-          "露营"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 12577
-        }
-      },
-      "predicted": 8.544,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2664,
-        "type": 2,
-        "name": "機動戦士ガンダム 第08MS小隊",
-        "nameCn": "机动战士高达 第08MS小队",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/da/aa/2664_S3lsS.jpg",
-        "tags": [
-          "高达",
-          "ova",
-          "第08ms小隊",
-          "sunrise",
-          "gundam",
-          "1996",
-          "uc系",
-          "爱情与战争",
-          "原创",
-          "真实系",
-          "光剑温泉与妹子",
-          "科幻"
-        ],
-        "rating": {
-          "score": 7.9,
-          "total": 4022
-        }
-      },
-      "predicted": 8.534,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3130,
-        "type": 2,
-        "name": "デジモンテイマーズ",
-        "nameCn": "数码宝贝驯兽师之王",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c9/22/3130_cGKH5.jpg",
-        "tags": [
-          "童年",
-          "数码宝贝",
-          "tv",
-          "2001",
-          "东映",
-          "馴獸師之王",
-          "原创",
-          "数码暴龙",
-          "催泪弹结局",
-          "刷蓝卡",
-          "燃！",
-          "digimon"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 2683
-        }
-      },
-      "predicted": 8.53,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、原创”相关作品通常比站内评价更偏爱。"
       ]
     },
     {
@@ -1684,10 +1356,10 @@ globalThis.BangumiInitialRecommendationFeed = {
         ],
         "rating": {
           "score": 7.8,
-          "total": 1145
+          "total": 1165
         }
       },
-      "predicted": 8.526,
+      "predicted": 8.527,
       "collaborativeLift": 0,
       "reasons": [
         "你的评分显示，对“百合、恋爱”相关作品通常比站内评价更偏爱。"
@@ -1695,34 +1367,386 @@ globalThis.BangumiInitialRecommendationFeed = {
     },
     {
       "subject": {
-        "id": 3172,
+        "id": 3130,
         "type": 2,
-        "name": "超時空要塞マクロス 愛・おぼえていますか",
-        "nameCn": "超时空要塞 可曾记得爱",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e2/5c/3172_F4mZ6.jpg",
+        "name": "デジモンテイマーズ",
+        "nameCn": "数码宝贝驯兽师之王",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c9/22/3130_cGKH5.jpg",
         "tags": [
-          "剧场版",
-          "超時空要塞",
-          "可曾记得爱",
-          "河森正治",
-          "1984",
-          "林明美",
-          "macross",
+          "童年",
+          "数码宝贝",
+          "tv",
+          "2001",
+          "东映",
+          "馴獸師之王",
           "原创",
-          "科幻",
-          "萝卜",
-          "美樹本晴彦",
-          "经典"
+          "数码暴龙",
+          "催泪弹结局",
+          "刷蓝卡",
+          "燃！",
+          "digimon"
         ],
         "rating": {
           "score": 8,
-          "total": 2464
+          "total": 2703
         }
       },
-      "predicted": 8.523,
+      "predicted": 8.525,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“恋爱、原创”相关作品通常比站内评价更偏爱。"
+        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 977,
+        "type": 2,
+        "name": "あずまんが大王 THE ANIMATION",
+        "nameCn": "笑园漫画大王",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cc/1a/977_5rRBg.jpg",
+        "tags": [
+          "搞笑",
+          "j.c.staff",
+          "阿兹漫画大王",
+          "校园",
+          "tv",
+          "日常",
+          "治愈",
+          "2002",
+          "漫画改",
+          "大阪",
+          "四格",
+          "电波"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 2950
+        }
+      },
+      "predicted": 8.524,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2979,
+        "type": 2,
+        "name": "勇者王ガオガイガーFINAL",
+        "nameCn": "勇者王GaoGaiGar Final",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2d/71/2979_VygjJ.jpg",
+        "tags": [
+          "ova",
+          "sunrise",
+          "勇者王",
+          "萝卜",
+          "2000",
+          "燃",
+          "热血",
+          "原创",
+          "科幻",
+          "勇者シリーズ",
+          "机战",
+          "童年"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 499
+        }
+      },
+      "predicted": 8.515,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“sunrise、童年”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2921,
+        "type": 2,
+        "name": "めぞん一刻",
+        "nameCn": "相聚一刻",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/17/d8/2921_Po9M8.jpg",
+        "tags": [
+          "高桥留美子",
+          "tv",
+          "1986",
+          "漫画改",
+          "相聚一刻",
+          "恋爱",
+          "studiodeen",
+          "爱情",
+          "搞笑",
+          "生活",
+          "经典",
+          "漫改"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 735
+        }
+      },
+      "predicted": 8.499,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“恋爱、日常”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 262897,
+        "type": 2,
+        "name": "ゆるキャン△ SEASON 2",
+        "nameCn": "摇曳露营△ 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0f/50/262897_d3555.jpg",
+        "tags": [
+          "芳文社",
+          "日常",
+          "治愈",
+          "2021年1月",
+          "漫画改",
+          "轻百合",
+          "tv",
+          "百合",
+          "摇曳露营δ",
+          "c-station",
+          "2021",
+          "露营"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 12704
+        }
+      },
+      "predicted": 8.495,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 844,
+        "type": 2,
+        "name": "人狼 JIN-ROH",
+        "nameCn": "人狼",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e9/7e/844_Z2u77.jpg",
+        "tags": [
+          "押井守",
+          "剧场版",
+          "production.i.g",
+          "1999",
+          "冲浦启之",
+          "科幻",
+          "原创",
+          "沖浦啓之",
+          "人狼",
+          "productioni.g",
+          "爱情",
+          "小红帽"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 3234
+        }
+      },
+      "predicted": 8.493,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“科幻、动画电影”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1704,
+        "type": 2,
+        "name": "HUNTER×HUNTER",
+        "nameCn": "猎人",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a5/88/1704_kwXKE.jpg",
+        "tags": [
+          "富坚义博",
+          "hunter×hunter",
+          "热血",
+          "万年坑",
+          "tv",
+          "1999",
+          "全职猎人",
+          "漫画改",
+          "坑",
+          "集英社",
+          "战斗",
+          "神作"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 5891
+        }
+      },
+      "predicted": 8.487,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 750,
+        "type": 2,
+        "name": "ARIA The OVA ～ARIETTA～",
+        "nameCn": "水星领航员 OVA ～ARIETTA～",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b1/37/750_21A6l.jpg",
+        "tags": [
+          "ova",
+          "水星领航员",
+          "治愈",
+          "2007",
+          "aria",
+          "漫画改",
+          "halfilmmaker",
+          "治愈系",
+          "佐藤顺一",
+          "治愈系神作",
+          "日常",
+          "漫改"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 1719
+        }
+      },
+      "predicted": 8.473,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“百合、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3166,
+        "type": 2,
+        "name": "超時空要塞マクロス",
+        "nameCn": "超时空要塞",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/5e/6d/3166_Z9Q8z.jpg",
+        "tags": [
+          "超时空要塞",
+          "macross",
+          "tv",
+          "1982",
+          "科幻",
+          "河森正治",
+          "林明美",
+          "原创",
+          "萝卜",
+          "龙之子",
+          "音乐",
+          "机战"
+        ],
+        "rating": {
+          "score": 7.7,
+          "total": 1771
+        }
+      },
+      "predicted": 8.469,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“童年、恋爱”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 93739,
+        "type": 2,
+        "name": "ピンポン THE ANIMATION",
+        "nameCn": "乒乓",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/1e/63/93739_1D6TS.jpg",
+        "tags": [
+          "汤浅政明",
+          "乒乓",
+          "运动",
+          "漫画改",
+          "tv",
+          "2014年4月",
+          "龙之子production",
+          "松本大洋",
+          "热血",
+          "2014",
+          "漫改",
+          "noitamina"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 17780
+        }
+      },
+      "predicted": 8.454,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“校园、noitamina”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 767,
+        "type": 2,
+        "name": "劇場版 空の境界 第三章 痛覚残留",
+        "nameCn": "剧场版 空之境界 第三章 痛觉残留",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f2/20/767_T9VD9.jpg",
+        "tags": [
+          "空之境界",
+          "剧场版",
+          "type-moon",
+          "ufotable",
+          "奈须きのこ",
+          "梶浦由记",
+          "2008",
+          "痛觉残留",
+          "两仪式",
+          "奇幻",
+          "空の境界",
+          "坂本真绫"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 11011
+        }
+      },
+      "predicted": 8.449,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“恋爱、奇幻”相关作品通常比站内评价更偏爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3423,
+        "type": 2,
+        "name": "劇場版 空の境界 第七章 殺人考察(後)",
+        "nameCn": "剧场版 空之境界 第七章 杀人考察（后）",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3d/32/3423_ZNaov.jpg",
+        "tags": [
+          "空之境界",
+          "剧场版",
+          "type-moon",
+          "ufotable",
+          "梶浦由記",
+          "奈须きのこ",
+          "两仪式",
+          "2009",
+          "空の境界",
+          "奇幻",
+          "小说改",
+          "坂本真绫"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 9998
+        }
+      },
+      "predicted": 8.449,
+      "collaborativeLift": 0,
+      "reasons": [
+        "你的评分显示，对“恋爱、奇幻”相关作品通常比站内评价更偏爱。"
       ]
     }
   ]
@@ -2150,7 +2174,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.11.2";
+  const APP_VERSION = "0.11.3";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2766,7 +2790,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const Feed = globalThis.BangumiRecommendationFeed;
   if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.11.2";
+  const APP_VERSION = "0.11.3";
   const OWNER = Feed.OWNER;
   const PAGE_SIZE = 5;
   const FEED_TTL = 6 * 60 * 60 * 1000;
@@ -3058,7 +3082,7 @@ globalThis.BangumiInitialRecommendationFeed = {
         .recommendation-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;align-items:start}
         .recommendation-card{min-width:0}.cover{display:block;aspect-ratio:5/7;background:var(--soft);overflow:hidden;border-radius:7px}.cover img{display:block;width:100%;height:100%;object-fit:cover}.cover-placeholder{display:flex;width:100%;height:100%;align-items:center;justify-content:center;color:var(--muted)}
         .recommendation-card h3{margin-top:9px;font-size:13px;line-height:1.5}.recommendation-card h3 a{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:39px}
-        .content-tags{display:flex;flex-wrap:wrap;gap:4px 7px;margin:5px 0;color:var(--link);font-size:11px;min-height:18px}.brief{font-size:12px;line-height:1.6;color:var(--muted);margin:6px 0 8px}
+        .content-tags{display:flex;flex-wrap:wrap;gap:4px 7px;margin:5px 0;color:var(--link);font-size:11px;min-height:18px}.brief{font-size:12px;line-height:1.6;color:var(--muted);margin:6px 0 8px;min-height:4.8em}
         .evidence-panel{font-size:12px}.evidence-panel summary{color:var(--site-link);width:fit-content;border-radius:4px;list-style:none}.evidence-body{padding-top:8px;line-height:1.75;overflow-wrap:anywhere}.evidence-body p{margin-bottom:8px}.evidence-score{color:var(--muted);font-size:11px}.evidence-body button{padding-left:0}
         .pagination{display:flex;align-items:center;justify-content:center;gap:15px;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.pagination label{display:flex;align-items:center;gap:5px}.pagination select{padding:3px 4px;font-size:12px}
         .toast{margin-top:12px;padding:8px 12px;background:var(--pink-soft);border-radius:6px;color:var(--link);font-size:12px}.toast button{margin-left:8px;color:var(--link)}
