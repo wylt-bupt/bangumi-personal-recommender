@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.15
+// @version      1.0.16
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -66,7 +66,7 @@
     return { events, next, oldest: events.length ? Math.min(...events.map(e => e.time)) : null, newest: events.length ? Math.max(...events.map(e => e.time)) : null };
   }
   function freshState(user) {
-    return { schema: 1, user, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
+    return { schema: 1, user, deep: false, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, deep: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
   }
   function mergeEvents(old, incoming) {
     const map = new Map(old.map(e => [e.id, e]));
@@ -79,6 +79,8 @@
     for (const type of SYNC_TYPES) {
       const stream = state?.streams?.[type];
       if (!stream || !stream.complete || stream.refresh) return 0;
+      // Full-history backfill requested but not finished: keep working now.
+      if (state.deep && !stream.deep) return 0;
       const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
       if (!checkedAt) return 0;
       next = Math.min(next, checkedAt + REFRESH_INTERVAL);
@@ -145,7 +147,34 @@
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
     return { days, hourly, weekly, platform, total, complete: stream.complete, start, end, average30 };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
+  // Continuous daily series for the trend chart: "year" mirrors the heatmap
+  // window, "all" stretches back to the oldest synced progress record.
+  function dailySeries(state, now = Date.now(), range = 'year') {
+    const events = state.events.filter(e => e.type === 'progress' && e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
+    const progress = new Map();
+    const daily = Object.create(null);
+    let oldestTime = Infinity;
+    for (const e of events) {
+      const amount = progressUnits(e, progress);
+      if (amount === 0) continue;
+      if (e.time < oldestTime) oldestTime = e.time;
+      const key = dayKey(e.time);
+      daily[key] = (daily[key] || 0) + amount;
+    }
+    const end = dayStart(now);
+    let start = end - 364 * DAY;
+    if (range === 'all' && Number.isFinite(oldestTime)) start = Math.min(start, dayStart(oldestTime));
+    const days = [];
+    let total = 0;
+    for (let time = start; time <= end; time += DAY) {
+      const key = dayKey(time);
+      const count = daily[key] || 0;
+      total += count;
+      days.push({ key, time, count });
+    }
+    return { days, total, oldestTime: Number.isFinite(oldestTime) ? oldestTime : null };
+  }
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, importBackup, normalizeEvent, progressUnits };
 });
 
 
@@ -161,6 +190,8 @@
 
   let db, host, shadow, state = C.freshState(USER), busy = false, channel, timer;
   let aborted = false, storageBlocked = false, message = '', drawnSignature = '', drawnWidth = -1, chartData = null;
+  let range = 'year', trendSignature = '', trendWidth = -1, trendSeries = null;
+  try { if (localStorage.getItem('bgmtl-chart-range') === 'all') range = 'all'; } catch (error) { /* 私密模式忽略 */ }
   // Idle streams only need attention every 15 minutes. Remembering the next
   // due time lets the 30-second poll skip the full IndexedDB read meanwhile.
   let idleUntil = 0;
@@ -205,6 +236,19 @@
     #hm-dashboard .hm-cell{transition:transform .15s,filter .15s;transform-box:fill-box;transform-origin:center}
     #hm-dashboard .hm-cell:hover{transform:scale(1.4);filter:drop-shadow(0 0 4px rgba(240,145,153,.5))}
     #hm-dashboard .hm-loading{height:112px;display:flex;align-items:center;justify-content:center;color:var(--hm-text-dim);font-size:11px}
+    #hm-dashboard .hm-trend-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin:14px 0 4px;font-size:10px;color:var(--hm-text-dim)}
+    #hm-dashboard .hm-trend-title{font-size:11px;font-weight:700;color:#f09199}
+    #hm-dashboard .hm-trend-legend{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+    #hm-dashboard .hm-trend-legend .sw{display:inline-block;width:9px;height:9px;border-radius:2px}
+    #hm-dashboard .hm-trend-legend .sw-bar{background:#f09199}
+    #hm-dashboard .hm-trend-legend .sw-line{width:14px;height:2px;border-radius:1px;background:var(--hm-text-strong)}
+    #hm-dashboard .hm-trend-total{white-space:nowrap}
+    #hm-dashboard .hm-trend-toggle{display:inline-flex;margin-left:auto}
+    #hm-dashboard .hm-trend-toggle button{font:inherit;font-size:10px;line-height:1.4;padding:2px 10px;border:1px solid var(--hm-border);background:transparent;color:var(--hm-text-dim);cursor:pointer}
+    #hm-dashboard .hm-trend-toggle button:first-child{border-radius:4px 0 0 4px}
+    #hm-dashboard .hm-trend-toggle button:last-child{border-radius:0 4px 4px 0;border-left:none}
+    #hm-dashboard .hm-trend-toggle button[aria-pressed=true]{color:#f09199;border-color:#f09199;background:rgba(240,145,153,.08)}
+    #hm-dashboard .hm-trend-hint{margin-top:4px;font-size:10px;color:var(--hm-text-dim)}
     @media(prefers-reduced-motion:reduce){#hm-dashboard .hm-cell{transition:none!important}}
   `;
 
@@ -239,11 +283,19 @@
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems ${homeLayout ? 'home-layout' : 'profile-layout'}" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></section>`;
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems ${homeLayout ? 'home-layout' : 'profile-layout'}" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div><div class="hm-trend-area"></div></section>`;
     if (homeLayout) new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width || 0;
       if (chartData && Math.abs(width - drawnWidth) > 0.5) drawHeatmap(chartData, false);
     }).observe(shadow.querySelector('.hm-chart-area'));
+    new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width || 0;
+      if (trendSeries && Math.abs(width - trendWidth) > 0.5) drawTrend(true);
+    }).observe(shadow.querySelector('.hm-trend-area'));
+    shadow.addEventListener('click', event => {
+      const button = event.target.closest('[data-range]');
+      if (button && button.getAttribute('aria-pressed') !== 'true') setRange(button.dataset.range);
+    });
     theme();
     new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
@@ -330,6 +382,80 @@
       });
     }
   }
+  // Trend chart: daily episode bars with a 7-day moving average line.
+  // Returns false when there is nothing drawable yet (zero-width container).
+  function drawTrend(useCache = false) {
+    const area = shadow.querySelector('.hm-trend-area');
+    if (!area) return false;
+    const width = area.clientWidth;
+    if (width < 80) return false;
+    if (!useCache || !trendSeries) trendSeries = C.dailySeries(state, Date.now(), range);
+    trendWidth = width;
+    const days = trendSeries.days, n = days.length;
+    const counts = days.map(day => day.count);
+    const padL = 34, padR = 6, padT = 8, padB = 18, plotH = 116;
+    const plotW = width - padL - padR, height = padT + plotH + padB;
+    const maxCount = Math.max(1, ...counts);
+    let tickStep;
+    if (maxCount <= 8) tickStep = maxCount <= 2 ? 1 : 2;
+    else {
+      const magnitude = Math.pow(10, Math.floor(Math.log10(maxCount / 4)));
+      tickStep = [1, 2, 4, 5, 10].map(m => m * magnitude).find(step => step >= maxCount / 4);
+    }
+    const yMax = Math.max(tickStep, tickStep * Math.ceil((maxCount + 0.5) / tickStep));
+    const ticks = Math.round(yMax / tickStep);
+    const y = v => padT + plotH * (1 - v / yMax);
+    const stepX = plotW / n;
+    const barW = Math.min(stepX, Math.max(1, Math.min(8, stepX - Math.max(0.5, stepX * 0.35))));
+    const ma = [];
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      sum += counts[i];
+      if (i >= 7) sum -= counts[i - 7];
+      ma.push(sum / Math.min(i + 1, 7));
+    }
+    const withTitles = n <= 800;
+    let bars = '';
+    for (let i = 0; i < n; i++) {
+      if (!counts[i]) continue;
+      const barHeight = Math.max(1, padT + plotH - y(counts[i]));
+      bars += `<rect class="hm-bar" x="${(padL + i * stepX).toFixed(1)}" y="${(padT + plotH - barHeight).toFixed(1)}" width="${barW.toFixed(1)}" height="${barHeight.toFixed(1)}" fill="#f09199">` + (withTitles ? `<title>${days[i].key.slice(5).replace('-', '/')} · ${counts[i]} 集 · 7日均 ${ma[i].toFixed(1)}</title>` : '') + '</rect>';
+    }
+    const points = ma.map((v, i) => `${(padL + i * stepX + barW / 2).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const line = n > 1 ? `<polyline points="${points}" fill="none" stroke="var(--hm-text-strong)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.85"/>` : '';
+    let grid = '';
+    for (let t = 0; t <= ticks; t++) {
+      const value = tickStep * t, yy = y(value);
+      grid += `<line x1="${padL}" y1="${yy}" x2="${padL + plotW}" y2="${yy}" stroke="var(--hm-border)"${t ? ' stroke-dasharray="2 3"' : ''}/><text x="${padL - 5}" y="${yy + 3}" text-anchor="end" fill="var(--hm-text-dim)" font-size="9">${value}</text>`;
+    }
+    let labels = '', lastX = -Infinity;
+    for (let i = 0; i < n; i++) {
+      if (days[i].key.slice(8) !== '01') continue;
+      const x = padL + i * stepX;
+      if (x - lastX < 32) continue;
+      lastX = x;
+      labels += `<text x="${x.toFixed(1)}" y="${height - 5}" fill="var(--hm-text-dim)" font-size="9">${Number(days[i].key.slice(5, 7))}/${Number(days[i].key.slice(8))}</text>`;
+    }
+    const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block" role="img" aria-label="每日活跃柱状图与7日均线，当前${range === 'all' ? '全部' : '近一年'}范围"><g>${grid}${bars}${line}${labels}</g></svg>`;
+    const pending = range === 'all' && !state.streams.progress.deep;
+    const hint = pending ? `<div class="hm-trend-hint">正在回溯更早的记录，已回溯到 ${days[0].key}…</div>` : '';
+    area.innerHTML = `<div class="hm-trend-head"><span class="hm-trend-title">每日活跃</span><span class="hm-trend-legend"><i class="sw sw-bar"></i>每日集数<i class="sw sw-line"></i>7日均线</span><span class="hm-trend-total">共 <b style="color:#f09199;">${trendSeries.total}</b> 集</span><span class="hm-trend-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span></div>${svg}${hint}`;
+    return true;
+  }
+  function ensureDeep() {
+    if (state.deep || state.streams.progress.deep) return;
+    state.deep = true;
+    save().catch(() => {});
+    idleUntil = 0;
+    run();
+  }
+  function setRange(value) {
+    if (value !== 'all' && value !== 'year') return;
+    range = value;
+    try { localStorage.setItem('bgmtl-chart-range', range); } catch (error) { /* 私密模式忽略 */ }
+    if (range === 'all') ensureDeep();
+    render();
+  }
   function render() {
     if (!shadow) return;
     const data = C.aggregate(state);
@@ -345,6 +471,8 @@
       chartData = data;
       drawHeatmap(data);
     }
+    const trendKey = `${range}:${state.events.length}:${state.deep ? 1 : 0}:${state.streams.progress.deep ? 1 : 0}`;
+    if (trendKey !== trendSignature && drawTrend()) trendSignature = trendKey;
   }
 
   async function fetchPage(type, page) {
@@ -396,10 +524,11 @@
           for (const t of C.SYNC_TYPES) {
             if (aborted || made >= 24) break;
             const s = state.streams[t];
-            if (s.complete && !s.refresh) continue;
+            if (s.complete && !s.refresh && (s.deep || !state.deep)) continue;
             const page = s.refresh?.page || s.page;
             const result = await fetchPage(t, page);
-            const cutoff = C.dayStart(Date.now()) - 364 * C.DAY;
+            // A deep backfill has no date cutoff: only the last page completes it.
+            const cutoff = state.deep ? 0 : C.dayStart(Date.now()) - 364 * C.DAY;
             state.events = C.mergeEvents(state.events, result.events);
             if (result.oldest !== null) s.oldest = s.oldest === null ? result.oldest : Math.min(s.oldest, result.oldest);
             if (s.refresh) {
@@ -410,7 +539,10 @@
             } else {
               if (page === 1) { s.latestTime = result.newest || s.latestTime; s.headAt = Date.now(); }
               s.page = result.next || page;
-              if (result.next === null || result.oldest < cutoff) s.complete = true;
+              if (result.next === null || result.oldest < cutoff) {
+                s.complete = true;
+                if (result.next === null) s.deep = true;
+              }
             }
             state.updatedAt = Date.now(); state.failures = 0; state.retryAt = 0;
             await save(); render(); made++; worked = true;
@@ -435,6 +567,7 @@
     try {
       db = await openDB(); state = await read(); idleUntil = C.nextSyncAt(state, Date.now());
       if (state.paused) { state.paused = false; await save(); }
+      if (range === 'all') ensureDeep();
       render();
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('bgmtl-personal');

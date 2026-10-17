@@ -29,9 +29,12 @@ assert.equal(episodeAggregate.total, 12);
 
 function fixture(type, page, extra = false) {
   const base = type === 'subject' ? 100 : 200;
-  const rows = page === 1 ? [0, 1, 2].map(i => ({ id: base + i, time: now - (i + 1) * 86400000 })) : [{ id: base + 4, time: now - 400 * 86400000 }];
+  const rows = page === 1 ? [0, 1, 2].map(i => ({ id: base + i, time: now - (i + 1) * 86400000 }))
+    : page === 2 ? [{ id: base + 4, time: now - 400 * 86400000 }]
+    : [{ id: base + 5, time: now - 500 * 86400000 }];
   if (extra && page === 1) rows.unshift({ id: base + 10, time: now - 1000 });
-  return `<html><a href="/user/wylt">wylt</a><div id="timeline"><ul>${rows.map((event, i) => `<li id="tml_${event.id}"><span class="info_full">${type === 'progress' ? `看过 <a href="/subject/ep/${i + 1}">ep.${i + 1}</a>` : '收藏了'} <a href="/subject/${i + 1}">作品 &lt;img onerror=alert(1)&gt;</a><div class="card"><img src="https://never-request.invalid/cover.jpg"><a href="/subject/${i + 1}">封面</a></div><div class="date"><span title="${stamp(event.time)}">昨天</span> · ${i % 2 ? '<a href="/dev/app/1">API</a>' : 'web'}</div></span></li>`).join('')}</ul></div>${page === 1 ? `<a href="/user/wylt/timeline?type=${type}&page=2">下一页 ››</a>` : ''}</html>`;
+  const next = page === 1 ? 2 : page === 2 ? 3 : null;
+  return `<html><a href="/user/wylt">wylt</a><div id="timeline"><ul>${rows.map((event, i) => `<li id="tml_${event.id}"><span class="info_full">${type === 'progress' ? `看过 <a href="/subject/ep/${i + 1}">ep.${i + 1}</a>` : '收藏了'} <a href="/subject/${i + 1}">作品 &lt;img onerror=alert(1)&gt;</a><div class="card"><img src="https://never-request.invalid/cover.jpg"><a href="/subject/${i + 1}">封面</a></div><div class="date"><span title="${stamp(event.time)}">昨天</span> · ${i % 2 ? '<a href="/dev/app/1">API</a>' : 'web'}</div></span></li>`).join('')}</ul></div>${next ? `<a href="/user/wylt/timeline?type=${type}&page=${next}">下一页 ››</a>` : ''}</html>`;
 }
 
 const rootHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;background:#fafafa}#columnHomeB{width:min(100%,820px);margin:auto}</style><div id="dock"><a href="https://bgm.tv/user/wylt" title="时光机">wylt</a></div><div id="columnHomeB" class="column"></div></html>';
@@ -96,7 +99,8 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     const cellCount = await page.locator('.hm-cell').count();
     assert.ok(cellCount >= 7 && cellCount <= 371, `expected visible days from aligned weeks, got ${cellCount} cells`);
     assert.ok(await page.locator('.hm-cell title').allTextContents().then(titles => titles.some(title => title.startsWith(core.dayKey(now)))), 'the current day must remain visible');
-    assert.equal(await page.locator('button,nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap');
+    assert.equal(await page.locator('nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap and its trend chart');
+    assert.equal(await page.locator('.hm-trend-toggle button').count(), 2);
     assert.equal(await page.locator('h2').textContent(), '活跃度热力图');
     assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-label'), '活跃度热力图');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
@@ -130,6 +134,34 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     const heatColors = await page.locator('#hm-dashboard').evaluate(element => ['empty', 'l1', 'l2', 'l3'].map(level => getComputedStyle(element).getPropertyValue(`--hm-cell-${level}`).trim()));
     assert.deepEqual(heatColors, ['#f2f2f2', '#f8cdd4', '#ed7790', '#c83d64']);
     assert.ok(await page.locator('.hm-scroll').evaluate(element => element.scrollWidth <= element.clientWidth), 'the heatmap must fit without horizontal scrolling');
+
+    // Trend chart under the heatmap: daily bars plus a 7-day moving average.
+    await page.locator('.hm-trend-area svg').waitFor();
+    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 3, 'year view shows exactly the three active days');
+    assert.ok(await page.locator('.hm-trend-area polyline').isVisible(), 'the 7-day average line is drawn');
+    assert.match(await page.locator('.hm-trend-total').textContent(), /共\s*3\s*集/);
+    assert.equal(await page.locator('.hm-trend-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
+
+    // Selecting "all" backfills history beyond the one-year sync cutoff.
+    const beforeDeep = requests.length;
+    await page.locator('.hm-trend-toggle button[data-range=all]').click();
+    let deepDone = false;
+    for (let attempt = 0; attempt < 40 && !deepDone; attempt++) {
+      await page.waitForTimeout(500);
+      deepDone = await readState().then(value => value.streams.progress.deep === true);
+    }
+    assert.ok(deepDone, 'the full-history backfill must complete');
+    const deepRequests = requests.slice(beforeDeep).map(value => new URL(value));
+    assert.ok(deepRequests.some(url => url.searchParams.get('page') === '3'), `selecting all must backfill pages beyond the year cutoff: ${deepRequests.map(url => url.href).join(', ')}`);
+    const oldestTrendDay = core.dayKey(now - 500 * core.DAY).slice(5).replace('-', '/');
+    const trendTitles = await page.locator('.hm-trend-area .hm-bar title').allTextContents();
+    assert.ok(trendTitles.some(title => title.startsWith(oldestTrendDay)), `the all view must include bars older than one year: ${trendTitles.join(' | ')}`);
+    assert.ok(trendTitles.length >= 5, `the all view must keep every active day: ${trendTitles.length}`);
+    assert.equal(await page.locator('.hm-trend-hint').count(), 0, 'the backfill hint disappears once history is complete');
+    assert.equal(await page.evaluate(() => localStorage.getItem('bgmtl-chart-range')), 'all');
+    await page.locator('.hm-trend-toggle button[data-range=year]').click();
+    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 3, 'toggling back to one year hides the older bars');
+
     await peer.close();
 
     const parserResult = await page.evaluate(({ html }) => {
@@ -214,6 +246,6 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await load(page); await page.locator('.hm-cell').first().waitFor();
     assert.equal(await page.locator('.hm-cell').first().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);
-    console.log('PASS: homepage adaptive heatmap without scrolling; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
+    console.log('PASS: homepage adaptive heatmap without scrolling; trend chart with 7-day average, one-year/all toggle and full-history backfill; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

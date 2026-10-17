@@ -55,7 +55,7 @@
     return { events, next, oldest: events.length ? Math.min(...events.map(e => e.time)) : null, newest: events.length ? Math.max(...events.map(e => e.time)) : null };
   }
   function freshState(user) {
-    return { schema: 1, user, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
+    return { schema: 1, user, deep: false, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, deep: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
   }
   function mergeEvents(old, incoming) {
     const map = new Map(old.map(e => [e.id, e]));
@@ -68,6 +68,8 @@
     for (const type of SYNC_TYPES) {
       const stream = state?.streams?.[type];
       if (!stream || !stream.complete || stream.refresh) return 0;
+      // Full-history backfill requested but not finished: keep working now.
+      if (state.deep && !stream.deep) return 0;
       const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
       if (!checkedAt) return 0;
       next = Math.min(next, checkedAt + REFRESH_INTERVAL);
@@ -134,5 +136,32 @@
     const platform = ranked.length <= 5 ? ranked : [...ranked.slice(0, 4), { name: '其他', count: ranked.slice(4).reduce((sum, x) => sum + x.count, 0) }];
     return { days, hourly, weekly, platform, total, complete: stream.complete, start, end, average30 };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, importBackup, normalizeEvent, progressUnits };
+  // Continuous daily series for the trend chart: "year" mirrors the heatmap
+  // window, "all" stretches back to the oldest synced progress record.
+  function dailySeries(state, now = Date.now(), range = 'year') {
+    const events = state.events.filter(e => e.type === 'progress' && e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
+    const progress = new Map();
+    const daily = Object.create(null);
+    let oldestTime = Infinity;
+    for (const e of events) {
+      const amount = progressUnits(e, progress);
+      if (amount === 0) continue;
+      if (e.time < oldestTime) oldestTime = e.time;
+      const key = dayKey(e.time);
+      daily[key] = (daily[key] || 0) + amount;
+    }
+    const end = dayStart(now);
+    let start = end - 364 * DAY;
+    if (range === 'all' && Number.isFinite(oldestTime)) start = Math.min(start, dayStart(oldestTime));
+    const days = [];
+    let total = 0;
+    for (let time = start; time <= end; time += DAY) {
+      const key = dayKey(time);
+      const count = daily[key] || 0;
+      total += count;
+      days.push({ key, time, count });
+    }
+    return { days, total, oldestTime: Number.isFinite(oldestTime) ? oldestTime : null };
+  }
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, importBackup, normalizeEvent, progressUnits };
 });

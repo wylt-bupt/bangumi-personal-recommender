@@ -108,3 +108,37 @@ test('backup validates account and merges without trusting coverage or cursors',
   assert.throws(() => C.importBackup(JSON.stringify({ ...backup, user: 'other' }), 'wylt', state));
   assert.throws(() => C.importBackup(JSON.stringify({ ...backup, events: [{ ...event(3), time: 0 }] }), 'wylt', state));
 });
+test('daily series mirrors the heatmap window for a year and stretches back for all', () => {
+  const state = C.freshState('wylt');
+  state.events = [event(1, now - C.DAY * 366), event(2, now - C.DAY * 400), event(3, now - C.DAY * 2)];
+  const year = C.dailySeries(state, now);
+  assert.equal(year.days.length, 365);
+  assert.equal(year.days[0].key, '2025-09-06');
+  assert.equal(year.days.at(-1).key, '2026-09-05');
+  assert.equal(year.days.find(d => d.key === '2026-09-03').count, 1);
+  assert.equal(year.total, 1);
+  const all = C.dailySeries(state, now, 'all');
+  assert.equal(all.days.length, 401);
+  assert.equal(all.days[0].key, '2025-08-01');
+  assert.equal(all.days.find(d => d.key === '2025-08-01').count, 1);
+  assert.equal(all.days.find(d => d.key === '2025-08-02').count, 0);
+  assert.equal(all.total, 3);
+  assert.equal(all.oldestTime, now - C.DAY * 400);
+  const empty = C.dailySeries(C.freshState('wylt'), now, 'all');
+  assert.equal(empty.days.length, 365);
+  assert.equal(empty.total, 0);
+  assert.equal(empty.oldestTime, null);
+});
+test('deep backfill keeps sync due until the stream reaches the oldest record', () => {
+  const state = C.freshState('wylt');
+  state.streams.progress.complete = true;
+  state.streams.progress.headAt = now - C.REFRESH_INTERVAL;
+  assert.equal(C.nextSyncAt(state, now), now);
+  state.deep = true;
+  assert.equal(C.nextSyncAt(state, now), 0);
+  state.streams.progress.deep = true;
+  assert.equal(C.nextSyncAt(state, now), now);
+  assert.equal(C.nextSyncAt(state, now + C.REFRESH_INTERVAL), now);
+  assert.equal(C.freshState('wylt').deep, false);
+  assert.equal(C.freshState('wylt').streams.progress.deep, false);
+});
