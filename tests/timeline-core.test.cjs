@@ -168,6 +168,30 @@ test('count axis keeps integer ticks, a zero floor and headroom above the peak',
   assert.ok(spiky.position(1) > 1 / 24, `one episode should be clearly visible, got ${spiky.position(1)}`);
   let previous = -1;
   for (const tick of spiky.ticks) { assert.ok(tick > previous, 'ticks ascend'); previous = tick; }
+  assert.equal(spiky.ticks.at(-1), spiky.hi, 'the top tick always marks the axis ceiling');
+});
+test('count axis allocates most of its height to the common range', () => {
+  // 真实账号的一年分布：365 天里 86 天 0 集、162 天 1-5 集、最多的一天 63 集。
+  const counts = [];
+  for (let i = 0; i < 86; i++) counts.push(0);
+  for (let i = 0; i < 78; i++) counts.push(i % 2 ? 1 : 2);
+  for (let i = 0; i < 84; i++) counts.push(3 + (i % 3));
+  for (let i = 0; i < 45; i++) counts.push(6 + (i % 4));
+  for (let i = 0; i < 58; i++) counts.push(10 + (i % 10));
+  for (let i = 0; i < 10; i++) counts.push(20 + i);
+  counts.push(63);
+  const axis = C.countAxis(counts);
+  const active = counts.filter(value => value > 0).sort((a, b) => a - b);
+  const common = active[Math.floor(0.8 * (active.length - 1))];
+  // 八成有记录的日子都不超过 common：它必须落在 65% 高度，普通日子才占得住面积。
+  assert.ok(Math.abs(axis.position(common) - 0.65) < 0.02, `common range should own 65% of the plot, got ${axis.position(common).toFixed(3)} at ${common} episodes`);
+  // 一次补番的高峰仍然顶天，但不再把其余部分压成发丝。
+  assert.ok(axis.position(1) > 0.2, `a single-episode day must stay clearly visible, got ${axis.position(1).toFixed(3)}`);
+  assert.ok(axis.position(10) > 0.55, `ten episodes or fewer should own most of the plot, got ${axis.position(10).toFixed(3)}`);
+  assert.ok(axis.position(1) < axis.position(3) && axis.position(3) < axis.position(10));
+  assert.ok(axis.constant < 1, `the heavy tail should compress harder than the old constant of 3, got ${axis.constant.toFixed(3)}`);
+  // 1/2/5 系列刻度：好读，且不随值域变多。
+  assert.deepEqual(axis.ticks.filter(tick => tick > 0 && tick < axis.hi), [1, 2, 5, 10, 20, 50]);
 });
 test('deep backfill keeps sync due until the stream reaches the oldest record', () => {
   const state = C.freshState('wylt');

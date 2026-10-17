@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.18
+// @version      1.0.19
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -164,22 +164,46 @@
     return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power;
   }
   /* ── 纵轴：零安全对数刻度（与账本日支出图同一套视觉语言）──
-     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下
-     普通日子全部被压成看不见的发丝，只剩几根孤零零的柱子。这里用
-     sign(v)·log1p(|v|/c) 把顶部压下去、底部抬起来，刻度仍取整数——
-     图给形状，读数交给指针读数条。 */
-  function countAxis(values, constant = 3) {
-    const finite = (values || []).filter(value => Number.isFinite(value));
+     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下普通日子
+     全部压成发丝；压缩不足时，八成的日子又挤在底部一小条里，图的面积跟
+     数据分布完全不对应。所以常数 c 不写死，按数据自己标定：让“八成日子都
+     不超过的那一天”落在 65% 高度，其余顶部空间留给少数高峰。刻度取 1/2/5
+     这类整数，像素密度交给调用方筛。 */
+  const COMMON_SHARE = 0.8, COMMON_HEIGHT = 0.65, MIN_COMPRESS = 0.05, MAX_COMPRESS = 25;
+  function countAxis(values) {
+    const finite = (values || []).filter(value => Number.isFinite);
     const max = finite.length ? Math.max(...finite) : 0;
     const unit = Math.max(1, niceStep(max / 5 || 1));
     // +0.5：最大值正好落在刻度上时也要留出头顶的一点空隙，否则最高的柱子贴边。
     const hi = Math.max(unit, Math.ceil((max + 0.5) / unit) * unit);
-    const c = Math.max(1, constant);
+    // 全零的日子本来就没有柱子，不参与标定，否则样本稀疏时会被推到极端压缩。
+    const active = finite.filter(value => value > 0).sort((a, b) => a - b);
+    const quantile = active.length ? active[Math.min(active.length - 1, Math.floor(COMMON_SHARE * (active.length - 1)))] : 0;
+    const common = Math.min(hi, Math.max(1, quantile));
+    // ratio(c) 随 c 单调递减：c 越小，低值被抬得越高。
+    const ratio = c => Math.log1p(common / c) / Math.log1p(hi / c);
+    let c = MAX_COMPRESS;
+    if (ratio(MIN_COMPRESS) <= COMMON_HEIGHT) c = MIN_COMPRESS;
+    else if (ratio(MAX_COMPRESS) > COMMON_HEIGHT) c = MAX_COMPRESS;
+    else {
+      let low = MIN_COMPRESS, high = MAX_COMPRESS;
+      for (let step = 0; step < 40; step++) {
+        const mid = Math.sqrt(low * high);
+        if (ratio(mid) > COMMON_HEIGHT) low = mid; else high = mid;
+      }
+      c = Math.sqrt(low * high);
+    }
     const transform = value => Math.sign(value) * Math.log1p(Math.abs(value) / c);
     const top = transform(hi);
-    const ticks = [];
-    for (let value = 0; value <= hi + 1e-9; value += unit) ticks.push(Math.round(value));
-    return { lo: 0, hi, unit, ticks, position: value => transform(value) / top };
+    const ticks = [0];
+    for (let power = 1; power <= hi; power *= 10) {
+      for (const multiple of [1, 2, 5]) {
+        const value = power * multiple;
+        if (value < hi && value !== ticks[ticks.length - 1]) ticks.push(value);
+      }
+    }
+    ticks.push(hi);
+    return { lo: 0, hi, unit, constant: c, ticks, position: value => transform(value) / top };
   }
   // Continuous daily series for the trend chart: "year" mirrors the heatmap
   // window, "all" stretches back to the oldest synced progress record. Each day
@@ -536,10 +560,10 @@
       area.innerHTML = head + '<div class="hm-trend-empty">还没有可统计的进度记录</div>' + legend;
       return true;
     }
-    const visible = TREND_SERIES.filter(item => !hiddenSeries.has(item.key));
     const values = key => days.map(day => (key === 'count' ? day.count : day.mean));
-    // 全部序列被关掉时值域退回全部序列：否则坐标算成 NaN，连框架一起消失。
-    const axis = C.countAxis((visible.length ? visible : TREND_SERIES).flatMap(item => values(item.key)));
+    // 刻度按“每日集数”标定：图的面积讲的是日子，均线只是参考线，把它混进
+    // 分位数会把压缩力度稀释掉。全部序列被关掉时退回集数，避免坐标算成 NaN。
+    const axis = C.countAxis(hiddenSeries.has('count') ? values('mean') : values('count'));
     const plotH = Math.max(140, Math.min(220, Math.round(width * 0.36)));
     const padL = 36, padR = 8, padT = 12, padB = 22;
     const plotW = Math.max(1, width - padL - padR), height = padT + plotH + padB;
@@ -551,9 +575,20 @@
     const barW = Math.max(1, band * 0.55);
     const base = y(0);
 
-    let grid = '';
+    // 对数轴上的刻度间距不再均匀：按像素筛一遍，太密的丢掉；顶部刻度优先，
+    // 宁可挤掉前一个也要标出值域上限。
+    const placedTicks = [];
     for (const tick of axis.ticks) {
-      const gy = y(tick).toFixed(1);
+      const gy = y(tick);
+      if (placedTicks.length && Math.abs(gy - placedTicks[placedTicks.length - 1].y) < 22) {
+        if (tick !== axis.hi) continue;
+        placedTicks.pop();
+      }
+      placedTicks.push({ tick, y: gy });
+    }
+    let grid = '';
+    for (const { tick, y: tickY } of placedTicks) {
+      const gy = tickY.toFixed(1);
       grid += `<line class="hm-grid-line${tick ? '' : ' zero'}" x1="${padL}" x2="${padL + plotW}" y1="${gy}" y2="${gy}"/>` +
         `<text class="hm-tick" x="${padL - 5}" y="${(Number(gy) + 3).toFixed(1)}" text-anchor="end">${tick}</text>`;
     }

@@ -153,22 +153,46 @@
     return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power;
   }
   /* ── 纵轴：零安全对数刻度（与账本日支出图同一套视觉语言）──
-     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下
-     普通日子全部被压成看不见的发丝，只剩几根孤零零的柱子。这里用
-     sign(v)·log1p(|v|/c) 把顶部压下去、底部抬起来，刻度仍取整数——
-     图给形状，读数交给指针读数条。 */
-  function countAxis(values, constant = 3) {
-    const finite = (values || []).filter(value => Number.isFinite(value));
+     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下普通日子
+     全部压成发丝；压缩不足时，八成的日子又挤在底部一小条里，图的面积跟
+     数据分布完全不对应。所以常数 c 不写死，按数据自己标定：让“八成日子都
+     不超过的那一天”落在 65% 高度，其余顶部空间留给少数高峰。刻度取 1/2/5
+     这类整数，像素密度交给调用方筛。 */
+  const COMMON_SHARE = 0.8, COMMON_HEIGHT = 0.65, MIN_COMPRESS = 0.05, MAX_COMPRESS = 25;
+  function countAxis(values) {
+    const finite = (values || []).filter(value => Number.isFinite);
     const max = finite.length ? Math.max(...finite) : 0;
     const unit = Math.max(1, niceStep(max / 5 || 1));
     // +0.5：最大值正好落在刻度上时也要留出头顶的一点空隙，否则最高的柱子贴边。
     const hi = Math.max(unit, Math.ceil((max + 0.5) / unit) * unit);
-    const c = Math.max(1, constant);
+    // 全零的日子本来就没有柱子，不参与标定，否则样本稀疏时会被推到极端压缩。
+    const active = finite.filter(value => value > 0).sort((a, b) => a - b);
+    const quantile = active.length ? active[Math.min(active.length - 1, Math.floor(COMMON_SHARE * (active.length - 1)))] : 0;
+    const common = Math.min(hi, Math.max(1, quantile));
+    // ratio(c) 随 c 单调递减：c 越小，低值被抬得越高。
+    const ratio = c => Math.log1p(common / c) / Math.log1p(hi / c);
+    let c = MAX_COMPRESS;
+    if (ratio(MIN_COMPRESS) <= COMMON_HEIGHT) c = MIN_COMPRESS;
+    else if (ratio(MAX_COMPRESS) > COMMON_HEIGHT) c = MAX_COMPRESS;
+    else {
+      let low = MIN_COMPRESS, high = MAX_COMPRESS;
+      for (let step = 0; step < 40; step++) {
+        const mid = Math.sqrt(low * high);
+        if (ratio(mid) > COMMON_HEIGHT) low = mid; else high = mid;
+      }
+      c = Math.sqrt(low * high);
+    }
     const transform = value => Math.sign(value) * Math.log1p(Math.abs(value) / c);
     const top = transform(hi);
-    const ticks = [];
-    for (let value = 0; value <= hi + 1e-9; value += unit) ticks.push(Math.round(value));
-    return { lo: 0, hi, unit, ticks, position: value => transform(value) / top };
+    const ticks = [0];
+    for (let power = 1; power <= hi; power *= 10) {
+      for (const multiple of [1, 2, 5]) {
+        const value = power * multiple;
+        if (value < hi && value !== ticks[ticks.length - 1]) ticks.push(value);
+      }
+    }
+    ticks.push(hi);
+    return { lo: 0, hi, unit, constant: c, ticks, position: value => transform(value) / top };
   }
   // Continuous daily series for the trend chart: "year" mirrors the heatmap
   // window, "all" stretches back to the oldest synced progress record. Each day

@@ -69,6 +69,12 @@ legacy/                     旧推荐源码、测试与备份
 
 ## 2026-10-18 维护记录
 
+独立活跃度热力图 `1.0.19`：用户反馈上一版“压缩力度还是不够，10 集以下明明最多，却只占一小部分面积”。改为**按数据分布标定压缩常数**：记 `active` 为有记录的日子，取 `COMMON_SHARE=0.8` 分位（本账号约 12 集），用二分法解 `log1p(common/c)/log1p(hi/c)=0.65`，让“八成日子都不超过的量级”正好落在 65% 高度，其余顶部留给少数高峰；常数夹在 `[0.05, 25]`，数据本身平坦（分位值接近上限）时退到最强档。`countAxis` 的刻度改成 1/2/5 整数序列 + 值域上限，UI 侧再按 22px 像素间距抽稀，顶部刻度优先（挤不下时挤掉前一个），彻底解决 20/40/60/80 全挤在顶部的问题。标定只取“每日集数”，均线不参与分位计算（否则会把压缩力度稀释掉）；隐藏集数时才用均线标定。实测：1 集柱子从 19px 提到 58px（绘图区 26%），中位数柱子 105px（48%），最高 210.7px，刻度 0/1/2/5/10/20/80。
+
+验证：`npm run verify` 通过（66 + 25）。`tests/timeline-core.test.cjs` 新增“80% 有记录的日子落在 65% 高度”的标定断言（含 10 集以下占 55% 以上、1 集仍清晰可见、刻度为 1/2/5 系列）；`test-timeline-browser.cjs` 增加 1 集柱高 > 绘图区 45%、刻度只标整数两条断言。截图 `artifacts/trend-real-820.png`、`trend-real-dark-820.png`、`trend-real-375.png`（用真实账号 365 天分布回放，脚本 `artifacts/trend-real-shot.cjs`，数据 `artifacts/real-daily-counts.json`）。
+
+线上验收（真实登录态）：1.0.19 已保存至 [应用 7057 的个人开发记录 3789](https://bgm.tv/dev/app/7057/gadget/3789)，站内源码与 `dist/` 归一化后同为 `48a4b459…`（45946 字符）。`https://bgm.tv/user/wylt` 实测：279 根柱、共 1947 集、SVG 785×254（绘图区 220px），刻度 0/1/2/5/10/20/80，最低柱 58px（26.4%）、中位 105px（47.7%）、最高 210.7px；读数条照旧（"2026/05/29 每日 1 集 7日均 1.1"）。截图 `artifacts/trend-live-1.0.19.png`。
+
 独立活跃度热力图 `1.0.18`：用户要求“首页只显示热力图”，每日活跃图只留在 `https://bgm.tv/user/wylt`。`mount()` 在 `home-layout` 下不再生成 `.hm-trend-area` 节点（趋势图的 ResizeObserver 也只绑在 `profile-layout`），`drawTrend` 开头直接按 `homeLayout` 返回 false；随之去掉首页因本地残留 `bgmtl-chart-range=all` 触发的深回溯（`start()` 里 `ensureDeep` 增加 `!homeLayout` 前置条件）——首页只做常规增量同步。首页宽度约 350px，柱状图挤进右栏本来也读不清，这次是收回到该组件原本的“首页小热力图 / 主页完整视图”分工。
 
 验证：`npm run verify` 通过（65 + 25）。`test-timeline-browser.cjs` 的热力图断言拆开：首页断言 `.hm-trend-area` 数量为 0 且残留“全部”偏好时只请求第 1 页，趋势图整组断言（柱数、对数抬升、读数条、图例开关、全部范围深回溯）移到 `profile-layout` 页面执行。截图 `artifacts/timeline-heatmap-375-light.png` 等确认首页只剩热力图。

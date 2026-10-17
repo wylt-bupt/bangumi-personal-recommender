@@ -316,10 +316,10 @@
       area.innerHTML = head + '<div class="hm-trend-empty">还没有可统计的进度记录</div>' + legend;
       return true;
     }
-    const visible = TREND_SERIES.filter(item => !hiddenSeries.has(item.key));
     const values = key => days.map(day => (key === 'count' ? day.count : day.mean));
-    // 全部序列被关掉时值域退回全部序列：否则坐标算成 NaN，连框架一起消失。
-    const axis = C.countAxis((visible.length ? visible : TREND_SERIES).flatMap(item => values(item.key)));
+    // 刻度按“每日集数”标定：图的面积讲的是日子，均线只是参考线，把它混进
+    // 分位数会把压缩力度稀释掉。全部序列被关掉时退回集数，避免坐标算成 NaN。
+    const axis = C.countAxis(hiddenSeries.has('count') ? values('mean') : values('count'));
     const plotH = Math.max(140, Math.min(220, Math.round(width * 0.36)));
     const padL = 36, padR = 8, padT = 12, padB = 22;
     const plotW = Math.max(1, width - padL - padR), height = padT + plotH + padB;
@@ -331,9 +331,20 @@
     const barW = Math.max(1, band * 0.55);
     const base = y(0);
 
-    let grid = '';
+    // 对数轴上的刻度间距不再均匀：按像素筛一遍，太密的丢掉；顶部刻度优先，
+    // 宁可挤掉前一个也要标出值域上限。
+    const placedTicks = [];
     for (const tick of axis.ticks) {
-      const gy = y(tick).toFixed(1);
+      const gy = y(tick);
+      if (placedTicks.length && Math.abs(gy - placedTicks[placedTicks.length - 1].y) < 22) {
+        if (tick !== axis.hi) continue;
+        placedTicks.pop();
+      }
+      placedTicks.push({ tick, y: gy });
+    }
+    let grid = '';
+    for (const { tick, y: tickY } of placedTicks) {
+      const gy = tickY.toFixed(1);
       grid += `<line class="hm-grid-line${tick ? '' : ' zero'}" x1="${padL}" x2="${padL + plotW}" y1="${gy}" y2="${gy}"/>` +
         `<text class="hm-tick" x="${padL - 5}" y="${(Number(gy) + 3).toFixed(1)}" text-anchor="end">${tick}</text>`;
     }

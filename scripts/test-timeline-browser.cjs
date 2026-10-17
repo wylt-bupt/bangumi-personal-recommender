@@ -207,6 +207,12 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     // 零安全对数轴的意义：1 集的日子不能被偶尔的高峰压成发丝。
     const heights = await profilePage.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('height'))));
     assert.ok(Math.min(...heights) >= 20, `the log scale must lift ordinary days, got ${heights.join(', ')}`);
+    // 压缩力度按数据标定：常见量级要占住大半绘图区，而不是底部一条。
+    const plotHeight = await profilePage.locator('.hm-trend').evaluate(node => Number(node.getAttribute('height')) - 12 - 22);
+    assert.ok(Math.min(...heights) > plotHeight * 0.45, `a one-episode day must own 45% of the plot, got ${Math.min(...heights)} of ${plotHeight}`);
+    const tickLabels = await profilePage.locator('.hm-tick').allTextContents();
+    assert.ok(tickLabels.every(label => /^\d+$/.test(label)), `the axis only labels whole episodes: ${tickLabels.join(', ')}`);
+    assert.deepEqual(tickLabels.slice(0, 2), ['0', '1'], `the axis must start from readable whole episodes: ${tickLabels.join(', ')}`);
     // 读数条取代原生 tooltip：悬到最右侧应读到今天（或最后一天）的日期与均线。
     const plot = profilePage.locator('.hm-trend-plot');
     await plot.scrollIntoViewIfNeeded();
