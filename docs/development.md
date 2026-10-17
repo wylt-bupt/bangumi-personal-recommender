@@ -73,6 +73,10 @@ legacy/                     旧推荐源码、测试与备份
 
 验证：`npm run verify` 通过（65 项当前测试 + 25 项历史兼容）。`tests/timeline-core.test.cjs` 新增 rollingMean 窗口语义、countAxis 整数刻度/零下界/峰值留空/对数抬升、dailySeries 均线随窗口切片三例；`test-timeline-browser.cjs` 改为断言对数轴下普通日子柱高 ≥20px、悬停读数条内容、图例开关后网格保留。截图 `artifacts/trend-profile-820.png`、`trend-home-375.png`、`trend-dark-820.png`（合成两年数据）。
 
+线上验收（真实登录态 `https://bgm.tv/user/wylt`）：1.0.17 已保存至 [应用 7057 的个人开发记录 3789](https://bgm.tv/dev/app/7057/gadget/3789)，状态"开发中"，作者启用，未提交全站审核；站内源码与 `dist/` 归一化后同为 `73570a4a…`（44275 字符）。实测近一年视图：279 根柱、共 1947 集、SVG 785×254、刻度 0/20/40/60/80、12 个月标；最低柱 19.06px、最高柱 204.81px（线性轴下 1 集的柱子只有约 3px，对数轴把它抬到 19px，这是本次改版的核心收益）。指针读数条正常（如"2026/05/29 每日 1 集 7日均 1.1"），ArrowLeft 可逐日回退（05/29 → 05/28）；关掉"每日集数"后柱归零、刻度退回 0/5/10/15/20/25、网格与均线留存，恢复后 279 根柱回来。截图 `artifacts/timeline-trend-live-1.0.17.png`（shadow DOM 无法按 selector 截图，改为滚动到该区域后整屏截图）。
+
+发布插曲：当晚 bgm.tv 源站故障（Cloudflare 522，`curl` 与浏览器同时不通，持续约 1.5 小时），代码先提交推送（`bd89934`），站点恢复后补做保存与验收。
+
 独立活跃度热力图 `1.0.16`：应用户要求，在热力图模块下方新增"每日活跃"图表——每日观看集数柱状图叠加 7 日均线（参考用户提供的示意图），时间范围可切换"近一年 / 全部"。核心层新增 `Core.dailySeries(state, now, range)`：`year` 与热力图同窗口，`all` 从最早进度记录日起（无记录时回退一年窗）；`total` 按窗口汇总。同步层新增深回溯：`state.deep`（用户请求过全量）与 `stream.deep`（已回溯到最早记录）两个标记，`nextSyncAt` 在回溯未完成时保持 0（30 秒轮询持续推进，每轮至多 24 页），同步循环在 `state.deep` 时取消 364 天截止，仅以 `next === null` 作为回溯完成标志并写入 `stream.deep`；首次点"全部"由 UI 写入 `state.deep` 并触发 `run()`，范围选择记忆在 `localStorage`（`bgmtl-chart-range`）。UI 层在 `#hm-dashboard` 内追加 `.hm-trend-area`：标题行（每日活跃 / 图例 / 共 N 集 / 范围切换）、SVG 柱状图（零活跃日不画柱，≤800 天时每柱带 `<title>`：日期 · N 集 · 7日均 X.X）、7 日均线 `polyline`（不足 7 天用部分窗口）、y 轴取整刻度网格、每月 1 号的 M/D 横轴标签（32px 防重叠），回溯未完成时显示"正在回溯更早的记录，已回溯到 YYYY-MM-DD…"；样式沿用热力图 CSS 变量，明暗主题自动适配；双布局各挂独立 `ResizeObserver`，绘制返回布尔值避免零宽容器吞掉首绘签名。
 
 验证：`npm run verify` 通过（62 项当前测试 + 25 项历史兼容）。`tests/timeline-core.test.cjs` 新增 dailySeries 年/全窗口与深回溯调度两例。`test-timeline-browser.cjs` fixture 扩展为 3 页（第 2 页越过一年截止且带下一页），新增断言：年视图恰 3 根柱、均线可见、共 3 集、年按钮按下态；点"全部"后回溯抓取第 3 页、`stream.deep` 置位、柱标题含 500 天前日期、回溯提示消失、localStorage 记忆 'all'；切回"近一年"旧柱消失。
