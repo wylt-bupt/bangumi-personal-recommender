@@ -71,6 +71,8 @@ legacy/                     旧推荐源码、测试与备份
 
 推荐与回顾 `0.12.2`：应用户要求"作品数在 20 部以上都可以入榜"。`Core.rankEntries` 的均分门槛由相对口径（前 10%，`cutoffWorks = workRanked[ceil(n*share)-1].works`）改为绝对口径 `minimumWorks`（默认 `Core.RANK_MINIMUM_WORKS = 20`，`works >= 20 && ratedWorks > 0`）；百分比门槛会随收藏量增长不断收紧，固定值不会。调用点：标签与声优用默认值，创作除"动画制作"分组（沿用 11，即大于 10 部）外也用默认值；`sortControls` 的入榜说明改为"仅作品数 20 部以上者入榜"。新增单测断言 19 部不入榜、20 部入榜、未评分不入榜、列表变大不再挤压榜单；浏览器回归补断言该文案与均分榜页内条数。顺带把两个浏览器回归脚本改为自带静态服务（`scripts/static-server.cjs`，随机端口），不再依赖外部预览进程。
 
+线上验收（真实登录态 `https://bgm.tv/user/wylt`）：0.12.2 已保存至 [应用 6931 的个人开发记录 3762](https://bgm.tv/dev/app/6931/gadget/3762)，状态“开发中”，作者启用，未提交全站审核；站内源码与 `dist/` 归一化后同为 `b8ffecb0…`（105913 字符）。三个均分榜的入榜说明均为“仅作品数 20 部以上者入榜”：标签均分页从 0.12.1 时的单页（≤12 条）变为 1 / 5 页（吐槽 8.25、京阿尼 8.15、催泪 8.03、治愈 7.91…）；声优均分榜 1 / 30 页（平野綾 8.35 起）；创作（导演）均分榜 2 条（石原立也 8.25、新房昭之 8.17，受人物补全进度限制）。截图 `artifacts/tags-average-live-0.12.2.png`。热力图与放送表本轮未改动，不重发。
+
 推荐与回顾 `0.12.1`：应用户要求，动画回顾"标签"页从词云改为与"创作""声优"一致的排行列表。实现上把标签行映射进 `Core.rankEntries` 的通用契约（`works=count`、`ratedWorks=ratedCount`、`eps=0`，`id` 用标签名），复用搜索、排序、分页与条形组件；`listRows` 参数化链接与空态文案（标签 → `/search/tag/anime/<encodeURIComponent(标签)>`，站内标签检索页已实测可用），排序榜单全集由调用方传入不再内部取 groups。入榜口径不变：`Viz.featuredTags`（count > 10 且排除时间标签）。词云几何（`packCloud`、`placeOrganic`、`overlaps`、`fontSize`、`scoreFontSize`）、`tagMetric` 状态与词云样式全部移除；`stats-viz.cjs` 只保留 `yearSeries/axis/isTemporalTag/featuredTags`。
 
 验证：`npm run verify` 通过（59 项当前测试、25 项兼容测试；词云相关 6 项几何测试随功能移除）。浏览器回归 `test-stats-viz-browser.cjs` 标签场景重写：4 组视口×主题断言列表降序、仅含 count>10 的标签、链接指向标签检索页、均分排序与条形比例、搜索过滤与空态、分页存在性；`?dense=1` 702 标签数据集下仅 2 个合格标签且不溢出列宽。`test-profile-browser.cjs` 主页回归同步通过。
