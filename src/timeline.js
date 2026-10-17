@@ -43,10 +43,47 @@
 
   // Visual layer adapted from Mikuorz's “条目时间线可视化” heatmap.
   const css = `
-    :host{display:block;min-width:0;margin-bottom:20px;--hm-text:#666;--hm-text-dim:#999;--hm-text-strong:#333;--hm-border:#eee;--hm-cell-empty:#f2f2f2;--hm-cell-l1:#f8cdd4;--hm-cell-l2:#ed7790;--hm-cell-l3:#c83d64;--hm-panel-bg:#fff;--hm-panel-border:rgba(240,145,153,.18)}
-    :host([data-theme=dark]){--hm-text:#999;--hm-text-dim:#777;--hm-text-strong:#ccc;--hm-border:rgba(255,255,255,.08);--hm-cell-empty:rgba(255,255,255,.08);--hm-cell-l1:rgba(240,145,153,.32);--hm-cell-l2:rgba(240,112,137,.66);--hm-cell-l3:#ef6889;--hm-panel-bg:rgba(255,255,255,.03);--hm-panel-border:rgba(240,145,153,.12)}
+    :host{display:block;min-width:0;margin-bottom:20px;--hm-text:#666;--hm-text-dim:#999;--hm-text-strong:#333;--hm-heading:#777;--hm-accent:#f09199;--hm-accent-soft:rgba(240,145,153,.1);--hm-border:#eee;--hm-cell-empty:#f2f2f2;--hm-cell-l1:#f8cdd4;--hm-cell-l2:#ed7790;--hm-cell-l3:#c83d64;--hm-panel-bg:#fff;--hm-readout-bg:#fff;--hm-panel-border:rgba(240,145,153,.18)}
+    :host([data-theme=dark]){--hm-text:#999;--hm-text-dim:#777;--hm-text-strong:#ccc;--hm-heading:#bbb;--hm-accent:#e99aa7;--hm-accent-soft:rgba(233,154,167,.14);--hm-border:rgba(255,255,255,.08);--hm-cell-empty:rgba(255,255,255,.08);--hm-cell-l1:rgba(240,145,153,.32);--hm-cell-l2:rgba(240,112,137,.66);--hm-cell-l3:#ef6889;--hm-panel-bg:rgba(255,255,255,.03);--hm-readout-bg:#262626;--hm-panel-border:rgba(240,145,153,.12)}
     *{box-sizing:border-box}
-    #hm-dashboard{border-radius:10px;padding:12px 15px;margin-bottom:20px;background:var(--hm-panel-bg);border:1px solid var(--hm-panel-border);color:var(--hm-text);font:12px/1.5 Arial,"Microsoft YaHei",sans-serif;overflow:hidden}
+    #hm-dashboard{min-width:0;color:var(--hm-text);font:12px/1.5 Arial,"Microsoft YaHei",sans-serif;container-type:inline-size}
+    /* 首页右栏空间紧，仍给一张轻卡片；个人主页与「动画回顾」一样无卡片、靠模块头分隔。 */
+    #hm-dashboard.home-layout{border-radius:10px;padding:12px 15px;background:var(--hm-panel-bg);border:1px solid var(--hm-panel-border);overflow:hidden}
+    /* 模块头：与「动画回顾」「个性推荐」同一套写法（18px 常规字重 + 下划线分隔） */
+    #hm-dashboard .module-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;padding:0 0 9px;border-bottom:1px solid var(--hm-border);margin:0 0 14px}
+    #hm-dashboard .module-head h2{margin:0;font-size:18px;font-weight:400;line-height:1.4;color:var(--hm-heading)}
+    #hm-dashboard.home-layout .module-head{padding-bottom:8px;margin-bottom:10px}
+    #hm-dashboard.home-layout .module-head h2{font-size:14px;font-weight:700;color:var(--hm-accent)}
+    /* 子图：热力图与柱状图共用一条头部行——左标题、中摘要、右图例与控件。 */
+    #hm-dashboard .hm-figure{min-width:0}
+    #hm-dashboard .hm-figure+.hm-figure{margin-top:16px;padding-top:14px;border-top:1px solid var(--hm-border)}
+    #hm-dashboard .hm-fig-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;min-height:24px;margin-bottom:8px;padding-right:10px;font-size:11px;color:var(--hm-text-dim)}
+    #hm-dashboard .hm-fig-title{margin:0;font-size:13px;font-weight:600;line-height:1.4;color:var(--hm-text-strong)}
+    #hm-dashboard .hm-fig-meta{font-variant-numeric:tabular-nums}
+    #hm-dashboard .hm-fig-meta b{font-weight:400;color:var(--hm-accent)}
+    #hm-dashboard .hm-fig-meta .sep{color:var(--hm-border)}
+    #hm-dashboard .hm-fig-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-left:auto}
+    /* 窄屏：标题行拆成两行时，图例跟着左对齐，不要孤零零地贴在右边。 */
+    @container (max-width:460px){#hm-dashboard .hm-fig-controls{margin-left:0}}
+    /* 图例：色阶（热力图，展示用）与系列开关（柱状图）同一行高、同一字号、同一记号尺寸 */
+    #hm-dashboard .hm-legend,#hm-dashboard .hm-scale{display:inline-flex;align-items:center;gap:2px;font-size:11px;color:var(--hm-text-dim);white-space:nowrap}
+    #hm-dashboard .hm-legend-key{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 3px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--hm-text-dim);font:inherit;font-size:11px;cursor:pointer}
+    #hm-dashboard .hm-legend-key i{display:block;width:8px;height:8px;flex:none;border:1px solid var(--hm-border);border-radius:1px;background:var(--hm-accent)}
+    #hm-dashboard .hm-legend-key i.line{width:14px;height:0;border:0;border-top:1.5px solid var(--hm-text-strong);border-radius:0;background:none}
+    #hm-dashboard .hm-legend-key:hover{border-color:var(--hm-border);color:var(--hm-text)}
+    #hm-dashboard .hm-legend-key:focus-visible{outline:1px solid var(--hm-accent);outline-offset:1px}
+    #hm-dashboard .hm-legend-key[aria-pressed=false]{opacity:.45}
+    #hm-dashboard .hm-legend-key[aria-pressed=false] span{text-decoration:line-through}
+    #hm-dashboard .hm-scale{padding-left:2px}
+    #hm-dashboard .hm-scale i{display:block;width:9px;height:9px;border-radius:2px}
+    #hm-dashboard .hm-scale .sw-empty{background:var(--hm-cell-empty)}
+    #hm-dashboard .hm-scale .sw-l1{background:var(--hm-cell-l1)}
+    #hm-dashboard .hm-scale .sw-l2{background:var(--hm-cell-l2)}
+    #hm-dashboard .hm-scale .sw-l3{background:var(--hm-cell-l3)}
+    #hm-dashboard .hm-toggle{display:inline-flex;border:1px solid var(--hm-border);border-radius:4px;overflow:hidden}
+    #hm-dashboard .hm-toggle button{padding:4px 9px;border:0;border-radius:0;background:transparent;color:var(--hm-text-dim);font:inherit;font-size:11px;line-height:1.3;cursor:pointer}
+    #hm-dashboard .hm-toggle button+button{border-left:1px solid var(--hm-border)}
+    #hm-dashboard .hm-toggle button[aria-pressed=true]{color:var(--hm-accent);background:var(--hm-accent-soft)}
     #hm-dashboard.home-layout .hm-scroll{overflow:hidden;padding:4px 0}
     #hm-dashboard.profile-layout .hm-scroll{overflow-x:auto;padding:4px 0 10px;scrollbar-width:thin;scrollbar-color:transparent transparent}
     #hm-dashboard.profile-layout .hm-scroll::-webkit-scrollbar{height:7px}
@@ -56,42 +93,26 @@
     #hm-dashboard .hm-cell{transition:transform .15s,filter .15s;transform-box:fill-box;transform-origin:center}
     #hm-dashboard .hm-cell:hover{transform:scale(1.4);filter:drop-shadow(0 0 4px rgba(240,145,153,.5))}
     #hm-dashboard .hm-loading{height:112px;display:flex;align-items:center;justify-content:center;color:var(--hm-text-dim);font-size:11px}
-    #hm-dashboard .hm-trend-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;margin:16px 0 6px;font-size:10px;color:var(--hm-text-dim)}
-    #hm-dashboard .hm-trend-title{font-size:11px;font-weight:700;letter-spacing:.1em;color:#f09199}
     #hm-dashboard .hm-trend-total{white-space:nowrap;font-variant-numeric:tabular-nums}
-    #hm-dashboard .hm-trend-total b{color:#f09199;font-weight:400}
-    #hm-dashboard .hm-trend-toggle{display:inline-flex;margin-left:auto}
-    #hm-dashboard .hm-trend-toggle button{font:inherit;font-size:10px;line-height:1.4;padding:2px 10px;border:1px solid var(--hm-border);background:transparent;color:var(--hm-text-dim);cursor:pointer}
-    #hm-dashboard .hm-trend-toggle button:first-child{border-radius:4px 0 0 4px}
-    #hm-dashboard .hm-trend-toggle button:last-child{border-radius:0 4px 4px 0;border-left:none}
-    #hm-dashboard .hm-trend-toggle button[aria-pressed=true]{color:#f09199;border-color:#f09199;background:rgba(240,145,153,.08)}
+    #hm-dashboard .hm-trend-total b{color:var(--hm-accent);font-weight:400}
     #hm-dashboard .hm-trend-plot{position:relative}
-    #hm-dashboard .hm-trend-plot:focus-visible{outline:1px solid #f09199;outline-offset:3px}
+    #hm-dashboard .hm-trend-plot:focus-visible{outline:1px solid var(--hm-accent);outline-offset:3px}
     #hm-dashboard .hm-trend{display:block;width:100%;height:auto}
     /* 网格：发丝虚线，零线转实线——基线要能被眼睛抓住。 */
     #hm-dashboard .hm-grid-line{stroke:var(--hm-border);stroke-width:1;stroke-dasharray:3 4}
     #hm-dashboard .hm-grid-line.zero{stroke:var(--hm-text-dim);stroke-dasharray:none;opacity:.55}
     #hm-dashboard .hm-tick,#hm-dashboard .hm-axis-label{fill:var(--hm-text-dim);font:9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
-    #hm-dashboard .hm-bar{fill:#f09199;shape-rendering:crispEdges}
+    #hm-dashboard .hm-bar{fill:var(--hm-accent);shape-rendering:crispEdges}
     #hm-dashboard .hm-mean-line{fill:none;stroke:var(--hm-text-strong);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;opacity:.9}
     #hm-dashboard .hm-guide-line{stroke:var(--hm-text-dim);stroke-width:1;stroke-dasharray:2 3}
-    #hm-dashboard .hm-guide-bar{fill:#f09199}
+    #hm-dashboard .hm-guide-bar{fill:var(--hm-accent)}
     #hm-dashboard .hm-guide-mean{fill:var(--hm-text-strong)}
     /* 读数条：图给形状，这里给精确读数，位置固定在右上角不遮挡主体。 */
-    #hm-dashboard .hm-readout{position:absolute;top:6px;right:8px;max-width:calc(100% - 16px);display:flex;align-items:baseline;flex-wrap:wrap;justify-content:flex-end;gap:2px 12px;padding:3px 8px;border:1px solid var(--hm-border);background:var(--hm-panel-bg);font-size:10px;color:var(--hm-text-dim);font-variant-numeric:tabular-nums;pointer-events:none}
+    #hm-dashboard .hm-readout{position:absolute;top:6px;right:8px;max-width:calc(100% - 16px);display:flex;align-items:baseline;flex-wrap:wrap;justify-content:flex-end;gap:2px 12px;padding:3px 8px;border:1px solid var(--hm-border);background:var(--hm-readout-bg);font-size:11px;color:var(--hm-text-dim);font-variant-numeric:tabular-nums;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.06)}
     #hm-dashboard .hm-readout time{color:var(--hm-text)}
     #hm-dashboard .hm-readout b{color:var(--hm-text);font-weight:400}
-    #hm-dashboard .hm-trend-empty{height:120px;display:flex;align-items:center;justify-content:center;border:1px solid var(--hm-border);color:var(--hm-text-dim);font-size:10px}
-    #hm-dashboard .hm-trend-legend{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-    #hm-dashboard .hm-legend-key{display:inline-flex;align-items:center;gap:6px;min-height:24px;padding:0 8px;border:1px solid transparent;background:transparent;color:var(--hm-text-dim);font:inherit;font-size:10px;cursor:pointer}
-    #hm-dashboard .hm-legend-key i{width:8px;height:8px;flex:none;border:1px solid var(--hm-border);background:#f09199}
-    /* 趋势线的图例记号画成横杠，与柱记忆号区分。 */
-    #hm-dashboard .hm-legend-key i.line{width:14px;height:2px;border:0;background:var(--hm-text-strong)}
-    #hm-dashboard .hm-legend-key:hover{border-color:var(--hm-border);color:var(--hm-text)}
-    #hm-dashboard .hm-legend-key:focus-visible{outline:1px solid #f09199;outline-offset:1px}
-    #hm-dashboard .hm-legend-key[aria-pressed=false]{opacity:.5}
-    #hm-dashboard .hm-legend-key[aria-pressed=false] span{text-decoration:line-through}
-    #hm-dashboard .hm-trend-hint{margin-top:6px;font-size:10px;color:var(--hm-text-dim)}
+    #hm-dashboard .hm-trend-empty{height:120px;display:flex;align-items:center;justify-content:center;border:1px solid var(--hm-border);color:var(--hm-text-dim);font-size:11px}
+    #hm-dashboard .hm-trend-hint{margin-top:6px;font-size:11px;color:var(--hm-text-dim)}
     @media(prefers-reduced-motion:reduce){#hm-dashboard .hm-cell{transition:none!important}}
   `;
 
@@ -128,7 +149,7 @@
     shadow = host.attachShadow({ mode: 'open' });
     // 首页右栏只有 350px 宽，柱状图塞进去既挤又难读：首页只留热力图，
     // 趋势图仅出现在个人主页。没有这块节点，drawTrend 自然不会被调用。
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems ${homeLayout ? 'home-layout' : 'profile-layout'}" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div>${homeLayout ? '' : '<div class="hm-trend-area"></div>'}</section>`;
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="${homeLayout ? 'home-layout' : 'profile-layout'}" aria-labelledby="bgmtl-title"><header class="module-head"><h2 id="bgmtl-title">活跃度</h2></header><div class="hm-figure hm-figure-heat"><div class="hm-fig-head"><h3 class="hm-fig-title">活跃热力图</h3><span class="hm-fig-meta" data-role="heat-meta">正在统计…</span><div class="hm-fig-controls"><span class="hm-scale" role="img" aria-label="色块越深代表当日观看集数越多">少<i class="sw-empty"></i><i class="sw-l1"></i><i class="sw-l2"></i><i class="sw-l3"></i>多</span></div></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></div>${homeLayout ? '' : '<div class="hm-figure hm-figure-trend"><div class="hm-trend-area"></div></div>'}</section>`;
     if (homeLayout) {
       new ResizeObserver(entries => {
         const width = entries[0]?.contentRect.width || 0;
@@ -218,10 +239,12 @@
     const active = data.days.filter(day => day.count > 0).length;
     const activeRate = (active / data.days.length * 100).toFixed(1);
     const recentActive = data.days.slice(-30).filter(day => day.count > 0).length;
-    const summary = homeLayout
-      ? `<span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span><span style="color:var(--hm-border);">·</span><span>近30天日均: <b style="color:#f09199;">${data.average30 === null ? '—' : data.average30.toFixed(1)}</b> 集</span>`
-      : `<span>近1年活跃率: <b style="color:#f09199;">${activeRate}%</b></span><span style="color:var(--hm-border);">·</span><span>近30天活跃: <b style="color:#f09199;">${recentActive}</b> 天</span>`;
-    area.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;font-size:10px;color:var(--hm-text-dim);"><span style="display:flex;align-items:center;gap:7px;white-space:nowrap;">${summary}</span><span style="display:flex;align-items:center;gap:3px;white-space:nowrap;">少${['empty', 'l1', 'l2', 'l3'].map(level => `<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--hm-cell-${level});"></i>`).join('')}多</span></div><div class="hm-scroll">${svg}</div>`;
+    // 摘要写在子图头部行（与柱状图的「共 N 集」同一位置、同一字号），图里只放图。
+    const meta = shadow.querySelector('[data-role="heat-meta"]');
+    if (meta) meta.innerHTML = homeLayout
+      ? `近30天活跃 <b>${recentActive}</b> 天<span class="sep"> · </span>日均 <b>${data.average30 === null ? '—' : data.average30.toFixed(1)}</b> 集`
+      : `近一年活跃率 <b>${activeRate}%</b><span class="sep"> · </span>近30天活跃 <b>${recentActive}</b> 天`;
+    area.innerHTML = `<div class="hm-scroll">${svg}</div>`;
     drawnWidth = area.clientWidth;
     if (!homeLayout) {
       const wrap = area.querySelector('.hm-scroll');
@@ -309,11 +332,13 @@
     if (!useCache || !trendSeries) trendSeries = C.dailySeries(state, Date.now(), range);
     trendWidth = width;
     const days = trendSeries.days, n = days.length;
-    const head = `<div class="hm-trend-head"><span class="hm-trend-title">每日活跃</span><span class="hm-trend-total">共 <b>${trendSeries.total}</b> 集</span><span class="hm-trend-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span></div>`;
-    const legend = `<div class="hm-trend-legend">${TREND_SERIES.map(item => `<button type="button" class="hm-legend-key" data-series="${item.key}" aria-pressed="${!hiddenSeries.has(item.key)}"><i class="${item.kind === 'line' ? 'line' : ''}" aria-hidden="true"></i><span>${item.label}</span></button>`).join('')}</div>`;
+    const toggle = `<span class="hm-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span>`;
+    const legend = `<span class="hm-legend">${TREND_SERIES.map(item => `<button type="button" class="hm-legend-key" data-series="${item.key}" aria-pressed="${!hiddenSeries.has(item.key)}"><i class="${item.kind === 'line' ? 'line' : ''}" aria-hidden="true"></i><span>${item.label}</span></button>`).join('')}</span>`;
+    // 头部行与热力图同构：左标题、中摘要、右图例 + 范围切换。
+    const head = `<div class="hm-fig-head"><h3 class="hm-fig-title">每日活跃</h3><span class="hm-fig-meta hm-trend-total">共 <b>${trendSeries.total}</b> 集</span><div class="hm-fig-controls">${legend}${toggle}</div></div>`;
     if (!n) {
       trendGeom = null; trendIndex = -1;
-      area.innerHTML = head + '<div class="hm-trend-empty">还没有可统计的进度记录</div>' + legend;
+      area.innerHTML = head + '<div class="hm-trend-empty">还没有可统计的进度记录</div>';
       return true;
     }
     const values = key => days.map(day => (key === 'count' ? day.count : day.mean));
@@ -332,11 +357,11 @@
     const base = y(0);
 
     // 对数轴上的刻度间距不再均匀：按像素筛一遍，太密的丢掉；顶部刻度优先，
-    // 宁可挤掉前一个也要标出值域上限。
+    // 16px 是 9px 字号仍能分开的最小行距，22px 会把 40/50 这类中间档连带丢掉。
     const placedTicks = [];
     for (const tick of axis.ticks) {
       const gy = y(tick);
-      if (placedTicks.length && Math.abs(gy - placedTicks[placedTicks.length - 1].y) < 22) {
+      if (placedTicks.length && Math.abs(gy - placedTicks[placedTicks.length - 1].y) < 16) {
         if (tick !== axis.hi) continue;
         placedTicks.pop();
       }
@@ -359,19 +384,23 @@
     }
     const average = hiddenSeries.has('mean') || n < 2 ? '' : `<polyline class="hm-mean-line" points="${days.map((day, index) => `${x(index).toFixed(2)},${y(day.mean).toFixed(2)}`).join(' ')}"/>`;
     // 横轴只标每月 1 号，且按屏幕距离抽稀，避免 365 天挤成一团。
+    // 跨度超过一年后改标年份：八年历史里的「18/1」会被读成 1 月 1 日。
+    const longSpan = n > 400;
     let labels = '', previous = -Infinity;
     for (let index = 0; index < n; index++) {
-      if (days[index].key.slice(8) !== '01') continue;
+      const key = days[index].key;
+      if (longSpan ? key.slice(5) !== '01-01' : key.slice(8) !== '01') continue;
       const lx = x(index);
       if (lx - previous < 44) continue;
       previous = lx;
-      labels += `<text class="hm-axis-label" x="${lx.toFixed(1)}" y="${height - 6}" text-anchor="middle">${Number(days[index].key.slice(5, 7))}/${Number(days[index].key.slice(8))}</text>`;
+      const text = longSpan ? key.slice(0, 4) : `${Number(key.slice(5, 7))}/${Number(key.slice(8))}`;
+      labels += `<text class="hm-axis-label" x="${lx.toFixed(1)}" y="${height - 6}" text-anchor="middle">${text}</text>`;
     }
     const pending = range === 'all' && !state.streams.progress.deep;
     const hint = pending ? `<div class="hm-trend-hint">正在回溯更早的记录，已回溯到 ${days[0].key}…</div>` : '';
     area.innerHTML = head +
       `<div class="hm-trend-plot" tabindex="0" role="img" aria-label="每日活跃柱状图与 7 日均线，当前${range === 'all' ? '全部' : '近一年'}范围，左右方向键可逐日查看"><svg class="hm-trend" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${grid}${bars}${average}${labels}<g class="hm-guide" style="display:none"><line class="hm-guide-line" x1="0" x2="0" y1="${padT}" y2="${padT + plotH}"/><rect class="hm-guide-bar" width="3" height="3"/><rect class="hm-guide-mean" width="3" height="3"/></g></svg><div class="hm-readout" hidden></div></div>` +
-      legend + hint;
+      hint;
     trendGeom = { width, n, band, bandX0, x, y };
     if (trendIndex >= 0) showTrend(Math.min(trendIndex, n - 1));
     bindTrend(area);
@@ -400,7 +429,8 @@
       chartData = data;
       drawHeatmap(data);
     } else if (!data.total && !data.complete && message) {
-      shadow.querySelector('.hm-loading').textContent = `加载失败：${message}`;
+      const loading = shadow.querySelector('.hm-loading');
+      if (loading) loading.textContent = `加载失败：${message}`;
     } else if (!data.total && data.complete) {
       drawnSignature = signature;
       chartData = data;

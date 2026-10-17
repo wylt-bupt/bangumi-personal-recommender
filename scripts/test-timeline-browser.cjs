@@ -101,10 +101,10 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(await page.locator('.hm-cell title').allTextContents().then(titles => titles.some(title => title.startsWith(core.dayKey(now)))), 'the current day must remain visible');
     assert.equal(await page.locator('nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap');
     assert.equal(await page.locator('.hm-trend-area').count(), 0, 'the homepage keeps the heatmap alone; the trend chart belongs to the profile');
-    assert.equal(await page.locator('h2').textContent(), '活跃度热力图');
-    assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-label'), '活跃度热力图');
+    assert.equal(await page.locator('#hm-dashboard .module-head h2').textContent(), '活跃度');
+    assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-labelledby'), 'bgmtl-title');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
-    assert.equal(await page.locator('.hm-chart-area i').count(), 4);
+    assert.equal(await page.locator('.hm-scale i').count(), 4);
     assert.match(await page.locator('.hm-cell').last().locator('title').textContent(), /\d{4}-\d{2}-\d{2}: \d+ 集/);
     const monthLabelBoxes = await page.locator('.hm-month-label').evaluateAll(labels => labels.map(label => {
       const box = label.getBBox(), date = label.getAttribute('data-date');
@@ -117,9 +117,12 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     }
     const firstDay = core.dayKey(now - core.DAY);
     assert.ok((await page.locator('.hm-cell title').allTextContents()).includes(`${firstDay}: 1 集`), 'a collection on the same day must not add another episode');
-    await page.waitForFunction(() => /近30天日均:\s*0\.1\s*集/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent));
-    assert.match(await page.locator('.hm-chart-area').textContent(), /近30天活跃:\s*3\s*天\s*·\s*近30天日均:\s*0\.1\s*集少多/);
-    assert.ok(!(await page.locator('.hm-chart-area').textContent()).includes('近1年活跃率'));
+    await page.waitForFunction(() => /日均\s*0\.1\s*集/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-figure-heat .hm-fig-meta').textContent));
+    assert.match(await page.locator('.hm-figure-heat .hm-fig-head').textContent(), /活跃热力图\s*近30天活跃\s*3\s*天\s*·\s*日均\s*0\.1\s*集\s*少\s*多/, 'the heatmap shares the sub-figure head row with the bar chart');
+    assert.ok(!(await page.locator('.hm-chart-area').textContent()).includes('活跃率'));
+    // 模块头统一为「活跃度」，与「动画回顾」「个性推荐」同一套写法。
+    assert.equal(await page.locator('#hm-dashboard .module-head h2').textContent(), '活跃度');
+    assert.equal(await page.locator('#hm-dashboard .hm-fig-title').count(), 1, 'the homepage only carries the heatmap sub-figure');
     assert.equal(await page.locator('img').count(), 0, 'remote covers never enter live DOM');
     const style = await page.locator('#hm-dashboard').evaluate(element => {
       const computed = getComputedStyle(element);
@@ -160,11 +163,13 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       oldestVisibleDays[width] = await page.locator('.hm-cell title').first().textContent();
       assert.ok(await page.locator('#hm-dashboard').isVisible());
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px ${theme} page overflow`);
-      assert.ok(await page.locator('.hm-chart-area').evaluate(area => {
-        const row = area.firstElementChild, [metrics, legend] = row.children;
-        return metrics.getBoundingClientRect().right <= legend.getBoundingClientRect().left
-          && legend.getBoundingClientRect().right <= area.getBoundingClientRect().right + 1;
-      }), `${width}px ${theme} summary must fit without clipping or overlap`);
+      assert.ok(await page.locator('.hm-figure-heat .hm-fig-head').evaluate(head => {
+        const bounds = head.getBoundingClientRect();
+        const meta = head.querySelector('.hm-fig-meta').getBoundingClientRect();
+        const controls = head.querySelector('.hm-fig-controls').getBoundingClientRect();
+        const overlap = !(meta.right <= controls.left || controls.right <= meta.left || meta.bottom <= controls.top || controls.bottom <= meta.top);
+        return !overlap && meta.right <= bounds.right + 1 && controls.right <= bounds.right + 1;
+      }), `${width}px ${theme} means and legend must fit without clipping or overlap`);
       await page.screenshot({ path: `artifacts/timeline-heatmap-${width}-${theme}.png`, fullPage: true });
     }
     assert.ok(visibleWeeks[1200] > visibleWeeks[375], `wide layout should show more history: ${JSON.stringify(visibleWeeks)}`);
@@ -185,8 +190,14 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await load(profilePage, 'https://bgm.tv/user/wylt');
     await profilePage.locator('.hm-cell').first().waitFor({ state: 'visible', timeout: 30000 });
     assert.ok(await profilePage.locator('#hm-dashboard').evaluate(element => element.classList.contains('profile-layout')));
-    assert.match(await profilePage.locator('.hm-chart-area').textContent(), /近1年活跃率:\s*0\.8%/);
-    assert.ok(!(await profilePage.locator('.hm-chart-area').textContent()).includes('日均'));
+    assert.match(await profilePage.locator('.hm-figure-heat .hm-fig-meta').textContent(), /近一年活跃率\s*0\.8%/);
+    assert.ok(!(await profilePage.locator('.hm-figure-heat .hm-fig-head').textContent()).includes('日均'));
+    // 两个子图共用同一套头部行：标题字号、图例字号一致，模块头只有一个「活跃度」。
+    assert.equal(await profilePage.locator('#hm-dashboard .module-head h2').textContent(), '活跃度');
+    assert.deepEqual(await profilePage.locator('#hm-dashboard .hm-fig-title').allTextContents(), ['活跃热力图', '每日活跃']);
+    assert.equal(await profilePage.locator('#hm-dashboard .hm-figure').count(), 2, 'the profile shows the heatmap and the bar chart as two sub-figures');
+    const figTitleSizes = await profilePage.locator('#hm-dashboard .hm-fig-title').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).fontSize));
+    assert.deepEqual(figTitleSizes, ['13px', '13px'], 'both sub-figure titles use the same type scale');
     assert.equal(await profilePage.locator('.hm-cell').count(), cellCount, 'profile shows the same full-year day range');
     assert.equal(await profilePage.locator('.hm-month-label').count(), 0, 'profile retains the original week-based month labels');
     const profileScroll = profilePage.locator('.hm-scroll');
@@ -203,7 +214,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 3, 'year view shows exactly the three active days');
     assert.ok(await profilePage.locator('.hm-trend-area polyline').isVisible(), 'the 7-day average line is drawn');
     assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*3\s*集/);
-    assert.equal(await profilePage.locator('.hm-trend-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
+    assert.equal(await profilePage.locator('.hm-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
     // 零安全对数轴的意义：1 集的日子不能被偶尔的高峰压成发丝。
     const heights = await profilePage.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('height'))));
     assert.ok(Math.min(...heights) >= 20, `the log scale must lift ordinary days, got ${heights.join(', ')}`);
@@ -231,7 +242,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
 
     // Selecting "all" backfills history beyond the one-year sync cutoff.
     const beforeDeep = requests.length;
-    await profilePage.locator('.hm-trend-toggle button[data-range=all]').click();
+    await profilePage.locator('.hm-toggle button[data-range=all]').click();
     let deepDone = false;
     for (let attempt = 0; attempt < 40 && !deepDone; attempt++) {
       await profilePage.waitForTimeout(500);
@@ -243,8 +254,11 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(await profilePage.locator('.hm-trend-area .hm-bar').count() >= 5, 'the all view must keep every active day');
     assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*5\s*集/, 'the all view counts the backfilled days too');
     assert.equal(await profilePage.locator('.hm-trend-hint').count(), 0, 'the backfill hint disappears once history is complete');
+    // 跨度超过一年后横轴改标年份，避免「18/1」被读成 1 月 1 日。
+    const allLabels = await profilePage.locator('.hm-axis-label').allTextContents();
+    assert.ok(allLabels.length > 0 && allLabels.every(label => /^\d{4}$/.test(label)), `the all view labels years, got ${allLabels.join(', ')}`);
     assert.equal(await profilePage.evaluate(() => localStorage.getItem('bgmtl-chart-range')), 'all');
-    await profilePage.locator('.hm-trend-toggle button[data-range=year]').click();
+    await profilePage.locator('.hm-toggle button[data-range=year]').click();
     assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 3, 'toggling back to one year hides the older bars');
     assert.deepEqual(errors, []);
     await profilePage.close();
@@ -257,8 +271,8 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
 
     // Stale cursors refresh automatically; there is no sync control in the UI.
     extra = true; await prepareRefresh(); await load(page);
-    await page.waitForFunction(() => /近30天活跃:\s*4\s*天/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-chart-area').textContent), null, { timeout: 30000 });
-    assert.match(await page.locator('.hm-chart-area').textContent(), /近30天日均:\s*0\.1\s*集/);
+    await page.waitForFunction(() => /近30天活跃\s*4\s*天/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-figure-heat .hm-fig-meta').textContent), null, { timeout: 30000 });
+    assert.match(await page.locator('.hm-figure-heat .hm-fig-meta').textContent(), /日均\s*0\.1\s*集/);
     const updated = await readState();
     assert.ok(updated.events.some(event => event.id === '210'), 'new progress record added incrementally');
 
