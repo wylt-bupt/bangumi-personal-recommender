@@ -430,7 +430,7 @@
     }
     sortControls(kind) {
       const active = this.state.sort[kind];
-      const eligibility = kind === 'staff' && this.state.activeStaffGroup === 'studios' ? '仅作品数大于 10 部者入榜' : '仅作品数位于前 10% 者入榜';
+      const eligibility = kind === 'staff' && this.state.activeStaffGroup === 'studios' ? '仅作品数大于 10 部者入榜' : `仅作品数 ${Core.RANK_MINIMUM_WORKS} 部以上者入榜`;
       return `<div class="sort-row"><span>排序</span><div class="sort-switch" role="group" aria-label="排名排序方式"><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="works" aria-pressed="${active === "works"}">作品数</button><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="average" aria-pressed="${active === "average"}">均分</button></div>${active === "average" ? `<small>${eligibility}</small>` : ""}</div>`;
     }
     pager(kind, page, pages) {
@@ -486,13 +486,13 @@
         averageRate: row.averageRate,
         eps: 0,
       }));
-      const ranking = Core.rankEntries(entries, this.state.sort.tags, 0.1);
+      const ranking = Core.rankEntries(entries, this.state.sort.tags);
       return `${this.rankingTools("tags", "标签")}${this.listRows(this.filterRows(ranking.rows, this.state.search.tags), "tags", "tags", ranking.rows)}`;
     }
     staff(stats) {
       const groups = [{ id: "directors", label: "导演" }, { id: "series", label: "系列构成" }, { id: "studios", label: "动画制作" }, { id: "originals", label: "原作 / 原案" }, { id: "scripts", label: "脚本" }, { id: "music", label: "音乐" }, { id: "characterDesign", label: "角色设计" }];
       const active = groups.find(group => group.id === this.state.activeStaffGroup) || groups[0];
-      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, 0.1, active.id === 'studios' ? 10 : null);
+      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, active.id === 'studios' ? 11 : Core.RANK_MINIMUM_WORKS);
       const rows = this.filterRows(ranking.rows, this.state.search.staff);
       return `<div class="role-switch" aria-label="创作职位">${groups.map(group => `<button type="button" data-action="staff-group" data-group="${group.id}" aria-pressed="${group.id === active.id}">${group.label}</button>`).join("")}</div>${this.rankingTools("staff", active.label)}${this.listRows(rows, "staff", "staff", ranking.rows)}`;
     }
@@ -500,7 +500,7 @@
       return `<div class="ranking-tools"><label><span class="sr-only">搜索${label}姓名</span><input type="search" data-search="${kind}" value="${escapeHtml(this.state.search[kind])}" placeholder="搜索${label}" autocomplete="off"></label>${this.sortControls(kind)}</div>`;
     }
     cast(stats) {
-      const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast, 0.1);
+      const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast);
       return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast", ranking.rows)}`;
     }
     content(stats) {

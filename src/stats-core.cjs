@@ -9,6 +9,10 @@
     5: "抛弃",
   });
 
+  // An average score needs enough sampled works to mean anything; entries at
+  // or above this many works qualify for the average ranking.
+  const RANK_MINIMUM_WORKS = 20;
+
   const ROLE_GROUPS = Object.freeze({
     directors: {
       label: "导演",
@@ -139,15 +143,15 @@
     })).sort((a, b) => b.works - a.works || b.averageRate - a.averageRate || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
   }
 
-  function rankEntries(entries, mode = "works", topShare = 0.1, minimumWorksExclusive = null) {
+  function rankEntries(entries, mode = "works", minimumWorks = RANK_MINIMUM_WORKS) {
     const rows = Array.isArray(entries) ? [...entries] : [];
     const byWorks = (a, b) => b.works - a.works || b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN");
     if (mode !== "average" || !rows.length) return { rows: rows.sort(byWorks), cutoffWorks: 0, eligibleCount: rows.length };
 
-    const validShare = Math.min(1, Math.max(0.01, number(topShare) || 0.1));
-    const workRanked = [...rows].sort(byWorks);
-    const cutoffIndex = Math.max(0, Math.ceil(workRanked.length * validShare) - 1);
-    const cutoffWorks = Number.isFinite(minimumWorksExclusive) ? minimumWorksExclusive + 1 : (workRanked[cutoffIndex]?.works || 0);
+    // Average rankings need a minimum sample size, not a share of the list: a
+    // percentage cutoff shrinks the board as the collection grows, so every
+    // entry at or above the absolute work count qualifies.
+    const cutoffWorks = Math.max(1, Math.floor(number(minimumWorks) || RANK_MINIMUM_WORKS));
     const eligible = rows.filter((row) => row.works >= cutoffWorks && row.ratedWorks > 0);
     eligible.sort((a, b) => b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.works - a.works || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
     return { rows: eligible, cutoffWorks, eligibleCount: eligible.length };
@@ -263,6 +267,7 @@
 
   const Core = Object.freeze({
     STATUS_LABELS,
+    RANK_MINIMUM_WORKS,
     ROLE_GROUPS,
     compactCollection,
     compactPersons,

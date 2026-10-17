@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.12.1
+// @version      0.12.2
 // @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -1763,6 +1763,10 @@ globalThis.BangumiInitialRecommendationFeed = {
     5: "抛弃",
   });
 
+  // An average score needs enough sampled works to mean anything; entries at
+  // or above this many works qualify for the average ranking.
+  const RANK_MINIMUM_WORKS = 20;
+
   const ROLE_GROUPS = Object.freeze({
     directors: {
       label: "导演",
@@ -1893,15 +1897,15 @@ globalThis.BangumiInitialRecommendationFeed = {
     })).sort((a, b) => b.works - a.works || b.averageRate - a.averageRate || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
   }
 
-  function rankEntries(entries, mode = "works", topShare = 0.1, minimumWorksExclusive = null) {
+  function rankEntries(entries, mode = "works", minimumWorks = RANK_MINIMUM_WORKS) {
     const rows = Array.isArray(entries) ? [...entries] : [];
     const byWorks = (a, b) => b.works - a.works || b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN");
     if (mode !== "average" || !rows.length) return { rows: rows.sort(byWorks), cutoffWorks: 0, eligibleCount: rows.length };
 
-    const validShare = Math.min(1, Math.max(0.01, number(topShare) || 0.1));
-    const workRanked = [...rows].sort(byWorks);
-    const cutoffIndex = Math.max(0, Math.ceil(workRanked.length * validShare) - 1);
-    const cutoffWorks = Number.isFinite(minimumWorksExclusive) ? minimumWorksExclusive + 1 : (workRanked[cutoffIndex]?.works || 0);
+    // Average rankings need a minimum sample size, not a share of the list: a
+    // percentage cutoff shrinks the board as the collection grows, so every
+    // entry at or above the absolute work count qualifies.
+    const cutoffWorks = Math.max(1, Math.floor(number(minimumWorks) || RANK_MINIMUM_WORKS));
     const eligible = rows.filter((row) => row.works >= cutoffWorks && row.ratedWorks > 0);
     eligible.sort((a, b) => b.averageRate - a.averageRate || b.ratedWorks - a.ratedWorks || b.works - a.works || b.eps - a.eps || a.name.localeCompare(b.name, "zh-CN"));
     return { rows: eligible, cutoffWorks, eligibleCount: eligible.length };
@@ -2017,6 +2021,7 @@ globalThis.BangumiInitialRecommendationFeed = {
 
   const Core = Object.freeze({
     STATUS_LABELS,
+    RANK_MINIMUM_WORKS,
     ROLE_GROUPS,
     compactCollection,
     compactPersons,
@@ -2077,7 +2082,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.12.1";
+  const APP_VERSION = "0.12.2";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2493,7 +2498,7 @@ globalThis.BangumiInitialRecommendationFeed = {
     }
     sortControls(kind) {
       const active = this.state.sort[kind];
-      const eligibility = kind === 'staff' && this.state.activeStaffGroup === 'studios' ? '仅作品数大于 10 部者入榜' : '仅作品数位于前 10% 者入榜';
+      const eligibility = kind === 'staff' && this.state.activeStaffGroup === 'studios' ? '仅作品数大于 10 部者入榜' : `仅作品数 ${Core.RANK_MINIMUM_WORKS} 部以上者入榜`;
       return `<div class="sort-row"><span>排序</span><div class="sort-switch" role="group" aria-label="排名排序方式"><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="works" aria-pressed="${active === "works"}">作品数</button><button type="button" data-action="sort" data-sort-kind="${kind}" data-sort="average" aria-pressed="${active === "average"}">均分</button></div>${active === "average" ? `<small>${eligibility}</small>` : ""}</div>`;
     }
     pager(kind, page, pages) {
@@ -2549,13 +2554,13 @@ globalThis.BangumiInitialRecommendationFeed = {
         averageRate: row.averageRate,
         eps: 0,
       }));
-      const ranking = Core.rankEntries(entries, this.state.sort.tags, 0.1);
+      const ranking = Core.rankEntries(entries, this.state.sort.tags);
       return `${this.rankingTools("tags", "标签")}${this.listRows(this.filterRows(ranking.rows, this.state.search.tags), "tags", "tags", ranking.rows)}`;
     }
     staff(stats) {
       const groups = [{ id: "directors", label: "导演" }, { id: "series", label: "系列构成" }, { id: "studios", label: "动画制作" }, { id: "originals", label: "原作 / 原案" }, { id: "scripts", label: "脚本" }, { id: "music", label: "音乐" }, { id: "characterDesign", label: "角色设计" }];
       const active = groups.find(group => group.id === this.state.activeStaffGroup) || groups[0];
-      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, 0.1, active.id === 'studios' ? 10 : null);
+      const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, active.id === 'studios' ? 11 : Core.RANK_MINIMUM_WORKS);
       const rows = this.filterRows(ranking.rows, this.state.search.staff);
       return `<div class="role-switch" aria-label="创作职位">${groups.map(group => `<button type="button" data-action="staff-group" data-group="${group.id}" aria-pressed="${group.id === active.id}">${group.label}</button>`).join("")}</div>${this.rankingTools("staff", active.label)}${this.listRows(rows, "staff", "staff", ranking.rows)}`;
     }
@@ -2563,7 +2568,7 @@ globalThis.BangumiInitialRecommendationFeed = {
       return `<div class="ranking-tools"><label><span class="sr-only">搜索${label}姓名</span><input type="search" data-search="${kind}" value="${escapeHtml(this.state.search[kind])}" placeholder="搜索${label}" autocomplete="off"></label>${this.sortControls(kind)}</div>`;
     }
     cast(stats) {
-      const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast, 0.1);
+      const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast);
       return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast", ranking.rows)}`;
     }
     content(stats) {
@@ -2613,7 +2618,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const Feed = globalThis.BangumiRecommendationFeed;
   if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.12.1";
+  const APP_VERSION = "0.12.2";
   const OWNER = Feed.OWNER;
   const PAGE_SIZE = 5;
   const FEED_TTL = 6 * 60 * 60 * 1000;

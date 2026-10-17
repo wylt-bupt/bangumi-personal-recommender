@@ -1,6 +1,6 @@
 {
   "name": "bangumi-personal-recommender",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "timelineVersion": "1.0.15",
   "calendarVersion": "1.0.8",
   "private": true,

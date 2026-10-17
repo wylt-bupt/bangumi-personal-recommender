@@ -1,11 +1,13 @@
 // Run against the local preview server; uses an isolated Chrome profile, never the signed-in browser.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
+const preview = require('./static-server.cjs');
 (async()=>{
+  const server = await preview.start(0);
   const browser = await chromium.launch({channel:'chrome',headless:true});
   const page = await browser.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  const origin='http://127.0.0.1:8765';
+  const origin='http://127.0.0.1:' + server.address().port;
   const report=[];
   try {
     for(const [width,height,theme] of [[1440,1000,'light'],[375,812,'light'],[667,375,'light'],[1440,1000,'dark']]) {
@@ -44,5 +46,5 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('.cover img').first().evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
     assert.deepEqual(errors,[]);
     console.log(report.join('\n'));
-  } finally { await browser.close(); }
+  } finally { await browser.close(); server.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

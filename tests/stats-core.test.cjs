@@ -4,13 +4,26 @@ const Stats = require("../src/stats-core.cjs");
 
 test('studio average ranking includes every rated studio over ten works, not only the top decile', () => {
   const rows=Array.from({length:30},(_,i)=>({id:i,name:'制作'+i,works:i===0?100:i===1?10:i===2?11:12,averageRate:10-i/10,ratedWorks:i===3?0:5,eps:100}));
-  const ranked=Stats.rankEntries(rows,'average',.1,10);
+  const ranked=Stats.rankEntries(rows,'average',11);
   assert.ok(ranked.rows.some(row=>row.id===2));
   assert.ok(!ranked.rows.some(row=>row.id===1 || row.id===3));
   assert.equal(ranked.rows.length,28);
   assert.equal(ranked.cutoffWorks,11);
-  assert.equal(Stats.rankEntries(rows,'works',.1,10).rows.length,30);
-  assert.equal(Stats.rankEntries(rows,'average',.1).rows.some(row=>row.id===2),false);
+  assert.equal(Stats.rankEntries(rows,'works',11).rows.length,30);
+  assert.equal(Stats.rankEntries(rows,'average').rows.some(row=>row.id===2),false);
+});
+
+test('average ranking admits every entry at the default twenty-work cutoff', () => {
+  const rows=Array.from({length:30},(_,i)=>({id:i,name:'标签'+i,works:i===0?100:i===1?19:i===2?20:25,averageRate:10-i/10,ratedWorks:i===3?0:5,eps:100}));
+  const ranked=Stats.rankEntries(rows,'average');
+  assert.equal(ranked.cutoffWorks,20);
+  assert.ok(ranked.rows.some(row=>row.id===2),'exactly twenty works qualifies');
+  assert.ok(!ranked.rows.some(row=>row.id===1),'nineteen works does not qualify');
+  assert.ok(!ranked.rows.some(row=>row.id===3),'unrated entries stay out');
+  assert.equal(ranked.rows.length,28);
+  // A bigger list no longer shrinks the board: the cutoff is absolute.
+  const wider=[...rows,...Array.from({length:300},(_,i)=>({id:100+i,name:'更多'+i,works:25,ratedWorks:1,averageRate:5,eps:12}))];
+  assert.equal(Stats.rankEntries(wider,'average').rows.some(row=>row.id===2),true);
 });
 
 function collection(id, rate, eps, epStatus, status = 2) {
@@ -85,14 +98,14 @@ test("keeps additional creative roles and overview distributions", () => {
   assert.deepEqual(result.distributions.tags[0], { name: "科幻", count: 2, ratedCount: 2, averageRate: 9 });
 });
 
-test("average ranking only includes the top decile by work count and keeps cutoff ties", () => {
+test("average ranking honors the requested minimum work count and keeps cutoff ties", () => {
   const rows = [
     { name: "高产甲", works: 12, ratedWorks: 12, averageRate: 7.5, eps: 120 },
     { name: "高产乙", works: 10, ratedWorks: 10, averageRate: 8.2, eps: 100 },
     { name: "同门槛", works: 10, ratedWorks: 9, averageRate: 8.8, eps: 90 },
     ...Array.from({ length: 17 }, (_, index) => ({ name: `低样本${index}`, works: 9 - Math.floor(index / 2), ratedWorks: 1, averageRate: 10, eps: 12 })),
   ];
-  const result = Stats.rankEntries(rows, "average", 0.1);
+  const result = Stats.rankEntries(rows, "average", 10);
   assert.equal(result.cutoffWorks, 10);
   assert.equal(result.eligibleCount, 3);
   assert.deepEqual(result.rows.map((row) => row.name), ["同门槛", "高产乙", "高产甲"]);

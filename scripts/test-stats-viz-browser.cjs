@@ -1,11 +1,14 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
+const preview = require('./static-server.cjs');
 (async () => {
+  const server = await preview.start(0);
+  const origin = 'http://127.0.0.1:' + server.address().port;
   const browser = await chromium.launch({channel:'chrome',headless:true});
   const page = await browser.newPage();
   const errors=[]; page.on('pageerror', error => errors.push(error.message));
   try {
-    await page.goto('http://127.0.0.1:8765');
+    await page.goto(origin);
     await page.evaluate(async () => {
       const db = await new Promise((resolve, reject) => {
         const request = indexedDB.open('bgmpr-stats', 1);
@@ -22,7 +25,7 @@ const assert = require('node:assert/strict');
     });
     for(const [width,height,theme] of [[1440,1000,'light'],[375,812,'light'],[667,375,'light'],[1440,1000,'dark']]) {
       await page.setViewportSize({width,height});
-      await page.goto('http://127.0.0.1:8765/demo/profile.html?theme='+theme);
+      await page.goto(origin + '/demo/profile.html?theme='+theme);
       await page.locator('.year-chart').waitFor();
       const labels=await page.locator('.year-column').evaluateAll(nodes=>nodes.map(el=>el.getAttribute('aria-label')));
       assert.equal(labels.length,47);assert.ok(labels[0].startsWith('2026'));assert.ok(labels.at(-1).startsWith('1980'));
@@ -47,6 +50,9 @@ const assert = require('node:assert/strict');
       assert.ok(tagScores.every((value,index)=>index===0||tagScores[index-1]>=value),'average scores must descend');
       const tagShare=await page.locator('.person-bar').first().evaluate(el=>parseFloat(el.style.getPropertyValue('--share')));
       assert.ok(Math.abs(tagShare-tagScores[0]*10)<.1);
+      assert.match(await page.locator('.sort-row small').innerText(),/20 部以上/);
+      const eligibleAverage=await page.evaluate(()=>BangumiStatsViz.featuredTags(BangumiPersonalStatsCore.aggregate(fixtureCollections).distributions.tags).filter(row=>row.count>=20&&row.ratedCount>0).length);
+      assert.equal(await page.locator('.person-bar').count(),Math.min(12,eligibleAverage));
       await page.locator('[data-sort-kind="tags"][data-sort="works"]').click();
       const firstTagName=await page.locator('.people-list a').first().innerText();
       await page.locator('[data-search="tags"]').fill(firstTagName);
@@ -79,7 +85,7 @@ const assert = require('node:assert/strict');
     await page.emulateMedia({reducedMotion:'reduce'});
     const denseContext=await browser.newContext({viewport:{width:375,height:812}});
     const densePage=await denseContext.newPage();
-    await densePage.goto('http://127.0.0.1:8765/demo/profile.html?dense=1');
+    await densePage.goto(origin + '/demo/profile.html?dense=1');
     await densePage.locator('.year-chart').waitFor();
     await densePage.getByRole('button',{name:'标签',exact:true}).click();
     await densePage.locator('.people-list').waitFor();
@@ -92,5 +98,5 @@ const assert = require('node:assert/strict');
     await denseContext.close();
     console.log('702-tag dataset: rare tags filtered, the two qualified tags stay inside the column');
     assert.deepEqual(errors,[]);
-  } finally { await browser.close(); }
+  } finally { await browser.close(); server.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
