@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      0.11.3
+// @version      0.12.0
 // @description  个人主页的动画回顾与协同推荐：年代柱图、偏好词云与人物排行。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -143,8 +143,8 @@
 globalThis.BangumiInitialRecommendationFeed = {
   "schema": 1,
   "owner": "wylt",
-  "generatedAt": "2026-10-17T09:50:36.511863+00:00",
-  "peerCount": 100,
+  "generatedAt": "2026-10-17T16:26:08.888956+00:00",
+  "peerCount": 245,
   "neighborCount": 40,
   "ratedCount": 1345,
   "model": "content",
@@ -175,10 +175,10 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 19750
         }
       },
-      "predicted": 9.733,
+      "predicted": 9.549,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《东京残响》题材重合：科幻、原创。"
       ]
     },
     {
@@ -207,106 +207,10 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 5794
         }
       },
-      "predicted": 9.06,
+      "predicted": 8.938,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 40003,
-        "type": 2,
-        "name": "うる星やつら2 ビューティフル・ドリーマー",
-        "nameCn": "福星小子2 绮丽梦中人",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/51/54/40003_d2Egm.jpg",
-        "tags": [
-          "押井守",
-          "剧场版",
-          "1984",
-          "studiopierrot",
-          "高桥留美子",
-          "漫画改",
-          "福星小子",
-          "漫改",
-          "奇幻",
-          "搞笑",
-          "西村纯二",
-          "电影"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 1576
-        }
-      },
-      "predicted": 8.944,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 37183,
-        "type": 2,
-        "name": "太陽の牙ダグラム",
-        "nameCn": "太阳之牙达格拉姆",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
-        "tags": [
-          "sunrise",
-          "tv",
-          "原创",
-          "1981",
-          "萝卜",
-          "高桥良辅",
-          "科幻",
-          "神田武幸",
-          "真实系",
-          "政治",
-          "高橋良輔",
-          "机战"
-        ],
-        "rating": {
-          "score": 8.3,
-          "total": 299
-        }
-      },
-      "predicted": 8.937,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 495562,
-        "type": 2,
-        "name": "デッドデッドデーモンズデデデデデストラクション",
-        "nameCn": "DDDD 恶魔的破坏",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f5/85/495562_onpMR.jpg",
-        "tags": [
-          "科幻",
-          "漫画改",
-          "production+h.",
-          "末世",
-          "2024",
-          "2024年4月",
-          "日常",
-          "tv",
-          "web",
-          "漫改",
-          "日本",
-          "剧情"
-        ],
-        "rating": {
-          "score": 7.6,
-          "total": 3543
-        }
-      },
-      "predicted": 8.917,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《百合熊风暴》题材重合：百合、校园。"
       ]
     },
     {
@@ -335,42 +239,74 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 2970
         }
       },
-      "predicted": 8.899,
+      "predicted": 8.935,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“科幻、小说改”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《86 -不存在的战区- 第2部分》题材重合：科幻、小说改。"
       ]
     },
     {
       "subject": {
-        "id": 28205,
+        "id": 40003,
         "type": 2,
-        "name": "日常 Eテレ版",
-        "nameCn": "日常 ETV版",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/19/6b/28205_AAqG1.jpg",
+        "name": "うる星やつら2 ビューティフル・ドリーマー",
+        "nameCn": "福星小子2 绮丽梦中人",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/51/54/40003_d2Egm.jpg",
         "tags": [
-          "日常",
-          "京阿尼",
-          "搞笑",
-          "2012年1月",
-          "tv",
-          "爆笑",
-          "电波",
-          "吐槽向",
-          "重制版",
-          "石原立也",
+          "押井守",
+          "剧场版",
+          "1984",
+          "studiopierrot",
+          "高桥留美子",
           "漫画改",
-          "2012"
+          "福星小子",
+          "漫改",
+          "奇幻",
+          "搞笑",
+          "西村纯二",
+          "电影"
         ],
         "rating": {
           "score": 8.2,
-          "total": 2607
+          "total": 1576
         }
       },
-      "predicted": 8.882,
+      "predicted": 8.92,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《侧耳倾听》题材重合：校园、恋爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 37183,
+        "type": 2,
+        "name": "太陽の牙ダグラム",
+        "nameCn": "太阳之牙达格拉姆",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d7/1b/37183_TT9yf.jpg",
+        "tags": [
+          "sunrise",
+          "tv",
+          "原创",
+          "1981",
+          "萝卜",
+          "高桥良辅",
+          "科幻",
+          "神田武幸",
+          "真实系",
+          "政治",
+          "高橋良輔",
+          "机战"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 299
+        }
+      },
+      "predicted": 8.905,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《机动战士高达 水星的魔女》题材重合：sunrise、科幻。"
       ]
     },
     {
@@ -399,10 +335,10 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 8877
         }
       },
-      "predicted": 8.878,
+      "predicted": 8.894,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、A-1 Pictures”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《BanG Dream!》题材重合：百合、日常。"
       ]
     },
     {
@@ -431,138 +367,10 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 9753
         }
       },
-      "predicted": 8.845,
+      "predicted": 8.893,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“恋爱、催泪”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 296659,
-        "type": 2,
-        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会",
-        "nameCn": "Love Live! 虹咲学园校园偶像同好会",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a7/35/296659_o709D.jpg",
-        "tags": [
-          "偶像",
-          "百合",
-          "sunrise",
-          "原创",
-          "lovelive",
-          "2020年10月",
-          "tv",
-          "音乐",
-          "校园",
-          "2020",
-          "扭曲",
-          "河村智之"
-        ],
-        "rating": {
-          "score": 7.5,
-          "total": 6118
-        }
-      },
-      "predicted": 8.809,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 14878,
-        "type": 2,
-        "name": "おジャ魔女どれみドッカ～ン!",
-        "nameCn": "小魔女DoReMi 大合奏",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0e/e8/14878_1hWbu.jpg",
-        "tags": [
-          "tv",
-          "2002",
-          "魔法少女",
-          "原创",
-          "五十岚卓哉",
-          "东映",
-          "童年",
-          "東映アニメーション",
-          "细田守",
-          "tvb",
-          "马越嘉彦",
-          "doremi"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 408
-        }
-      },
-      "predicted": 8.795,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 64172,
-        "type": 2,
-        "name": "THE IDOLM@STER MOVIE 輝きの向こう側へ！",
-        "nameCn": "偶像大师 剧场版 向着光辉的彼岸！",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f8/45/64172_8MujB.jpg",
-        "tags": [
-          "剧场版",
-          "a-1pictures",
-          "偶像大师",
-          "偶像",
-          "2014",
-          "锦织敦史",
-          "游戏改",
-          "im@s",
-          "音乐",
-          "2014年1月",
-          "輝きの向こう側へ！",
-          "錦織敦史"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 4284
-        }
-      },
-      "predicted": 8.79,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、A-1 Pictures”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 335579,
-        "type": 2,
-        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会 2期",
-        "nameCn": "Love Live! 虹咲学园校园偶像同好会 第二季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/78/6f/335579_3ldtt.jpg",
-        "tags": [
-          "偶像",
-          "原创",
-          "sunrise",
-          "百合",
-          "lovelive！",
-          "2022年4月",
-          "tv",
-          "音乐",
-          "校园",
-          "2022",
-          "田中仁",
-          "lovelive"
-        ],
-        "rating": {
-          "score": 7.4,
-          "total": 4462
-        }
-      },
-      "predicted": 8.782,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“扭曲、sunrise”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《葬送的芙莉莲》题材重合：恋爱、催泪。"
       ]
     },
     {
@@ -591,10 +399,42 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 4527
         }
       },
-      "predicted": 8.759,
+      "predicted": 8.827,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《3月的狮子 第二季》题材重合：校园、恋爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 495562,
+        "type": 2,
+        "name": "デッドデッドデーモンズデデデデデストラクション",
+        "nameCn": "DDDD 恶魔的破坏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f5/85/495562_onpMR.jpg",
+        "tags": [
+          "科幻",
+          "漫画改",
+          "production+h.",
+          "末世",
+          "2024",
+          "2024年4月",
+          "日常",
+          "tv",
+          "web",
+          "漫改",
+          "日本",
+          "剧情"
+        ],
+        "rating": {
+          "score": 7.6,
+          "total": 3543
+        }
+      },
+      "predicted": 8.823,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《章鱼哔的原罪》题材重合：百合、校园。"
       ]
     },
     {
@@ -623,10 +463,10 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 5838
         }
       },
-      "predicted": 8.749,
+      "predicted": 8.821,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“校园、恋爱”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《3月的狮子 第二季》题材重合：校园、恋爱。"
       ]
     },
     {
@@ -655,170 +495,10 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 9462
         }
       },
-      "predicted": 8.749,
+      "predicted": 8.756,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 23304,
-        "type": 2,
-        "name": "伝説巨神イデオン 発動篇",
-        "nameCn": "传说巨神伊迪安 发动篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
-        "tags": [
-          "富野由悠季",
-          "剧场版",
-          "sunrise",
-          "1982",
-          "萝卜",
-          "原创",
-          "科幻",
-          "全灭",
-          "传说巨神伊迪安",
-          "机战",
-          "裸漂",
-          "日本"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 1017
-        }
-      },
-      "predicted": 8.746,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 338,
-        "type": 2,
-        "name": "フルメタル・パニック? ふもっふ",
-        "nameCn": "全金属狂潮 校园篇",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
-        "tags": [
-          "京阿尼",
-          "全金属狂潮",
-          "搞笑",
-          "爆笑",
-          "tv",
-          "校园",
-          "贺东招二",
-          "2003",
-          "校园篇",
-          "bon太君",
-          "轻小说改",
-          "全金属狂潮2"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 6560
-        }
-      },
-      "predicted": 8.724,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“京阿尼、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 860,
-        "type": 2,
-        "name": "カウボーイビバップ 天国の扉",
-        "nameCn": "星际牛仔 天国之扉",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
-        "tags": [
-          "剧场版",
-          "渡边信一郎",
-          "星际牛仔",
-          "sunrise",
-          "菅野よう子",
-          "bones",
-          "2001",
-          "原创",
-          "科幻",
-          "菅野洋子",
-          "cowboy",
-          "cowboy_bebop"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 7264
-        }
-      },
-      "predicted": 8.71,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2741,
-        "type": 2,
-        "name": "タッチ",
-        "nameCn": "棒球英豪",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cd/cb/2741_GPGN2.jpg",
-        "tags": [
-          "安达充",
-          "棒球",
-          "爱情",
-          "touch",
-          "青春",
-          "校园",
-          "经典",
-          "tv",
-          "上杉达也",
-          "1985",
-          "童年",
-          "体育"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 1958
-        }
-      },
-      "predicted": 8.71,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1027,
-        "type": 2,
-        "name": "舞-HiME",
-        "nameCn": "舞-HiME",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/88/3e/1027_7reJ8.jpg",
-        "tags": [
-          "百合",
-          "舞-hime",
-          "sunrise",
-          "梶浦由记",
-          "tv",
-          "2004",
-          "吐便当",
-          "校园",
-          "中原麻衣",
-          "原创",
-          "战斗",
-          "全员白魔法"
-        ],
-        "rating": {
-          "score": 7.3,
-          "total": 1867
-        }
-      },
-      "predicted": 8.696,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、百合”相关作品通常比站内评价更偏爱。"
+        "与你评过 7 分的《青之芦苇》题材重合：校园、漫改。"
       ]
     },
     {
@@ -847,10 +527,42 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 2977
         }
       },
-      "predicted": 8.692,
+      "predicted": 8.748,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、奇幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《悠哉日常大王 Nonstop》题材重合：百合、日常。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 338,
+        "type": 2,
+        "name": "フルメタル・パニック? ふもっふ",
+        "nameCn": "全金属狂潮 校园篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/81/9f/338_W81CE.jpg",
+        "tags": [
+          "京阿尼",
+          "全金属狂潮",
+          "搞笑",
+          "爆笑",
+          "tv",
+          "校园",
+          "贺东招二",
+          "2003",
+          "校园篇",
+          "bon太君",
+          "轻小说改",
+          "全金属狂潮2"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 6560
+        }
+      },
+      "predicted": 8.737,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《甘城光辉游乐园》题材重合：恋爱、日常。"
       ]
     },
     {
@@ -879,202 +591,138 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 2484
         }
       },
-      "predicted": 8.687,
+      "predicted": 8.729,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“恋爱、科幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《古立特宇宙》题材重合：恋爱、科幻。"
       ]
     },
     {
       "subject": {
-        "id": 1891,
+        "id": 64172,
         "type": 2,
-        "name": "少女革命ウテナ アドゥレセンス黙示録",
-        "nameCn": "少女革命 思春期默示录",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/13/16/1891_qDgl0.jpg",
+        "name": "THE IDOLM@STER MOVIE 輝きの向こう側へ！",
+        "nameCn": "偶像大师 剧场版 向着光辉的彼岸！",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/f8/45/64172_8MujB.jpg",
         "tags": [
           "剧场版",
-          "j.c.staff",
-          "几原邦彦",
-          "百合",
-          "1999",
-          "原创",
-          "少女革命",
-          "幾原邦彦",
-          "榎戸洋司",
-          "少女革命ウテナ",
-          "神作",
-          "光宗信吉"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 3157
-        }
-      },
-      "predicted": 8.668,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 316007,
-        "type": 2,
-        "name": "GOTCHA！",
-        "nameCn": "",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/79/84/316007_KkQOZ.jpg",
-        "tags": [
-          "短片",
-          "bones",
-          "2020",
-          "web",
-          "pokemon",
-          "松本理恵",
-          "mv",
-          "宝可梦",
+          "a-1pictures",
+          "偶像大师",
+          "偶像",
+          "2014",
+          "锦织敦史",
           "游戏改",
-          "中村豊",
-          "松本理惠",
-          "林祐己"
-        ],
-        "rating": {
-          "score": 7.9,
-          "total": 878
-        }
-      },
-      "predicted": 8.65,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 340,
-        "type": 2,
-        "name": "蟲師",
-        "nameCn": "虫师",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/40/00/340_J14Mj.jpg",
-        "tags": [
-          "治愈",
-          "虫师",
-          "奇幻",
-          "神音乐",
-          "空灵",
-          "内涵系",
-          "tv",
-          "2005",
-          "治愈系",
-          "人生",
-          "水墨",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.7,
-          "total": 11948
-        }
-      },
-      "predicted": 8.612,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“奇幻、公路片”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 254,
-        "type": 2,
-        "name": "サムライチャンプルー",
-        "nameCn": "混沌武士",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
-        "tags": [
-          "渡边信一郎",
-          "混沌武士",
-          "tv",
-          "manglobe",
-          "原创",
-          "2004",
-          "武士",
-          "动作",
-          "hiphop",
-          "神作",
-          "战斗",
-          "向日葵味道"
-        ],
-        "rating": {
-          "score": 8.5,
-          "total": 11513
-        }
-      },
-      "predicted": 8.609,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“音乐、原创”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1029,
-        "type": 2,
-        "name": "ef - a tale of melodies.",
-        "nameCn": "悠久之翼2",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
-        "tags": [
-          "新房昭之",
-          "大沼心",
-          "ef",
-          "shaft",
-          "gal改",
-          "催泪",
-          "tv",
-          "minori",
-          "天门",
-          "2008年10月",
-          "ef_a_tale_of_melodies.",
-          "2008"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 6089
-        }
-      },
-      "predicted": 8.6,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“致郁、校园”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 10379,
-        "type": 2,
-        "name": "装甲騎兵ボトムズ",
-        "nameCn": "装甲骑兵VOTOMS",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c1/ba/10379_y3cGG.jpg",
-        "tags": [
-          "sunrise",
-          "高桥良辅",
-          "tv",
-          "1983",
-          "萝卜",
-          "原创",
-          "真实系",
-          "科幻",
-          "装甲骑兵",
-          "机战",
-          "激励哥",
-          "高橋良輔"
+          "im@s",
+          "音乐",
+          "2014年1月",
+          "輝きの向こう側へ！",
+          "錦織敦史"
         ],
         "rating": {
           "score": 8,
-          "total": 646
+          "total": 4284
         }
       },
-      "predicted": 8.598,
+      "predicted": 8.702,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“sunrise、科幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《超辉夜姬！》题材重合：百合、日常。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 14878,
+        "type": 2,
+        "name": "おジャ魔女どれみドッカ～ン!",
+        "nameCn": "小魔女DoReMi 大合奏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0e/e8/14878_1hWbu.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "魔法少女",
+          "原创",
+          "五十岚卓哉",
+          "东映",
+          "童年",
+          "東映アニメーション",
+          "细田守",
+          "tvb",
+          "马越嘉彦",
+          "doremi"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 408
+        }
+      },
+      "predicted": 8.697,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《麦兜故事》题材重合：日常、原创。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 23304,
+        "type": 2,
+        "name": "伝説巨神イデオン 発動篇",
+        "nameCn": "传说巨神伊迪安 发动篇",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3a/d6/23304_ijJx5.jpg",
+        "tags": [
+          "富野由悠季",
+          "剧场版",
+          "sunrise",
+          "1982",
+          "萝卜",
+          "原创",
+          "科幻",
+          "全灭",
+          "传说巨神伊迪安",
+          "机战",
+          "裸漂",
+          "日本"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 1017
+        }
+      },
+      "predicted": 8.697,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《Code Geass 复活的鲁路修》题材重合：sunrise、科幻。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 2741,
+        "type": 2,
+        "name": "タッチ",
+        "nameCn": "棒球英豪",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cd/cb/2741_GPGN2.jpg",
+        "tags": [
+          "安达充",
+          "棒球",
+          "爱情",
+          "touch",
+          "青春",
+          "校园",
+          "经典",
+          "tv",
+          "上杉达也",
+          "1985",
+          "童年",
+          "体育"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 1958
+        }
+      },
+      "predicted": 8.696,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《青之芦苇》题材重合：校园、恋爱。"
       ]
     },
     {
@@ -1103,74 +751,202 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 25298
         }
       },
-      "predicted": 8.583,
+      "predicted": 8.663,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“奇幻、剧情”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《灵能百分百 第三季》题材重合：奇幻、漫改。"
       ]
     },
     {
       "subject": {
-        "id": 3128,
+        "id": 1891,
         "type": 2,
-        "name": "デジモンアドベンチャー",
-        "nameCn": "数码宝贝大冒险",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/df/f8/3128_4QNAH.jpg",
+        "name": "少女革命ウテナ アドゥレセンス黙示録",
+        "nameCn": "少女革命 思春期默示录",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/13/16/1891_qDgl0.jpg",
         "tags": [
-          "童年",
-          "数码暴龙",
-          "永远的回忆",
-          "tv",
+          "剧场版",
+          "j.c.staff",
+          "几原邦彦",
+          "百合",
           "1999",
-          "热血",
-          "butterfly神曲",
-          "无限大的梦想",
-          "数码宝贝",
           "原创",
-          "东映",
-          "butterfly"
+          "少女革命",
+          "幾原邦彦",
+          "榎戸洋司",
+          "少女革命ウテナ",
+          "神作",
+          "光宗信吉"
         ],
         "rating": {
-          "score": 8.3,
-          "total": 8629
+          "score": 8.2,
+          "total": 3157
+        }
+      },
+      "predicted": 8.614,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《剧场版 少女☆歌剧 Revue Starlight》题材重合：百合、校园。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 254,
+        "type": 2,
+        "name": "サムライチャンプルー",
+        "nameCn": "混沌武士",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c5/2f/254_PLvyV.jpg",
+        "tags": [
+          "渡边信一郎",
+          "混沌武士",
+          "tv",
+          "manglobe",
+          "原创",
+          "2004",
+          "武士",
+          "动作",
+          "hiphop",
+          "神作",
+          "战斗",
+          "向日葵味道"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 11513
+        }
+      },
+      "predicted": 8.608,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 6 分的《宿命回响：命运节拍》题材重合：原创、音乐。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 340,
+        "type": 2,
+        "name": "蟲師",
+        "nameCn": "虫师",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/40/00/340_J14Mj.jpg",
+        "tags": [
+          "治愈",
+          "虫师",
+          "奇幻",
+          "神音乐",
+          "空灵",
+          "内涵系",
+          "tv",
+          "2005",
+          "治愈系",
+          "人生",
+          "水墨",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 11948
+        }
+      },
+      "predicted": 8.596,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《葬送的芙莉莲》题材重合：奇幻、公路片。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 10379,
+        "type": 2,
+        "name": "装甲騎兵ボトムズ",
+        "nameCn": "装甲骑兵VOTOMS",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c1/ba/10379_y3cGG.jpg",
+        "tags": [
+          "sunrise",
+          "高桥良辅",
+          "tv",
+          "1983",
+          "萝卜",
+          "原创",
+          "真实系",
+          "科幻",
+          "装甲骑兵",
+          "机战",
+          "激励哥",
+          "高橋良輔"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 646
         }
       },
       "predicted": 8.573,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《Code Geass 复活的鲁路修》题材重合：sunrise、科幻。"
       ]
     },
     {
       "subject": {
-        "id": 62285,
+        "id": 1029,
         "type": 2,
-        "name": "プリティーリズム・レインボーライブ",
-        "nameCn": "美妙旋律 Rainbow Live",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/da/39/62285_zcb5F.jpg",
+        "name": "ef - a tale of melodies.",
+        "nameCn": "悠久之翼2",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/84/d2/1029_Zc2U6.jpg",
         "tags": [
+          "新房昭之",
+          "大沼心",
+          "ef",
+          "shaft",
+          "gal改",
+          "催泪",
           "tv",
-          "偶像",
-          "美妙旋律",
-          "2013",
-          "原创",
-          "龙之子",
-          "2013年4月",
-          "幼女向",
-          "音乐",
-          "菱田正和",
-          "星光少女",
-          "加藤英美里"
+          "minori",
+          "天门",
+          "2008年10月",
+          "ef_a_tale_of_melodies.",
+          "2008"
         ],
         "rating": {
-          "score": 8,
-          "total": 302
+          "score": 8.1,
+          "total": 6090
         }
       },
-      "predicted": 8.57,
+      "predicted": 8.569,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、童年”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《CLANNAD 〜AFTER STORY〜》题材重合：校园、恋爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 207195,
+        "type": 2,
+        "name": "ゆるキャン△",
+        "nameCn": "摇曳露营△",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/18/bc/207195_2Cp3o.jpg",
+        "tags": [
+          "芳文社",
+          "治愈",
+          "百合",
+          "日常",
+          "2018年1月",
+          "漫画改",
+          "tv",
+          "摇曳露营△",
+          "c-station",
+          "露营",
+          "2018",
+          "轻百合"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 17837
+        }
+      },
+      "predicted": 8.564,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《街角魔族 2丁目》题材重合：百合、校园。"
       ]
     },
     {
@@ -1199,458 +975,106 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 12591
         }
       },
+      "predicted": 8.563,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 6 分的《君主·埃尔梅罗二世事件簿 魔眼收集列车 特别篇》题材重合：奇幻、梶浦由记。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 296659,
+        "type": 2,
+        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会",
+        "nameCn": "Love Live! 虹咲学园校园偶像同好会",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a7/35/296659_o709D.jpg",
+        "tags": [
+          "偶像",
+          "百合",
+          "sunrise",
+          "原创",
+          "lovelive",
+          "2020年10月",
+          "tv",
+          "音乐",
+          "校园",
+          "2020",
+          "扭曲",
+          "河村智之"
+        ],
+        "rating": {
+          "score": 7.5,
+          "total": 6118
+        }
+      },
+      "predicted": 8.561,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《夜晚的水母不会游泳》题材重合：扭曲、百合。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 860,
+        "type": 2,
+        "name": "カウボーイビバップ 天国の扉",
+        "nameCn": "星际牛仔 天国之扉",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/fc/49/860_gtiyS.jpg",
+        "tags": [
+          "剧场版",
+          "渡边信一郎",
+          "星际牛仔",
+          "sunrise",
+          "菅野よう子",
+          "bones",
+          "2001",
+          "原创",
+          "科幻",
+          "菅野洋子",
+          "cowboy",
+          "cowboy_bebop"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 7264
+        }
+      },
       "predicted": 8.558,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“奇幻、梶浦由记”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《红辣椒》题材重合：科幻、原创。"
       ]
     },
     {
       "subject": {
-        "id": 5694,
+        "id": 3128,
         "type": 2,
-        "name": "プリンセスチュチュ",
-        "nameCn": "萩萩公主",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_MdZo5.jpg",
-        "tags": [
-          "tv",
-          "2002",
-          "原创",
-          "童话",
-          "佐藤顺一",
-          "halfilmmaker",
-          "岡崎律子",
-          "芭蕾舞",
-          "萩萩公主",
-          "少女系",
-          "古典音乐",
-          "奇幻"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 720
-        }
-      },
-      "predicted": 8.556,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 207168,
-        "type": 2,
-        "name": "結城友奈は勇者である -鷲尾須美の章- 第3章 やくそく",
-        "nameCn": "结城友奈是勇者 -鹫尾须美之章- 第3章 约定",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d9/2c/207168_jk2kY.jpg",
-        "tags": [
-          "剧场版",
-          "百合",
-          "studio五组",
-          "原创",
-          "结城友奈是勇者",
-          "2017",
-          "战斗",
-          "2017年7月",
-          "魔法少女",
-          "岸诚二",
-          "-鹫尾须美之章-",
-          "致郁"
-        ],
-        "rating": {
-          "score": 7.3,
-          "total": 1294
-        }
-      },
-      "predicted": 8.554,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“致郁、百合”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3324,
-        "type": 2,
-        "name": "マインド・ゲーム",
-        "nameCn": "心灵游戏",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3c/e6/3324_y2yg1.jpg",
-        "tags": [
-          "汤浅政明",
-          "剧场版",
-          "studio4℃",
-          "2004",
-          "原创",
-          "湯浅政明",
-          "想像力",
-          "人生",
-          "渡辺信一郎",
-          "菅野洋子",
-          "渡边信一郎",
-          "漫画改"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 2374
-        }
-      },
-      "predicted": 8.549,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“奇幻、科幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 207195,
-        "type": 2,
-        "name": "ゆるキャン△",
-        "nameCn": "摇曳露营△",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/18/bc/207195_2Cp3o.jpg",
-        "tags": [
-          "芳文社",
-          "治愈",
-          "百合",
-          "日常",
-          "2018年1月",
-          "漫画改",
-          "tv",
-          "摇曳露营△",
-          "c-station",
-          "露营",
-          "2018",
-          "轻百合"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 17823
-        }
-      },
-      "predicted": 8.532,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 623179,
-        "type": 2,
-        "name": "「ray 超かぐや姫！Version」MV",
-        "nameCn": "",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/6f/da/623179_ww0Wi.jpg",
-        "tags": [
-          "短片",
-          "mv",
-          "百合",
-          "原创",
-          "2026",
-          "studiocolorido",
-          "山下清悟",
-          "web",
-          "日本",
-          "studiochromato",
-          "音乐",
-          "2026年1月"
-        ],
-        "rating": {
-          "score": 7.8,
-          "total": 1165
-        }
-      },
-      "predicted": 8.527,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、恋爱”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3130,
-        "type": 2,
-        "name": "デジモンテイマーズ",
-        "nameCn": "数码宝贝驯兽师之王",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c9/22/3130_cGKH5.jpg",
+        "name": "デジモンアドベンチャー",
+        "nameCn": "数码宝贝大冒险",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/df/f8/3128_4QNAH.jpg",
         "tags": [
           "童年",
-          "数码宝贝",
-          "tv",
-          "2001",
-          "东映",
-          "馴獸師之王",
-          "原创",
           "数码暴龙",
-          "催泪弹结局",
-          "刷蓝卡",
-          "燃！",
-          "digimon"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 2703
-        }
-      },
-      "predicted": 8.525,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 977,
-        "type": 2,
-        "name": "あずまんが大王 THE ANIMATION",
-        "nameCn": "笑园漫画大王",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cc/1a/977_5rRBg.jpg",
-        "tags": [
-          "搞笑",
-          "j.c.staff",
-          "阿兹漫画大王",
-          "校园",
+          "永远的回忆",
           "tv",
-          "日常",
-          "治愈",
-          "2002",
-          "漫画改",
-          "大阪",
-          "四格",
-          "电波"
-        ],
-        "rating": {
-          "score": 7.9,
-          "total": 2950
-        }
-      },
-      "predicted": 8.524,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、电波”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2979,
-        "type": 2,
-        "name": "勇者王ガオガイガーFINAL",
-        "nameCn": "勇者王GaoGaiGar Final",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2d/71/2979_VygjJ.jpg",
-        "tags": [
-          "ova",
-          "sunrise",
-          "勇者王",
-          "萝卜",
-          "2000",
-          "燃",
+          "1999",
           "热血",
+          "butterfly神曲",
+          "无限大的梦想",
+          "数码宝贝",
           "原创",
-          "科幻",
-          "勇者シリーズ",
-          "机战",
-          "童年"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 499
-        }
-      },
-      "predicted": 8.515,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“sunrise、童年”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 2921,
-        "type": 2,
-        "name": "めぞん一刻",
-        "nameCn": "相聚一刻",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/17/d8/2921_Po9M8.jpg",
-        "tags": [
-          "高桥留美子",
-          "tv",
-          "1986",
-          "漫画改",
-          "相聚一刻",
-          "恋爱",
-          "studiodeen",
-          "爱情",
-          "搞笑",
-          "生活",
-          "经典",
-          "漫改"
-        ],
-        "rating": {
-          "score": 8.1,
-          "total": 735
-        }
-      },
-      "predicted": 8.499,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“恋爱、日常”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 262897,
-        "type": 2,
-        "name": "ゆるキャン△ SEASON 2",
-        "nameCn": "摇曳露营△ 第二季",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0f/50/262897_d3555.jpg",
-        "tags": [
-          "芳文社",
-          "日常",
-          "治愈",
-          "2021年1月",
-          "漫画改",
-          "轻百合",
-          "tv",
-          "百合",
-          "摇曳露营δ",
-          "c-station",
-          "2021",
-          "露营"
+          "东映",
+          "butterfly"
         ],
         "rating": {
           "score": 8.3,
-          "total": 12704
+          "total": 8629
         }
       },
-      "predicted": 8.495,
+      "predicted": 8.553,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“百合、萌系”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 844,
-        "type": 2,
-        "name": "人狼 JIN-ROH",
-        "nameCn": "人狼",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e9/7e/844_Z2u77.jpg",
-        "tags": [
-          "押井守",
-          "剧场版",
-          "production.i.g",
-          "1999",
-          "冲浦启之",
-          "科幻",
-          "原创",
-          "沖浦啓之",
-          "人狼",
-          "productioni.g",
-          "爱情",
-          "小红帽"
-        ],
-        "rating": {
-          "score": 8,
-          "total": 3234
-        }
-      },
-      "predicted": 8.493,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“科幻、动画电影”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 1704,
-        "type": 2,
-        "name": "HUNTER×HUNTER",
-        "nameCn": "猎人",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a5/88/1704_kwXKE.jpg",
-        "tags": [
-          "富坚义博",
-          "hunter×hunter",
-          "热血",
-          "万年坑",
-          "tv",
-          "1999",
-          "全职猎人",
-          "漫画改",
-          "坑",
-          "集英社",
-          "战斗",
-          "神作"
-        ],
-        "rating": {
-          "score": 8.4,
-          "total": 5891
-        }
-      },
-      "predicted": 8.487,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 750,
-        "type": 2,
-        "name": "ARIA The OVA ～ARIETTA～",
-        "nameCn": "水星领航员 OVA ～ARIETTA～",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b1/37/750_21A6l.jpg",
-        "tags": [
-          "ova",
-          "水星领航员",
-          "治愈",
-          "2007",
-          "aria",
-          "漫画改",
-          "halfilmmaker",
-          "治愈系",
-          "佐藤顺一",
-          "治愈系神作",
-          "日常",
-          "漫改"
-        ],
-        "rating": {
-          "score": 8.2,
-          "total": 1719
-        }
-      },
-      "predicted": 8.473,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“百合、奇幻”相关作品通常比站内评价更偏爱。"
-      ]
-    },
-    {
-      "subject": {
-        "id": 3166,
-        "type": 2,
-        "name": "超時空要塞マクロス",
-        "nameCn": "超时空要塞",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/5e/6d/3166_Z9Q8z.jpg",
-        "tags": [
-          "超时空要塞",
-          "macross",
-          "tv",
-          "1982",
-          "科幻",
-          "河森正治",
-          "林明美",
-          "原创",
-          "萝卜",
-          "龙之子",
-          "音乐",
-          "机战"
-        ],
-        "rating": {
-          "score": 7.7,
-          "total": 1771
-        }
-      },
-      "predicted": 8.469,
-      "collaborativeLift": 0,
-      "reasons": [
-        "你的评分显示，对“童年、恋爱”相关作品通常比站内评价更偏爱。"
+        "与你评过 8 分的《幽灵公主》题材重合：奇幻、原创。"
       ]
     },
     {
@@ -1679,10 +1103,330 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 17780
         }
       },
-      "predicted": 8.454,
+      "predicted": 8.549,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“校园、noitamina”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《3月的狮子 第二季》题材重合：校园、漫改。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 623179,
+        "type": 2,
+        "name": "「ray 超かぐや姫！Version」MV",
+        "nameCn": "",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/6f/da/623179_ww0Wi.jpg",
+        "tags": [
+          "短片",
+          "mv",
+          "百合",
+          "原创",
+          "2026",
+          "studiocolorido",
+          "山下清悟",
+          "web",
+          "日本",
+          "studiochromato",
+          "音乐",
+          "2026年1月"
+        ],
+        "rating": {
+          "score": 7.8,
+          "total": 1165
+        }
+      },
+      "predicted": 8.534,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《超辉夜姬！》题材重合：百合、恋爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 262897,
+        "type": 2,
+        "name": "ゆるキャン△ SEASON 2",
+        "nameCn": "摇曳露营△ 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/0f/50/262897_d3555.jpg",
+        "tags": [
+          "芳文社",
+          "日常",
+          "治愈",
+          "2021年1月",
+          "漫画改",
+          "轻百合",
+          "tv",
+          "百合",
+          "摇曳露营δ",
+          "c-station",
+          "2021",
+          "露营"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 12704
+        }
+      },
+      "predicted": 8.526,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《街角魔族 2丁目》题材重合：百合、校园。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3324,
+        "type": 2,
+        "name": "マインド・ゲーム",
+        "nameCn": "心灵游戏",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3c/e6/3324_y2yg1.jpg",
+        "tags": [
+          "汤浅政明",
+          "剧场版",
+          "studio4℃",
+          "2004",
+          "原创",
+          "湯浅政明",
+          "想像力",
+          "人生",
+          "渡辺信一郎",
+          "菅野洋子",
+          "渡边信一郎",
+          "漫画改"
+        ],
+        "rating": {
+          "score": 8.1,
+          "total": 2374
+        }
+      },
+      "predicted": 8.504,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《风之谷》题材重合：奇幻、科幻。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 750,
+        "type": 2,
+        "name": "ARIA The OVA ～ARIETTA～",
+        "nameCn": "水星领航员 OVA ～ARIETTA～",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b1/37/750_21A6l.jpg",
+        "tags": [
+          "ova",
+          "水星领航员",
+          "治愈",
+          "2007",
+          "aria",
+          "漫画改",
+          "halfilmmaker",
+          "治愈系",
+          "佐藤顺一",
+          "治愈系神作",
+          "日常",
+          "漫改"
+        ],
+        "rating": {
+          "score": 8.2,
+          "total": 1719
+        }
+      },
+      "predicted": 8.491,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《末世二轮之旅》题材重合：百合、奇幻。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3423,
+        "type": 2,
+        "name": "劇場版 空の境界 第七章 殺人考察(後)",
+        "nameCn": "剧场版 空之境界 第七章 杀人考察（后）",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3d/32/3423_ZNaov.jpg",
+        "tags": [
+          "空之境界",
+          "剧场版",
+          "type-moon",
+          "ufotable",
+          "梶浦由記",
+          "奈须きのこ",
+          "两仪式",
+          "2009",
+          "空の境界",
+          "奇幻",
+          "坂本真绫",
+          "小说改"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 9998
+        }
+      },
+      "predicted": 8.468,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《刀剑神域 序列之争》题材重合：恋爱、奇幻。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 335579,
+        "type": 2,
+        "name": "ラブライブ！虹ヶ咲学園スクールアイドル同好会 2期",
+        "nameCn": "Love Live! 虹咲学园校园偶像同好会 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/78/6f/335579_3ldtt.jpg",
+        "tags": [
+          "偶像",
+          "原创",
+          "sunrise",
+          "百合",
+          "lovelive！",
+          "2022年4月",
+          "tv",
+          "音乐",
+          "校园",
+          "2022",
+          "田中仁",
+          "lovelive"
+        ],
+        "rating": {
+          "score": 7.4,
+          "total": 4462
+        }
+      },
+      "predicted": 8.465,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《夜晚的水母不会游泳》题材重合：扭曲、百合。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 770,
+        "type": 2,
+        "name": "天元突破グレンラガン",
+        "nameCn": "天元突破 红莲螺岩",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/4e/a0/770_EvrMq.jpg",
+        "tags": [
+          "热血",
+          "gainax",
+          "今石洋之",
+          "燃",
+          "天元突破グレンラガン",
+          "钻头",
+          "原创",
+          "tv",
+          "萝卜",
+          "超级系",
+          "2007",
+          "神作"
+        ],
+        "rating": {
+          "score": 8.5,
+          "total": 16799
+        }
+      },
+      "predicted": 8.453,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《DARLING in the FRANXX》题材重合：奇幻、科幻。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 207168,
+        "type": 2,
+        "name": "結城友奈は勇者である -鷲尾須美の章- 第3章 やくそく",
+        "nameCn": "结城友奈是勇者 -鹫尾须美之章- 第3章 约定",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/d9/2c/207168_jk2kY.jpg",
+        "tags": [
+          "剧场版",
+          "百合",
+          "studio五组",
+          "原创",
+          "结城友奈是勇者",
+          "2017",
+          "战斗",
+          "2017年7月",
+          "魔法少女",
+          "岸诚二",
+          "-鹫尾须美之章-",
+          "致郁"
+        ],
+        "rating": {
+          "score": 7.3,
+          "total": 1294
+        }
+      },
+      "predicted": 8.448,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《某科学的超电磁炮S》题材重合：百合、校园。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 518519,
+        "type": 2,
+        "name": "ONE PIECE FAN LETTER",
+        "nameCn": "航海王：粉丝来信",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/be/42/518519_DMDo8.jpg",
+        "tags": [
+          "海贼王",
+          "ova",
+          "2024",
+          "番外",
+          "东映动画",
+          "短片",
+          "tv",
+          "小说改",
+          "日本",
+          "2024年10月",
+          "东映",
+          "热血"
+        ],
+        "rating": {
+          "score": 8.6,
+          "total": 4370
+        }
+      },
+      "predicted": 8.437,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《来自深渊 漂泊之黄昏》题材重合：奇幻、催泪。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1027,
+        "type": 2,
+        "name": "舞-HiME",
+        "nameCn": "舞-HiME",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/88/3e/1027_7reJ8.jpg",
+        "tags": [
+          "百合",
+          "舞-hime",
+          "sunrise",
+          "梶浦由记",
+          "tv",
+          "2004",
+          "吐便当",
+          "校园",
+          "中原麻衣",
+          "原创",
+          "战斗",
+          "全员白魔法"
+        ],
+        "rating": {
+          "score": 7.3,
+          "total": 1867
+        }
+      },
+      "predicted": 8.437,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《SSSS.古立特》题材重合：百合、校园。"
       ]
     },
     {
@@ -1711,42 +1455,298 @@ globalThis.BangumiInitialRecommendationFeed = {
           "total": 11011
         }
       },
-      "predicted": 8.449,
+      "predicted": 8.42,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“恋爱、奇幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 6 分的《君主·埃尔梅罗二世事件簿 魔眼收集列车 特别篇》题材重合：奇幻、梶浦由记。"
       ]
     },
     {
       "subject": {
-        "id": 3423,
+        "id": 337,
         "type": 2,
-        "name": "劇場版 空の境界 第七章 殺人考察(後)",
-        "nameCn": "剧场版 空之境界 第七章 杀人考察（后）",
-        "image": "https://lain.bgm.tv/r/400/pic/cover/l/3d/32/3423_ZNaov.jpg",
+        "name": "フルメタル・パニック! The Second Raid",
+        "nameCn": "全金属狂潮 The Second Raid",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/35/7a/337_WzSea.jpg",
         "tags": [
-          "空之境界",
+          "全金属狂潮",
+          "京阿尼",
+          "tv",
+          "贺东招二",
+          "2005",
+          "科幻",
+          "萝卜",
+          "轻小说改",
+          "全金属狂潮3",
+          "雪野五月",
+          "关智一",
+          "武本康弘"
+        ],
+        "rating": {
+          "score": 7.8,
+          "total": 4782
+        }
+      },
+      "predicted": 8.418,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《境界的彼方 -I'LL BE HERE- 未来篇》题材重合：校园、恋爱。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1704,
+        "type": 2,
+        "name": "HUNTER×HUNTER",
+        "nameCn": "猎人",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/a5/88/1704_kwXKE.jpg",
+        "tags": [
+          "富坚义博",
+          "hunter×hunter",
+          "热血",
+          "万年坑",
+          "tv",
+          "1999",
+          "全职猎人",
+          "漫画改",
+          "坑",
+          "集英社",
+          "战斗",
+          "神作"
+        ],
+        "rating": {
+          "score": 8.4,
+          "total": 5891
+        }
+      },
+      "predicted": 8.416,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《JOJO的奇妙冒险》题材重合：奇幻、jump。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 977,
+        "type": 2,
+        "name": "あずまんが大王 THE ANIMATION",
+        "nameCn": "笑园漫画大王",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/cc/1a/977_5rRBg.jpg",
+        "tags": [
+          "搞笑",
+          "j.c.staff",
+          "阿兹漫画大王",
+          "校园",
+          "tv",
+          "日常",
+          "治愈",
+          "2002",
+          "漫画改",
+          "大阪",
+          "四格",
+          "电波"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 2950
+        }
+      },
+      "predicted": 8.412,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 9 分的《日常》题材重合：百合、电波。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 844,
+        "type": 2,
+        "name": "人狼 JIN-ROH",
+        "nameCn": "人狼",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e9/7e/844_Z2u77.jpg",
+        "tags": [
+          "押井守",
           "剧场版",
-          "type-moon",
-          "ufotable",
-          "梶浦由記",
-          "奈须きのこ",
-          "两仪式",
-          "2009",
-          "空の境界",
-          "奇幻",
-          "小说改",
-          "坂本真绫"
+          "production.i.g",
+          "1999",
+          "冲浦启之",
+          "科幻",
+          "原创",
+          "沖浦啓之",
+          "人狼",
+          "productioni.g",
+          "爱情",
+          "小红帽"
         ],
         "rating": {
           "score": 8,
-          "total": 9998
+          "total": 3235
         }
       },
-      "predicted": 8.449,
+      "predicted": 8.408,
       "collaborativeLift": 0,
       "reasons": [
-        "你的评分显示，对“恋爱、奇幻”相关作品通常比站内评价更偏爱。"
+        "与你评过 9 分的《攻壳机动队2 无罪》题材重合：科幻、原创。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 5694,
+        "type": 2,
+        "name": "プリンセスチュチュ",
+        "nameCn": "萩萩公主",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/b0/d6/5694_MdZo5.jpg",
+        "tags": [
+          "tv",
+          "2002",
+          "原创",
+          "童话",
+          "佐藤顺一",
+          "halfilmmaker",
+          "岡崎律子",
+          "芭蕾舞",
+          "萩萩公主",
+          "少女系",
+          "古典音乐",
+          "奇幻"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 720
+        }
+      },
+      "predicted": 8.406,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《冰雪奇缘》题材重合：奇幻、原创。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 67753,
+        "type": 2,
+        "name": "あしたのジョー2",
+        "nameCn": "明日之丈2",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e5/34/67753_OYWBt.jpg",
+        "tags": [
+          "tv",
+          "1980",
+          "明日之丈",
+          "出崎统",
+          "漫画改",
+          "拳击",
+          "运动",
+          "tms",
+          "漫改",
+          "热血",
+          "杉野昭夫",
+          "体育"
+        ],
+        "rating": {
+          "score": 8.7,
+          "total": 934
+        }
+      },
+      "predicted": 8.405,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 7 分的《MEGALO BOX》题材重合：漫改、tms。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 3130,
+        "type": 2,
+        "name": "デジモンテイマーズ",
+        "nameCn": "数码宝贝驯兽师之王",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/c9/22/3130_cGKH5.jpg",
+        "tags": [
+          "童年",
+          "数码宝贝",
+          "tv",
+          "2001",
+          "东映",
+          "馴獸師之王",
+          "原创",
+          "数码暴龙",
+          "催泪弹结局",
+          "刷蓝卡",
+          "燃！",
+          "digimon"
+        ],
+        "rating": {
+          "score": 8,
+          "total": 2703
+        }
+      },
+      "predicted": 8.405,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《蜡笔小新：我的超时空新娘》题材重合：奇幻、科幻。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 1269,
+        "type": 2,
+        "name": "ARIA The NATURAL",
+        "nameCn": "水星领航员 第二季",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/e0/04/1269_8hpU3.jpg",
+        "tags": [
+          "治愈",
+          "水星领航员",
+          "tv",
+          "aria",
+          "2006",
+          "治愈系神作",
+          "漫画改",
+          "halfilmmaker",
+          "2006年4月",
+          "日常",
+          "治愈系",
+          "漫改"
+        ],
+        "rating": {
+          "score": 8.3,
+          "total": 2859
+        }
+      },
+      "predicted": 8.403,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《悠哉日常大王 Nonstop》题材重合：百合、日常。"
+      ]
+    },
+    {
+      "subject": {
+        "id": 109869,
+        "type": 2,
+        "name": "たまゆら～卒業写真～",
+        "nameCn": "玉响～毕业写真～",
+        "image": "https://lain.bgm.tv/r/400/pic/cover/l/2b/30/109869_w5vOo.jpg",
+        "tags": [
+          "剧场版",
+          "治愈",
+          "原创",
+          "ova",
+          "玉响",
+          "2015",
+          "佐藤顺一",
+          "日常",
+          "tyoanimations",
+          "百合",
+          "完结篇",
+          "2015年4月"
+        ],
+        "rating": {
+          "score": 7.9,
+          "total": 957
+        }
+      },
+      "predicted": 8.4,
+      "collaborativeLift": 0,
+      "reasons": [
+        "与你评过 8 分的《摇曳百合 夏日时光！》题材重合：百合、校园。"
       ]
     }
   ]
@@ -2174,7 +2174,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const ENTITY_RETRY_LIMIT = 3;
   const ENTITY_RETRY_BASE_DELAY = 1200;
   const AUTO_RESUME_BACKOFF = 15 * 60 * 1000;
-  const APP_VERSION = "0.11.3";
+  const APP_VERSION = "0.12.0";
   const RANK_PAGE_SIZE = 12;
   const TABS = Object.freeze({ overview: "年代", tags: "标签", staff: "创作", cast: "声优" });
 
@@ -2790,7 +2790,7 @@ globalThis.BangumiInitialRecommendationFeed = {
   const Feed = globalThis.BangumiRecommendationFeed;
   if (!Feed || document.getElementById("bgmpr-host")) return;
 
-  const APP_VERSION = "0.11.3";
+  const APP_VERSION = "0.12.0";
   const OWNER = Feed.OWNER;
   const PAGE_SIZE = 5;
   const FEED_TTL = 6 * 60 * 60 * 1000;
