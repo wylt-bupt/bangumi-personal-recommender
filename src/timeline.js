@@ -370,9 +370,11 @@
     let grid = '';
     for (const { tick, y: tickY } of placedTicks) {
       const gy = tickY.toFixed(1);
-      grid += `<line class="hm-grid-line${tick ? '' : ' zero'}" x1="${padL}" x2="${padL + plotW}" y1="${gy}" y2="${gy}"/>` +
+      grid += `<line class="hm-grid-line" x1="${padL}" x2="${padL + plotW}" y1="${gy}" y2="${gy}"/>` +
         `<text class="hm-tick" x="${padL - 5}" y="${(Number(gy) + 3).toFixed(1)}" text-anchor="end">${tick}</text>`;
     }
+    // 刻度标签从最低一档（5 集）起算，但柱子总要有个落地线，基线单独画。
+    grid += `<line class="hm-grid-line zero" x1="${padL}" x2="${padL + plotW}" y1="${base.toFixed(1)}" y2="${base.toFixed(1)}"/>`;
     let bars = '';
     if (!hiddenSeries.has('count')) {
       for (let index = 0; index < n; index++) {

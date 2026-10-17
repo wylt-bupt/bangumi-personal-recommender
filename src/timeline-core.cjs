@@ -154,41 +154,38 @@
   }
   /* ── 纵轴：零安全对数刻度（与账本日支出图同一套视觉语言）──
      逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下普通日子
-     全部压成发丝；压缩不足时，八成的日子又挤在底部一小条里，图的面积跟
-     数据分布完全不对应。所以常数 c 不写死，按数据自己标定：让“八成日子都
-     不超过的那一天”落在 65% 高度，其余顶部空间留给少数高峰。刻度取 1/2/5
-     这类整数，像素密度交给调用方筛。 */
-  const COMMON_SHARE = 0.8, COMMON_HEIGHT = 0.65, MIN_COMPRESS = 0.05, MAX_COMPRESS = 25;
+     全部压成发丝。但对数压缩也不能一味往上抬——抬过头了，1 集的日子会顶到
+     绘图区四分之一高，图片面积跟数量又对不上。所以压缩力度锚在最低刻度线
+     上：纵轴最低标 5 集，让它固定落在 22% 高度，5 集以下按对数自然收在底部，
+     顶部留给少数高峰。刻度只出 5/10/20/50… 这类整数，像素密度交给调用方筛。 */
+  const AXIS_BASE = 5, BASE_HEIGHT = 0.22, MIN_COMPRESS = 0.05, MAX_COMPRESS = 25;
   function countAxis(values) {
     const finite = (values || []).filter(value => Number.isFinite);
     const max = finite.length ? Math.max(...finite) : 0;
     const unit = Math.max(1, niceStep(max / 5 || 1));
     // +0.5：最大值正好落在刻度上时也要留出头顶的一点空隙，否则最高的柱子贴边。
-    const hi = Math.max(unit, Math.ceil((max + 0.5) / unit) * unit);
-    // 全零的日子本来就没有柱子，不参与标定，否则样本稀疏时会被推到极端压缩。
-    const active = finite.filter(value => value > 0).sort((a, b) => a - b);
-    const quantile = active.length ? active[Math.min(active.length - 1, Math.floor(COMMON_SHARE * (active.length - 1)))] : 0;
-    const common = Math.min(hi, Math.max(1, quantile));
+    // 下限取最低刻度：再小的值域也得有一条刻度线撑着。
+    const hi = Math.max(AXIS_BASE, Math.ceil((max + 0.5) / unit) * unit);
     // ratio(c) 随 c 单调递减：c 越小，低值被抬得越高。
-    const ratio = c => Math.log1p(common / c) / Math.log1p(hi / c);
+    const ratio = c => Math.log1p(AXIS_BASE / c) / Math.log1p(hi / c);
     let c = MAX_COMPRESS;
-    if (ratio(MIN_COMPRESS) <= COMMON_HEIGHT) c = MIN_COMPRESS;
-    else if (ratio(MAX_COMPRESS) > COMMON_HEIGHT) c = MAX_COMPRESS;
+    if (ratio(MIN_COMPRESS) <= BASE_HEIGHT) c = MIN_COMPRESS;
+    else if (ratio(MAX_COMPRESS) > BASE_HEIGHT) c = MAX_COMPRESS;
     else {
       let low = MIN_COMPRESS, high = MAX_COMPRESS;
       for (let step = 0; step < 40; step++) {
         const mid = Math.sqrt(low * high);
-        if (ratio(mid) > COMMON_HEIGHT) low = mid; else high = mid;
+        if (ratio(mid) > BASE_HEIGHT) low = mid; else high = mid;
       }
       c = Math.sqrt(low * high);
     }
     const transform = value => Math.sign(value) * Math.log1p(Math.abs(value) / c);
     const top = transform(hi);
-    const ticks = [0];
+    const ticks = [];
     for (let power = 1; power <= hi; power *= 10) {
       for (const multiple of [1, 2, 5]) {
         const value = power * multiple;
-        if (value < hi && value !== ticks[ticks.length - 1]) ticks.push(value);
+        if (value >= AXIS_BASE && value < hi && value !== ticks[ticks.length - 1]) ticks.push(value);
       }
     }
     ticks.push(hi);

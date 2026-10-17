@@ -157,7 +157,8 @@ test('rolling mean uses the full window and never exceeds it', () => {
 test('count axis keeps integer ticks, a zero floor and headroom above the peak', () => {
   const flat = C.countAxis([0, 0, 0]);
   assert.equal(flat.lo, 0);
-  assert.ok(flat.hi >= 1, 'an all-zero series still needs a non-degenerate axis');
+  assert.ok(flat.hi >= 5, `an empty series still needs one labelled tick, got ${flat.hi}`);
+  assert.deepEqual(flat.ticks, [5], 'the lowest labelled tick is 5 episodes');
   assert.ok(flat.ticks.every(Number.isInteger));
   const spiky = C.countAxis([1, 1, 2, 1, 24, 1, 3]);
   assert.equal(spiky.lo, 0);
@@ -168,9 +169,10 @@ test('count axis keeps integer ticks, a zero floor and headroom above the peak',
   assert.ok(spiky.position(1) > 1 / 24, `one episode should be clearly visible, got ${spiky.position(1)}`);
   let previous = -1;
   for (const tick of spiky.ticks) { assert.ok(tick > previous, 'ticks ascend'); previous = tick; }
+  assert.equal(spiky.ticks[0], 5, `no tick below 5 episodes: ${spiky.ticks.join(', ')}`);
   assert.equal(spiky.ticks.at(-1), spiky.hi, 'the top tick always marks the axis ceiling');
 });
-test('count axis allocates most of its height to the common range', () => {
+test('count axis anchors the compression on the lowest labelled tick', () => {
   // 真实账号的一年分布：365 天里 86 天 0 集、162 天 1-5 集、最多的一天 63 集。
   const counts = [];
   for (let i = 0; i < 86; i++) counts.push(0);
@@ -181,17 +183,17 @@ test('count axis allocates most of its height to the common range', () => {
   for (let i = 0; i < 10; i++) counts.push(20 + i);
   counts.push(63);
   const axis = C.countAxis(counts);
-  const active = counts.filter(value => value > 0).sort((a, b) => a - b);
-  const common = active[Math.floor(0.8 * (active.length - 1))];
-  // 八成有记录的日子都不超过 common：它必须落在 65% 高度，普通日子才占得住面积。
-  assert.ok(Math.abs(axis.position(common) - 0.65) < 0.02, `common range should own 65% of the plot, got ${axis.position(common).toFixed(3)} at ${common} episodes`);
-  // 一次补番的高峰仍然顶天，但不再把其余部分压成发丝。
-  assert.ok(axis.position(1) > 0.2, `a single-episode day must stay clearly visible, got ${axis.position(1).toFixed(3)}`);
-  assert.ok(axis.position(10) > 0.55, `ten episodes or fewer should own most of the plot, got ${axis.position(10).toFixed(3)}`);
-  assert.ok(axis.position(1) < axis.position(3) && axis.position(3) < axis.position(10));
-  assert.ok(axis.constant < 1, `the heavy tail should compress harder than the old constant of 3, got ${axis.constant.toFixed(3)}`);
-  // 1/2/5 系列刻度：好读，且不随值域变多。
-  assert.deepEqual(axis.ticks.filter(tick => tick > 0 && tick < axis.hi), [1, 2, 5, 10, 20, 50]);
+  // 最低刻度线（5 集）固定落在 22% 高度，压缩力度不再随分位数漂移。
+  assert.ok(Math.abs(axis.position(5) - 0.22) < 0.02, `five episodes define the first gridline at 22%, got ${axis.position(5).toFixed(3)}`);
+  // 1 集只占一条薄边：上一版把 1 集抬到 26%，面积跟数量完全脱节。
+  assert.ok(axis.position(1) < 0.1, `a single-episode day must stay a sliver, got ${axis.position(1).toFixed(3)}`);
+  assert.ok(axis.position(1) > 1 / 63, `a single-episode day must still be visible, got ${axis.position(1).toFixed(3)}`);
+  assert.ok(axis.position(3) < axis.position(5) && axis.position(5) < axis.position(10) && axis.position(10) < axis.position(63));
+  // 高峰仍然顶天，尾部靠对数压住，但压缩比 1.0.19 的 c≈0.2 轻得多。
+  assert.ok(axis.position(63) > 0.85, `the peak should still reach the top, got ${axis.position(63).toFixed(3)}`);
+  assert.ok(axis.constant > 3, `the compression must be gentler than the old constant of 3, got ${axis.constant.toFixed(3)}`);
+  // 刻度从 5 起算：0 只作基线，不再标数字。
+  assert.deepEqual(axis.ticks, [5, 10, 20, 50, 80], 'ticks are whole episodes starting at 5');
 });
 test('deep backfill keeps sync due until the stream reaches the oldest record', () => {
   const state = C.freshState('wylt');
