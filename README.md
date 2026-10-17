@@ -13,10 +13,15 @@
 
 ## 当前版本
 
-- 推荐与回顾组件：`0.12.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
+- 推荐与回顾组件：`0.12.1`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
 - 独立活跃度热力图：`1.0.15`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
 - 独立我的放送表：`1.0.8`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
+
+## 0.12.1：标签页改为排行列表
+
+- 动画回顾的"标签"页从词云改为与"创作""声优"一致的排行列表：序号、名称、部数与个人均分条形、每页 12 条分页，附搜索框与"作品数 / 均分"排序切换；均分模式沿用"仅作品数位于前 10% 者入榜"的门槛。
+- 标签名可点击，跳转到站内标签检索页 `/search/tag/anime/<标签>`；入榜口径不变（出现次数大于 10 且排除时间标签），词云相关的布局与字号代码随之移除。
 
 ## 0.12.0：系列变体剔除、指名引证与同行池扩容
 

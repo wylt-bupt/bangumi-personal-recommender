@@ -179,10 +179,9 @@
         cancel: false,
         activeTab: "overview",
         activeStaffGroup: "directors",
-        tagMetric: "count",
-        search: { staff: "", cast: "" },
-        pages: { staff: 1, cast: 1 },
-        sort: { staff: "works", cast: "works" },
+        search: { staff: "", cast: "", tags: "" },
+        pages: { staff: 1, cast: 1, tags: 1 },
+        sort: { staff: "works", cast: "works", tags: "works" },
         collections: [],
         people: {},
         cast: {},
@@ -215,9 +214,6 @@
         const caption = this.$('.viz-caption');
         if (caption && !this.shadow.activeElement?.matches('[data-viz-label]')) caption.textContent = caption.dataset.default;
       });
-      this.cloudObserver = new ResizeObserver(() => this.scheduleCloud());
-      this.cloudObserver.observe(this.host);
-      document.fonts?.ready.then(() => { const cloud = this.$('.tag-cloud'); if (cloud) delete cloud.dataset.width; this.scheduleCloud(); });
       const updateTheme = () => { this.host.dataset.theme = this.detectTheme(); };
       updateTheme();
       new MutationObserver(updateTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
@@ -383,10 +379,6 @@
       if (action === "all") this.enrichAll();
       if (action === "cancel") this.pauseEnrichment();
       if (action === "tab") { this.state.activeTab = event.target.closest("[data-tab]")?.dataset.tab || "overview"; this.render(); }
-      if (action === "tag-metric") {
-        const metric = event.target.closest("[data-metric]")?.dataset.metric;
-        if (["count", "average"].includes(metric)) { this.state.tagMetric = metric; this.render(); }
-      }
       if (action === "staff-group") { this.state.activeStaffGroup = event.target.closest("[data-group]")?.dataset.group || "directors"; this.state.search.staff = ""; this.state.pages.staff = 1; this.render(); }
       if (action === "sort") {
         const button = event.target.closest("[data-sort-kind]");
@@ -445,19 +437,20 @@
       if (pages <= 1) return "";
       return `<div class="pager" aria-label="分页"><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button><span>${page} / ${pages}</span><button type="button" data-action="page" data-page-kind="${kind}" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>下一页</button></div>`;
     }
-    listRows(rows, kind, pageKind) {
-      if (!rows.length) return '<p class="empty">暂无匹配的人物。</p>';
+    listRows(rows, kind, pageKind, pool) {
+      if (!rows.length) return `<p class="empty">暂无匹配的${kind === 'tags' ? '标签' : '人物'}。</p>`;
       const pages = Math.max(1, Math.ceil(rows.length / RANK_PAGE_SIZE));
       const page = Math.min(pages, Math.max(1, this.state.pages[pageKind] || 1));
       this.state.pages[pageKind] = page;
       const offset = (page - 1) * RANK_PAGE_SIZE;
       const shown = rows.slice(offset, offset + RANK_PAGE_SIZE);
       const byScore = this.state.sort[pageKind] === 'average';
-      const max = byScore ? 10 : Math.max(1, ...this.stats().groups[pageKind === 'cast' ? 'cast' : this.state.activeStaffGroup].map(row => row.works));
+      const max = byScore ? 10 : Math.max(1, ...(pool || []).map(row => row.works));
       return `<div class="rank-axis" aria-hidden="true"><span>${byScore ? '个人均分' : '看过的作品'} · 0—${max}${byScore ? ' 分' : ' 部'}</span></div><ol class="people-list" start="${offset + 1}">${shown.map((row, index) => {
         const detail = `${formatNumber(row.works)} 部 · 均分 ${formatRate(row.averageRate)}`;
         const share = Math.max(0, Math.min(100, (byScore ? row.averageRate : row.works) / max * 100));
-        return `<li><span class="rank">${offset + index + 1}</span><div><div class="person-heading"><a href="/person/${row.id}" target="_blank" rel="noopener">${escapeHtml(row.name)}</a><span class="person-meta">${byScore ? formatRate(row.averageRate) : `${formatNumber(row.works)} 部`}</span></div><span class="sr-only">${detail}</span><span class="person-track" title="${detail}" aria-hidden="true"><i class="person-bar" style="--share:${share}%"></i></span></div></li>`;
+        const href = kind === 'tags' ? `/search/tag/anime/${encodeURIComponent(row.name)}` : `/person/${row.id}`;
+        return `<li><span class="rank">${offset + index + 1}</span><div><div class="person-heading"><a href="${href}" target="_blank" rel="noopener">${escapeHtml(row.name)}</a><span class="person-meta">${byScore ? formatRate(row.averageRate) : `${formatNumber(row.works)} 部`}</span></div><span class="sr-only">${detail}</span><span class="person-track" title="${detail}" aria-hidden="true"><i class="person-bar" style="--share:${share}%"></i></span></div></li>`;
       }).join("")}</ol>${this.pager(pageKind, page, pages)}`;
     }
     overview(stats) {
@@ -483,102 +476,32 @@
         }).join('')}</div></div></section>`;
     }
     tags(rows) {
-      rows = Viz.featuredTags(rows);
-      if (!rows.length) return '<p class="empty">还没有数量大于 10 部的标签。</p>';
-      const metric = this.state.tagMetric === 'average' ? 'average' : 'count';
-      const ranked = [...rows]
-        .filter(row => metric === 'count' || row.ratedCount > 0)
-        .sort((a, b) => metric === 'average'
-          ? b.averageRate - a.averageRate || b.ratedCount - a.ratedCount || b.count - a.count || a.name.localeCompare(b.name, 'zh-CN')
-          : b.count - a.count || a.name.localeCompare(b.name, 'zh-CN'));
-      const values = ranked.map(row => metric === 'average' ? row.averageRate : row.count);
-      const min = Math.min(...values), max = Math.max(...values);
-      const caption = metric === 'average' ? '标签作品个人均分' : '标签出现次数';
-      const controls = `<div class="cloud-metric" role="group" aria-label="词云数值"><button type="button" data-action="tag-metric" data-metric="count" aria-pressed="${metric === 'count'}">出现次数</button><button type="button" data-action="tag-metric" data-metric="average" aria-pressed="${metric === 'average'}">个人均分</button></div>`;
-      return `<section aria-label="数量大于10部的个人标签词云"><div class="viz-heading"><span class="viz-caption" data-default="${caption}" aria-live="polite">${caption}</span>${controls}</div><div class="tag-cloud">${ranked.map((row, index) => {
-        const value = metric === 'average' ? row.averageRate : row.count;
-        const ratio = max === min ? 0.5 : (value - min) / (max - min);
-        const tone = ratio >= 0.72 ? 'hero' : ratio >= 0.42 ? 'strong' : ratio >= 0.18 ? 'medium' : 'quiet';
-        const size = metric === 'average' ? Viz.scoreFontSize(value, values) : Viz.fontSize(value, min, max);
-        const seed = Array.from(String(row.name)).reduce((hash, character) => Math.imul(hash ^ character.codePointAt(0), 16777619) >>> 0, 2166136261);
-        const angle = 0;
-        const color = seed % 8;
-        const detail = metric === 'average'
-          ? `${row.name} · 个人均分 ${formatRate(row.averageRate)} · ${row.ratedCount}/${row.count} 部已评分`
-          : `${row.name} · ${row.count} 部`;
-        return `<button class="cloud-word" data-tone="${tone}" data-color="${color}" data-count="${row.count}" data-value="${value}" data-viz-label="${escapeHtml(detail)}" title="${escapeHtml(detail)}" aria-label="${escapeHtml(detail)}" data-size="${size}" data-angle="${angle}" data-seed="${seed}" style="font-size:${size}px"><span class="cloud-label">${escapeHtml(row.name)}</span></button>`;
-      }).join('')}</div></section>`;
-    }
-    scheduleCloud() {
-      cancelAnimationFrame(this.cloudFrame);
-      this.cloudFrame = requestAnimationFrame(() => this.layoutCloud());
-    }
-    layoutCloud() {
-      const cloud = this.$('.tag-cloud');
-      if (!cloud) return;
-      const width = cloud.clientWidth;
-      if (width < 40 || cloud.dataset.width === String(width)) return;
-      const words = Array.from(cloud.querySelectorAll('.cloud-word'));
-      // Measure real browser text, including CJK/fallback fonts and browser text scaling.
-      words.forEach(word => {
-        word.hidden = false;
-        word.style.width = 'auto';
-        word.style.height = 'auto';
-        word.style.maxWidth = 'none';
-        word.style.removeProperty('--fit-scale');
-        const scale = Math.min(1, Math.pow(width / 680, width < 460 ? 0.58 : 0.35));
-        word.style.fontSize = Math.max(12, Number(word.dataset.size) * scale) + 'px';
-      });
-      words.forEach(word => {
-        const naturalWidth = word.querySelector('.cloud-label').offsetWidth;
-        if (naturalWidth > width - 32) word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 32) / naturalWidth) + 'px';
-        word.style.maxWidth = (width - 20) + 'px';
-      });
-      const boxes = words.map((word, index) => {
-        const label = word.querySelector('.cloud-label');
-        const angle = Math.abs(Number(word.dataset.angle) || 0) * Math.PI / 180;
-        let naturalWidth = label.offsetWidth;
-        let naturalHeight = label.offsetHeight;
-        let rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
-        if (rotatedWidth > width - 28) {
-          word.style.fontSize = Math.max(12, parseFloat(word.style.fontSize) * (width - 28) / rotatedWidth) + 'px';
-          naturalWidth = label.offsetWidth;
-          naturalHeight = label.offsetHeight;
-          rotatedWidth = Math.abs(Math.cos(angle)) * naturalWidth + Math.abs(Math.sin(angle)) * naturalHeight;
-        }
-        const rotatedHeight = Math.abs(Math.sin(angle)) * naturalWidth + Math.abs(Math.cos(angle)) * naturalHeight;
-        return { index, seed: Number(word.dataset.seed), width: Math.ceil(rotatedWidth) + 4, height: Math.ceil(rotatedHeight) + 3 };
-      });
-      // Every qualified tag is laid out; the packer never drops words.
-      const layout = Viz.packCloud(boxes, width);
-      const visible = new Set(layout.items.map(box => box.index));
-      words.forEach((word, index) => { word.hidden = !visible.has(index); });
-      for (const box of layout.items) {
-        const word = words[box.index];
-        word.style.setProperty('--fit-scale', String(box.fitScale || 1));
-        word.style.width = box.width + 'px'; word.style.height = box.height + 'px';
-        word.style.left = box.x + 'px'; word.style.top = box.y + 'px';
-      }
-      cloud.style.height = layout.height + 'px';
-      cloud.dataset.shape = layout.shape || 'dense';
-      cloud.dataset.visibleCount = String(layout.items.length);
-      cloud.dataset.fitScale = String(layout.scale || 1);
-      cloud.dataset.width = width;
-      cloud.classList.add('is-ready');
+      const featured = Viz.featuredTags(rows);
+      if (!featured.length) return '<p class="empty">还没有数量大于 10 部的标签。</p>';
+      const entries = featured.map(row => ({
+        id: row.name,
+        name: row.name,
+        works: row.count,
+        ratedWorks: row.ratedCount,
+        averageRate: row.averageRate,
+        eps: 0,
+      }));
+      const ranking = Core.rankEntries(entries, this.state.sort.tags, 0.1);
+      return `${this.rankingTools("tags", "标签")}${this.listRows(this.filterRows(ranking.rows, this.state.search.tags), "tags", "tags", ranking.rows)}`;
     }
     staff(stats) {
       const groups = [{ id: "directors", label: "导演" }, { id: "series", label: "系列构成" }, { id: "studios", label: "动画制作" }, { id: "originals", label: "原作 / 原案" }, { id: "scripts", label: "脚本" }, { id: "music", label: "音乐" }, { id: "characterDesign", label: "角色设计" }];
       const active = groups.find(group => group.id === this.state.activeStaffGroup) || groups[0];
       const ranking = Core.rankEntries(stats.groups[active.id] || [], this.state.sort.staff, 0.1, active.id === 'studios' ? 10 : null);
       const rows = this.filterRows(ranking.rows, this.state.search.staff);
-      return `<div class="role-switch" aria-label="创作职位">${groups.map(group => `<button type="button" data-action="staff-group" data-group="${group.id}" aria-pressed="${group.id === active.id}">${group.label}</button>`).join("")}</div>${this.rankingTools("staff", active.label)}${this.listRows(rows, "staff", "staff")}`;
+      return `<div class="role-switch" aria-label="创作职位">${groups.map(group => `<button type="button" data-action="staff-group" data-group="${group.id}" aria-pressed="${group.id === active.id}">${group.label}</button>`).join("")}</div>${this.rankingTools("staff", active.label)}${this.listRows(rows, "staff", "staff", ranking.rows)}`;
     }
     rankingTools(kind, label) {
       return `<div class="ranking-tools"><label><span class="sr-only">搜索${label}姓名</span><input type="search" data-search="${kind}" value="${escapeHtml(this.state.search[kind])}" placeholder="搜索${label}" autocomplete="off"></label>${this.sortControls(kind)}</div>`;
     }
     cast(stats) {
       const ranking = Core.rankEntries(stats.groups.cast, this.state.sort.cast, 0.1);
-      return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast")}`;
+      return `${this.rankingTools("cast", "声优")}${this.listRows(this.filterRows(ranking.rows, this.state.search.cast), "cast", "cast", ranking.rows)}`;
     }
     content(stats) {
       if (!["staff", "cast"].includes(this.state.activeTab)) return this.overview(stats);
@@ -589,7 +512,7 @@
     render() {
       const active = this.shadow.activeElement;
       const action = active?.getAttribute("data-action");
-      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-metric') || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
+      const key = active?.getAttribute("data-tab") || active?.getAttribute("data-group") || active?.getAttribute("data-sort") || active?.getAttribute('data-year-page') || active?.getAttribute('data-page-kind');
       const name = active?.getAttribute('aria-label');
       const stats = this.stats();
       this.isBusy();
@@ -598,19 +521,16 @@
       const tabs = Object.entries(TABS).map(([id, label]) => `<button type="button" aria-pressed="${this.state.activeTab === id}" data-action="tab" data-tab="${id}">${label}</button>`).join("");
       this.shadow.innerHTML = `${this.styles()}<section class="module" aria-labelledby="bgmstats-title" aria-busy="${this.state.busy}"><header class="module-head"><h2 id="bgmstats-title">动画回顾</h2><button class="update-button" type="button" data-action="sync" title="核对个人收藏与评分" aria-live="polite" ${this.state.busy ? "disabled" : ""}>${this.state.syncing ? "更新中…" : "更新"}</button></header><div class="tabs" role="group" aria-label="回顾分类">${tabs}</div><div class="progress" aria-live="polite" ${needsNotice ? "" : "hidden"}><span data-role="progress-label">${escapeHtml(progress.label)}</span><span data-role="progress-count"></span></div><div class="content">${this.content(stats)}</div></section>`;
       if (action && key) this.shadow.querySelectorAll('[data-action]').forEach(el => {
-        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-metric') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
+        const nextKey = el.getAttribute('data-tab') || el.getAttribute('data-group') || el.getAttribute('data-sort') || el.getAttribute('data-year-page') || el.getAttribute('data-page-kind');
         if (el.getAttribute('data-action') === action && (action === 'year-page' ? el.getAttribute('aria-label') === name : nextKey === key && (!active?.textContent || el.textContent === active.textContent)) && !el.disabled) el.focus({ preventScroll: true });
       });
-      this.scheduleCloud();
     }
     styles() { return `<style>${globalThis.BangumiProfileUI.css}
       .content{padding:18px 0 0;min-height:230px}.content header{display:none}
       .entity-tools{display:flex;justify-content:flex-end;gap:6px;margin-bottom:12px;font-size:12px}
       .viz-heading{display:flex;justify-content:space-between;align-items:center;min-height:36px;gap:10px;color:var(--muted);font-size:12px;margin-bottom:16px}.viz-caption{overflow-wrap:anywhere}
-      .cloud-metric{display:flex;flex-shrink:0;gap:3px;padding:3px;background:var(--soft);border-radius:8px}.cloud-metric button{padding:4px 10px;font-size:12px}.cloud-metric button[aria-pressed="true"]{color:var(--link);background:var(--surface);box-shadow:0 1px 4px #0000000b}
       .year-plot{position:relative;margin:20px 16px 38px 38px;height:210px}.year-grid{position:absolute;inset:0;pointer-events:none}.year-grid>span{position:absolute;left:0;right:0;border-top:1px solid var(--line)}.year-grid b{position:absolute;right:calc(100% + 10px);top:-10px;font-size:11px;font-weight:400;color:var(--muted)}
       .year-columns{position:absolute;inset:0;display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));gap:clamp(1px,.45cqw,5px)}.year-column{position:relative;padding:0;border-radius:3px 3px 0 0;min-width:0;display:flex;align-items:flex-end;justify-content:center}.year-column:hover:not(:disabled){background:var(--soft)}.column-fill{position:relative;display:block;width:100%;max-width:24px;height:var(--height);border-radius:3px 3px 0 0;background:linear-gradient(to top,color-mix(in srgb,var(--pink) 14%,transparent),var(--pink))}.column-value{position:absolute;left:50%;bottom:calc(100% + 3px);transform:translateX(-50%);font-size:11px;color:var(--muted);display:none}.year-column:hover .column-value,.year-column:focus-visible .column-value{display:block}.column-year{display:none;position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);font-size:10px;color:var(--muted)}.year-column[data-label-five="true"] .column-year{display:block}
-      .tag-cloud{--cloud-c0:#313642;--cloud-c1:#8b3f59;--cloud-c2:#836d2f;--cloud-c3:#4f6b61;--cloud-c4:#53677e;--cloud-c5:#765570;--cloud-c6:#805947;--cloud-c7:#5f666f;position:relative;isolation:isolate;min-height:240px;visibility:hidden;overflow:visible;background:radial-gradient(ellipse at center,#fbfbfc 0%,#fdfdfd 58%,transparent 78%)}.tag-cloud.is-ready{visibility:visible}:host([data-theme="dark"]) .tag-cloud{--cloud-c0:#e4e7ed;--cloud-c1:#e5a0b3;--cloud-c2:#d6c180;--cloud-c3:#9bc9b9;--cloud-c4:#a9bfd9;--cloud-c5:#cfacd0;--cloud-c6:#d3aa91;--cloud-c7:#b8bec8;background:radial-gradient(ellipse at center,#27282c 0%,#222328 58%,transparent 78%)}.cloud-word{--word-color:var(--cloud-c0);position:absolute;display:grid;place-items:center;box-sizing:border-box;white-space:nowrap;padding:0;line-height:1;min-height:0!important;font-weight:420;border-radius:5px;color:var(--word-color);overflow:visible;letter-spacing:-.018em;opacity:.76;transition:opacity .2s ease,background .2s ease}.cloud-word[data-color="1"]{--word-color:var(--cloud-c1)}.cloud-word[data-color="2"]{--word-color:var(--cloud-c2)}.cloud-word[data-color="3"]{--word-color:var(--cloud-c3)}.cloud-word[data-color="4"]{--word-color:var(--cloud-c4)}.cloud-word[data-color="5"]{--word-color:var(--cloud-c5)}.cloud-word[data-color="6"]{--word-color:var(--cloud-c6)}.cloud-word[data-color="7"]{--word-color:var(--cloud-c7)}.cloud-label{display:inline-block;padding:1px 2px;transform:scale(var(--fit-scale,1));transform-origin:center;transition:transform .2s ease}.cloud-word[data-tone="hero"]{font-weight:680;opacity:1}.cloud-word[data-tone="strong"]{font-weight:590;opacity:.94}.cloud-word[data-tone="medium"]{font-weight:510;opacity:.86}.cloud-word:hover:not(:disabled),.cloud-word:focus-visible{z-index:2;color:var(--word-color);opacity:1;background:color-mix(in srgb,var(--word-color) 9%,transparent)}.cloud-word:hover:not(:disabled) .cloud-label,.cloud-word:focus-visible .cloud-label{transform:scale(var(--fit-scale,1)) scale(1.045)}
       .role-switch{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px}.role-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}
       .ranking-tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 20px}.ranking-tools input{width:160px;font-size:12px}.sort-row{display:flex;gap:8px;align-items:center;font-size:12px}.sort-row>span{display:none}.sort-switch{display:flex;gap:3px}.sort-switch button[aria-pressed="true"]{color:var(--link);background:var(--pink-soft)}.sort-row small{max-width:140px;color:var(--muted)}
       .rank-axis{display:flex;justify-content:space-between;margin:0 0 14px 28px;padding-bottom:5px;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.people-list{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,auto);grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 36px;list-style:none;margin:0;padding:0}.people-list li{display:flex;gap:10px;min-width:0}.rank{font-size:12px;color:var(--muted);width:18px;flex-shrink:0}.people-list li>div{flex:1;min-width:0}.person-heading{display:flex;align-items:baseline;gap:8px;justify-content:space-between}.person-heading a{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.person-meta{font-size:12px;color:var(--muted);white-space:nowrap}.person-track{display:block;height:2px;background:var(--line);margin:10px 5px 4px 0}.person-bar{display:block;position:relative;width:var(--share);height:2px;background:var(--pink)}.person-bar::after{content:"";position:absolute;right:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--pink);border:1px solid var(--surface)}

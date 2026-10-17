@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
       assert.equal(await page.locator('.launcher,.scrim,[role="dialog"]').count(),0);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       assert.deepEqual(await page.locator('#bgmpr-profile-sections').evaluate(e=>Array.from(e.children).map(x=>x.id)),['bgmstats-host','bgmpr-host']);
-      await page.getByRole('button',{name:'标签',exact:true}).click();await page.locator('.tag-cloud.is-ready').waitFor();
+      await page.getByRole('button',{name:'标签',exact:true}).click();await page.locator('[data-search="tags"]').waitFor();assert.equal(await page.locator('.person-bar').count(),12);
       await page.getByRole('button',{name:'创作',exact:true}).click();assert.ok(await page.locator('[data-search="staff"]').isVisible());
       await page.getByRole('button',{name:'声优',exact:true}).click();assert.ok(await page.locator('[data-search="cast"]').isVisible());
       await page.getByRole('button',{name:'年代',exact:true}).click();

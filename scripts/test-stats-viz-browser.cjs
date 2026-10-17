@@ -20,23 +20,6 @@ const assert = require('node:assert/strict');
       }
       await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
     });
-    async function checkCloud() {
-      await page.locator('.tag-cloud.is-ready').waitFor();
-      const cloud = await page.locator('.tag-cloud').evaluate(el => {
-        const root = el.getBoundingClientRect();
-        return {width:root.width,height:root.height,words:Array.from(el.children).filter(word => !word.hidden).map(word => {
-          const r=word.getBoundingClientRect();
-          return {x:r.x-root.x,y:r.y-root.y,width:r.width,height:r.height,size:parseFloat(getComputedStyle(word).fontSize)};
-        })};
-      });
-      cloud.words.forEach((a,i) => {
-        assert.ok(a.x>=0 && a.x+a.width<=cloud.width+1 && a.y>=0 && a.y+a.height<=cloud.height+1);
-        cloud.words.slice(i+1).forEach(b => assert.ok(a.x+a.width<=b.x || b.x+b.width<=a.x || a.y+a.height<=b.y || b.y+b.height<=a.y,'cloud overlap'));
-      });
-      assert.ok(cloud.height<=Math.max(cloud.width*(cloud.width>=460?1.8:2.6),260)+1,'cloud aspect ratio stretched too far');
-      assert.ok(cloud.words[0].size>cloud.words.at(-1).size);
-      return cloud;
-    }
     for(const [width,height,theme] of [[1440,1000,'light'],[375,812,'light'],[667,375,'light'],[1440,1000,'dark']]) {
       await page.setViewportSize({width,height});
       await page.goto('http://127.0.0.1:8765/demo/profile.html?theme='+theme);
@@ -49,30 +32,29 @@ const assert = require('node:assert/strict');
       assert.ok(await page.locator('.year-column').nth(1).evaluate(el=>el===el.getRootNode().activeElement));
       await page.locator('#bgmstats-host').screenshot({path:'artifacts/years-'+width+'-'+theme+'.png'});
       await page.getByRole('button',{name:'标签',exact:true}).click();
-      const countCloud=await checkCloud();
-      const expectedTags=await page.evaluate(()=>BangumiPersonalStatsCore.aggregate(fixtureCollections).distributions.tags.filter(row=>row.count>10).length);
-      assert.equal(await page.locator('.cloud-word').count(),expectedTags);
-      assert.equal(countCloud.words.length,expectedTags);
-      assert.equal(await page.locator('.tag-cloud').getAttribute('data-shape'),'oval');
-      assert.ok(await page.locator('.cloud-word').evaluateAll(nodes=>nodes.every(el=>Number(el.dataset.angle)===0)));
-      const heroBackground=await page.locator('.cloud-word[data-tone="hero"] .cloud-label').first().evaluate(el=>getComputedStyle(el).backgroundColor);
-      assert.match(heroBackground,/rgba?\(0, 0, 0, 0\)|transparent/);
-      assert.ok(await page.locator('.cloud-word').evaluateAll(nodes=>nodes.every(el=>Number(el.dataset.count)>10)));
-      await page.locator('.cloud-word').first().click();assert.match(await page.locator('.viz-caption').innerText(),/日常 · \d+ 部/);
-      await page.locator('#bgmstats-host').screenshot({path:'artifacts/cloud-'+width+'-'+theme+'.png'});
-      await page.getByRole('button',{name:'个人均分',exact:true}).click();
-      await page.locator('.tag-cloud.is-ready').waitFor();
-      const averageCloud=await checkCloud();
-      assert.equal(averageCloud.words.length,expectedTags);
-      const averageSizeRatio=averageCloud.words[0].size/averageCloud.words.at(-1).size;
-      assert.ok(averageSizeRatio>2.5,'average cloud hierarchy is too flat: '+averageSizeRatio);
-      const averages=await page.locator('.cloud-word').evaluateAll(nodes=>nodes.map(el=>Number(el.dataset.value)));
-      assert.ok(averages.every((value,index)=>index===0||averages[index-1]>=value));
-      assert.match(await page.locator('.viz-caption').innerText(),/标签作品个人均分/);
-      await page.locator('.cloud-word').first().click();assert.match(await page.locator('.viz-caption').innerText(),/个人均分 \d+\.\d{2}/);
-      await page.locator('#bgmstats-host').screenshot({path:'artifacts/cloud-average-'+width+'-'+theme+'.png'});
-      await page.getByRole('button',{name:'出现次数',exact:true}).click();
-      assert.equal(await page.locator('[data-page-kind="tags"]').count(),0);
+      await page.locator('.rank-axis').waitFor();
+      const expectedTags=await page.evaluate(()=>BangumiStatsViz.featuredTags(BangumiPersonalStatsCore.aggregate(fixtureCollections).distributions.tags).length);
+      assert.deepEqual(await page.locator('.rank').evaluateAll(nodes=>nodes.map(node=>node.textContent)),['1','2','3','4','5','6','7','8','9','10','11','12']);
+      const tagCounts=await page.locator('.person-meta').evaluateAll(nodes=>nodes.map(node=>Number(node.textContent.replace(/[^\d]/g,''))));
+      assert.ok(tagCounts.every((value,index)=>index===0||tagCounts[index-1]>=value),'tag counts must descend');
+      assert.ok(tagCounts.every(value=>value>10),'only tags over ten works are ranked');
+      assert.match(await page.locator('.people-list a').first().getAttribute('href'),/^\/search\/tag\/anime\//);
+      assert.equal(await page.locator('[data-page-kind="tags"]').count()>0,expectedTags>12);
+      await page.locator('#bgmstats-host').screenshot({path:'artifacts/tags-'+width+'-'+theme+'.png'});
+      await page.locator('[data-sort-kind="tags"][data-sort="average"]').click();
+      assert.match(await page.locator('.rank-axis').innerText(),/10 分/);
+      const tagScores=await page.locator('.person-meta').evaluateAll(nodes=>nodes.map(node=>Number(node.textContent)));
+      assert.ok(tagScores.every((value,index)=>index===0||tagScores[index-1]>=value),'average scores must descend');
+      const tagShare=await page.locator('.person-bar').first().evaluate(el=>parseFloat(el.style.getPropertyValue('--share')));
+      assert.ok(Math.abs(tagShare-tagScores[0]*10)<.1);
+      await page.locator('[data-sort-kind="tags"][data-sort="works"]').click();
+      const firstTagName=await page.locator('.people-list a').first().innerText();
+      await page.locator('[data-search="tags"]').fill(firstTagName);
+      await page.waitForFunction(name=>{const links=[...document.querySelector('#bgmstats-host').shadowRoot.querySelectorAll('.people-list a')];return links.length&&links.every(a=>a.textContent.includes(name));},firstTagName);
+      await page.locator('[data-search="tags"]').fill('没有这个标签');await page.locator('.content .empty').waitFor();
+      assert.match(await page.locator('.content .empty').innerText(),/标签/);
+      await page.locator('[data-search="tags"]').fill('');
+      await page.locator('.people-list').waitFor();
       await page.getByRole('button',{name:'创作',exact:true}).click();assert.equal(await page.locator('.person-bar').count(),12);
       const rankOrder=await page.locator('.rank').evaluateAll(nodes=>nodes.map(node=>node.textContent));
       const leftColumn=await page.locator('.people-list li').evaluateAll(nodes=>nodes.slice(0,6).map(node=>node.getBoundingClientRect().left));
@@ -87,29 +69,28 @@ const assert = require('node:assert/strict');
       await page.getByRole('button',{name:'声优',exact:true}).click();assert.equal(await page.locator('.person-bar').count(),12);
       await page.locator('[data-search="cast"]').fill('没有这个声优');await page.locator('.content .empty').waitFor();
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-      console.log(width+'×'+height+' '+theme+': descending years, tag threshold/cloud, column order passed');
+      console.log(width+'×'+height+' '+theme+': descending years, tag ranking, column order passed');
     }
-    // Resize while the cloud stays open, not just on a fresh render.
-    await page.getByRole('button',{name:'标签',exact:true}).click();await checkCloud();
+    // Resize while the tag ranking stays open, not just on a fresh render.
+    await page.getByRole('button',{name:'标签',exact:true}).click();await page.locator('.people-list').waitFor();
     await page.setViewportSize({width:375,height:812});
-    await page.waitForFunction(()=>{const el=document.querySelector('#bgmstats-host').shadowRoot.querySelector('.tag-cloud');return el.dataset.width===String(el.clientWidth);});
-    await checkCloud();
+    await page.locator('.people-list').waitFor();
+    assert.equal(await page.locator('.person-bar').count(),12);
     await page.emulateMedia({reducedMotion:'reduce'});
-    assert.equal(await page.locator('.cloud-word').first().evaluate(el=>getComputedStyle(el).transitionDuration),'0s');
     const denseContext=await browser.newContext({viewport:{width:375,height:812}});
     const densePage=await denseContext.newPage();
     await densePage.goto('http://127.0.0.1:8765/demo/profile.html?dense=1');
     await densePage.locator('.year-chart').waitFor();
     await densePage.getByRole('button',{name:'标签',exact:true}).click();
-    await densePage.locator('.tag-cloud.is-ready').waitFor();
-    assert.equal(await densePage.locator('.cloud-word').count(),2);
-    const denseCheck=await densePage.locator('.tag-cloud').evaluate(el=>{
-      const bounds=el.getBoundingClientRect(), boxes=Array.from(el.children).map(word=>word.getBoundingClientRect());
-      return {overflow:boxes.some(a=>a.left<bounds.left||a.right>bounds.right||a.top<bounds.top||a.bottom>bounds.bottom),overlap:boxes.some((a,i)=>boxes.slice(i+1).some(b=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top))};
+    await densePage.locator('.people-list').waitFor();
+    assert.equal(await densePage.locator('.people-list li').count(),2);
+    const denseCheck=await densePage.locator('.people-list').evaluate(el=>{
+      const bounds=el.getBoundingClientRect(), boxes=Array.from(el.querySelectorAll('li')).map(row=>row.getBoundingClientRect());
+      return {overflow:boxes.some(a=>a.left<bounds.left-1||a.right>bounds.right+1),rows:boxes.length};
     });
-    assert.deepEqual(denseCheck,{overflow:false,overlap:false});
+    assert.deepEqual(denseCheck,{overflow:false,rows:2});
     await denseContext.close();
-    console.log('702-tag dataset: rare tags filtered, remaining tags have no clipping/overlap');
+    console.log('702-tag dataset: rare tags filtered, the two qualified tags stay inside the column');
     assert.deepEqual(errors,[]);
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
