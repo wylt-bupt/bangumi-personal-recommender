@@ -13,18 +13,21 @@ if (!inputPath) {
 }
 
 const input = JSON.parse(fs.readFileSync(inputPath, "utf8"));
-const markedKeys = eligibility.markedFranchiseKeys(input.own || []);
+const marked = eligibility.markedFranchiseKeys(input.own || []);
 const exclusions = {};
+const franchiseKeys = {};
 const stats = { origin: 0, watchedFranchise: 0 };
 for (const [id, subject] of Object.entries(input.subjects || {})) {
-  const reason = eligibility.excludeReason(subject, markedKeys);
+  franchiseKeys[id] = eligibility.franchiseKey(subject);
+  const reason = eligibility.excludeReason(subject, marked);
   if (reason) {
     exclusions[id] = reason;
     stats[reason] += 1;
   }
 }
 process.stdout.write(JSON.stringify({
-  markedFranchiseCount: markedKeys.size,
+  markedFranchiseCount: marked.keys.size,
   stats,
   exclusions,
+  franchiseKeys,
 }));

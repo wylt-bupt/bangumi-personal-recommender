@@ -14,6 +14,21 @@ let nextRequestAt = 0;
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+// Request-level retries live in getJson(); whole-crawl phases get their own
+// outer retry so a short network/proxy outage window cannot kill a run that
+// takes hours to finish.
+async function withRetries(label, times, fn) {
+  for (let attempt = 1; attempt <= times; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt === times) throw error;
+      console.error(`${label} failed (attempt ${attempt}/${times}): ${String(error).slice(0, 90)}; retrying in 2 min`);
+      await sleep(120_000);
+    }
+  }
+}
+
 async function getJson(url) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const wait = nextRequestAt - Date.now();
@@ -119,19 +134,23 @@ async function main() {
     throw new Error('Peer cohort must contain at least 60 distinct public account IDs');
   }
   fs.mkdirSync(cacheDir, { recursive: true });
-  const ownRows = await collections('wylt');
+  const ownRows = await withRetries('own collections', 3, () => collections('wylt'));
   const subjects = {};
   const own = ownRows.map(row => {
     if (row.subject?.id) subjects[row.subject.id] = compactSubject(row.subject);
     return { subject_id: Number(row.subject_id), rate: Number(row.rate) || 0, subject: compactSubject(row.subject || {}) };
   });
   const peers = [];
-  let consecutiveFailures = 0;
+  let peerFailures = 0;
+  // A single public account can hang server-side (observed during the 2026-10
+  // cohort expansion: profile responds in <1s, collections never return), so
+  // per-member failures are skipped; only a systemic outage treats the run
+  // itself as unsafe and preserves the previous feed.
+  const maxPeerFailures = Math.max(5, Math.ceil(cohort.length / 10));
   for (const userId of cohort) {
     try {
       const cached = readPeerCache(userId);
       const rows = cached ? null : await collections(userId);
-      consecutiveFailures = 0;
       const rated = cached?.rated || rows.filter(row => Number(row.rate) > 0 && Number(row.subject_id) > 0)
         .map(row => [Number(row.subject_id), Number(row.rate)]);
       if (rated.length < 100) continue;
@@ -148,14 +167,16 @@ async function main() {
       peers.push({ rated });
       console.error(`${peers.length}/${cohort.length} usable peers (${rated.length} ratings${cached ? ', cached' : ', fresh'} in latest account)`);
     } catch (error) {
-      console.error(`Public peer unavailable: ${String(error).replace(/https?:\/\/\S+/g, '[API URL]').slice(0, 100)}`);
+      console.error(`Public peer ${userId} unavailable: ${String(error).replace(/https?:\/\/\S+/g, '[API URL]').slice(0, 100)}`);
       if (/HTTP 404/.test(String(error))) continue;
-      consecutiveFailures += 1;
-      if (consecutiveFailures >= 3) throw new Error('Three consecutive public peer requests failed; preserving previous feed');
+      peerFailures += 1;
+      if (peerFailures > maxPeerFailures) {
+        throw new Error(`${peerFailures} peers could not be read this run; treating as a systemic outage and preserving the previous feed`);
+      }
     }
   }
   if (peers.length < 60) throw new Error(`Only ${peers.length} public peers remained; refusing to replace the feed`);
-  Object.assign(subjects, await rankedSubjects());
+  Object.assign(subjects, await withRetries('ranked metadata', 3, () => rankedSubjects()));
   for (const row of own) {
     if (subjects[row.subject_id]) row.subject = subjects[row.subject_id];
   }

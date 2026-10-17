@@ -31,7 +31,7 @@ const NON_JAPAN_MARKERS = [
 const SUFFIX_PATTERN = new RegExp("(?:第?\\s*[0-9〇一二三四五六七八九十百]+\\s*(?:季|期|部|章|篇|话|話|卷|幕)?\\s*$"
   + "|(?:season|saison)\\s*[0-9]+$|(?:[0-9]+(?:st|nd|rd|th))?\\s*season$|part\\s*[0-9ivx]+$|第\\s*[0-9]+\\s*season$"
   + "|ova$|oad$|外传$|外傳$|番外$|特别篇$|特別篇$|总集篇$|總集篇$|総集編$|精选集$|精選集$"
-  + "|剧场版$|劇場版$|剧场版：[^\\u4e00-\\u9fa5|]*|movie$|映画$"
+  + "|剧场版$|劇場版$|剧场版：[^\\u4e00-\\u9fa5|]*|movie$|映画$|ETV版$|TV版$|电视版$|電視版$"
   + "|续篇$|續篇$|続編$|新剧场版$|前篇$|后篇$|後篇$|上篇$|下篇$|完结篇$|完結篇$|终章$|最終章$|最终章$|追忆篇$)", "i");
 
 function tagsOf(subject) {
@@ -87,22 +87,41 @@ function franchiseKey(subject) {
 
 function markedFranchiseKeys(rows) {
   const keys = new Set();
+  const titles = new Set();
   for (const row of Array.isArray(rows) ? rows : []) {
     const subject = row?.subject || row || {};
     const type = Number(subject.type);
     if (Number.isFinite(type) && type !== 2) continue; // only marked animation counts
     const key = franchiseKey(subject);
     if (key && key !== `title:${Number(subject.id) || 0}`) keys.add(key);
+    const title = aliasText(subject.name_cn || subject.nameCn || subject.name);
+    if (title.length >= 2) titles.add(title);
   }
-  return keys;
+  return { keys, titles };
+}
+
+// A candidate title that is just a marked base title plus a release-variant
+// suffix (“日常” + “ETV版”, “日常” + “第二季”) belongs to the watched family
+// even when no franchise tag exists to key them together (“日常 ETV版”).
+function isReleaseVariant(rest) {
+  return rest.length > 0 && (SUFFIX_PATTERN.test(rest) || /^(?:etv|tv|hd)(?:d|版)?$/.test(rest));
 }
 
 /**
  * @returns {null|"origin"|"watchedFranchise"} null keeps the candidate.
  */
-function excludeReason(subject, markedKeys) {
+function excludeReason(subject, marked) {
   if (!isJapaneseOrigin(subject)) return "origin";
-  if (markedKeys instanceof Set && markedKeys.has(franchiseKey(subject))) return "watchedFranchise";
+  const keys = marked instanceof Set ? marked : marked?.keys;
+  if (keys instanceof Set && keys.has(franchiseKey(subject))) return "watchedFranchise";
+  const titles = marked?.titles instanceof Set ? marked.titles : null;
+  if (titles) {
+    const title = aliasText(subject.name_cn || subject.nameCn || subject.name);
+    for (const base of titles) {
+      if (base.length < 2 || title.length <= base.length || !title.startsWith(base)) continue;
+      if (isReleaseVariant(title.slice(base.length))) return "watchedFranchise";
+    }
+  }
   return null;
 }
 

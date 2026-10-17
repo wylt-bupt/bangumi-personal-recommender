@@ -238,6 +238,8 @@ def train_model(input_data):
 
     rows = []
     citation_pool = [(row["subject"], int(row["rate"])) for row in own if int(row.get("rate") or 0) > 0]
+    own_tagsets = [(subject, rate, {tag_key(display_tag(t)) for t in tags(subject) if meaningful_tag(t)})
+                   for subject, rate in citation_pool]
     for index in np.argsort(-predictions):
         subject = candidate_subjects[index]
         title = subject.get("name_cn") or subject.get("nameCn") or subject.get("name")
@@ -246,40 +248,40 @@ def train_model(input_data):
         # Weights already express net preference over the site baseline for
         # each tag; dedupe spelling variants so one studio never explains the
         # same candidate twice, and pick the strongest two distinct markers.
-        tagged = [(weights[columns[tag]], tag) for tag in tags(subject) if tag in columns]
+        weight_by_key = {tag_key(display_tag(tag)): float(weights[columns[tag]]) for tag in tags(subject) if tag in columns}
+        cand_display = {tag_key(display_tag(tag)): display_tag(tag) for tag in tags(subject) if meaningful_tag(tag)}
+        cand_keys = set(cand_display)
         positive, seen_keys = [], set()
-        for score, tag in sorted(tagged, reverse=True):
-            key = tag_key(display_tag(tag))
+        for key in sorted(weight_by_key, key=lambda key: weight_by_key[key], reverse=True):
             if key in seen_keys:
                 continue
-            if score <= 0.03:
-                break
+            if weight_by_key[key] <= 0.03 or key not in cand_keys:
+                continue
             seen_keys.add(key)
-            positive.append(display_tag(tag))
+            positive.append(cand_display[key])
             if len(positive) == 2:
                 break
+        # The most personal explanation available: the public collection row
+        # that shares the most weighted-interest tags with this candidate.
+        best, best_score, best_shared = None, 0.0, []
+        for own_subject, rate, keys in own_tagsets:
+            shared = cand_keys & keys
+            if not shared:
+                continue
+            score = sum(1.0 + (0.5 if weight_by_key.get(key, 0.0) > 0 else 0.0) for key in shared)
+            if score > best_score or (score == best_score and best is not None and rate > best[1]):
+                best, best_score, best_shared = (own_subject, rate), score, \
+                    sorted(shared, key=lambda key: weight_by_key.get(key, 0.0), reverse=True)
         reasons = []
-        if positive:
+        if best is not None and best_score >= 4.0 and (best[0].get("name_cn") or best[0].get("name")):
+            cited = [cand_display[key] for key in best_shared[:2] if key in cand_display]
+            reasons.append(f"与你评过 {best[1]} 分的《{best[0].get('name_cn') or best[0].get('name')}》题材重合：{'、'.join(cited)}。")
+        elif positive:
             reasons.append("你的评分显示，对“" + "、".join(positive) + "”相关作品通常比站内评价更偏爱。")
-        if lift[index] > 0.05:
+        if lift[index] > 0.05 and len(reasons) < 2:
             reasons.append("公开用户评分的协同信号提高了这部作品的排序。")
         if not reasons:
-            # The pool only ever contains titles the closest public raters
-            # actually rated, so say that instead of a pseudo-explanation, and
-            # cite the single most similar work from the user's public list
-            # when one exists in the cached snapshot.
-            candidate_tags = {tag_key(display_tag(tag)) for tag in tags(subject)}
-            best, best_score = None, 0.0
-            for own_subject, rate in citation_pool:
-                own_tags = {tag_key(display_tag(tag)) for tag in tags(own_subject)}
-                shared, union = len(candidate_tags & own_tags), len(candidate_tags | own_tags)
-                similarity = shared / union if union else 0.0
-                if similarity > best_score or (similarity == best_score and best and rate > best[1]):
-                    best, best_score = (own_subject, rate), similarity
-            if best is not None and best_score >= 0.34 and (best[0].get("name_cn") or best[0].get("name")):
-                reasons.append(f"与你评过 {best[1]} 分的《{best[0].get('name_cn') or best[0].get('name')}》题材相近。")
-            else:
-                reasons.append("来自与你观看轨迹最接近、评分倾向一致的公开用户的共同作品。")
+            reasons.append("来自与你观看轨迹最接近、评分倾向一致的公开用户的共同作品。")
         rating = subject.get("rating") or {}
         image = subject.get("image") or (subject.get("images") or {}).get("common") or (subject.get("images") or {}).get("medium") or ""
         rows.append({

@@ -47,9 +47,19 @@ test('marked franchises only consider animation rows across all statuses', () =>
     { subject_id: 78910, rate: 0, subject: GINTAMA_MARKED },          // unrated placeholder still marks
     { subject_id: 600, type: 3, subject: { type: 3, name_cn: '银河英雄传说 原著', tags: ['银河英雄传说', '小说'] } },
   ]);
-  assert.ok(marked.has(Eligibility.franchiseKey(WITCH_MERCURY)));
-  assert.ok(marked.has(Eligibility.franchiseKey(GINTAMA_MARKED)));
-  assert.ok(!marked.has(Eligibility.franchiseKey({ name_cn: '银河英雄传说 原著', tags: ['银河英雄传说', '小说'] })));
+  assert.ok(marked.keys.has(Eligibility.franchiseKey(WITCH_MERCURY)));
+  assert.ok(marked.keys.has(Eligibility.franchiseKey(GINTAMA_MARKED)));
+  assert.ok(marked.titles.has('新剧场版银魂-吉原大炎上-'));
+  assert.ok(!marked.keys.has(Eligibility.franchiseKey({ name_cn: '银河英雄传说 原著', tags: ['银河英雄传说', '小说'] })));
+});
+
+test('release-variant titles of marked base titles are excluded', () => {
+  const marked = Eligibility.markedFranchiseKeys([{ subject_id: 9912, subject: { id: 9912, type: 2, name: '日常', name_cn: '日常', tags: ['日常', '京阿尼', 'tv'] } }]);
+  assert.equal(Eligibility.excludeReason({ id: 28205, type: 2, name: '日常 (ETV)', name_cn: '日常 ETV版', tags: ['京アニメ', 'tv'] }, marked), 'watchedFranchise');
+  assert.equal(Eligibility.excludeReason({ type: 2, name_cn: '日常 2', tags: [] }, marked), 'watchedFranchise');
+  // same subject prefix but a different work is kept
+  assert.equal(Eligibility.excludeReason({ type: 2, name_cn: '日常系的异能战斗', tags: [] }, marked), null);
+  assert.equal(Eligibility.excludeReason({ type: 2, name_cn: '日常', tags: ['日常'] }, marked), 'watchedFranchise');
 });
 
 test('excludeReason reports origin and watchedFranchise, null keeps candidate', () => {
@@ -58,4 +68,10 @@ test('excludeReason reports origin and watchedFranchise, null keeps candidate', 
   assert.equal(Eligibility.excludeReason(GINTAMA_RETRY, marked), 'watchedFranchise');
   assert.equal(Eligibility.excludeReason(GUNDAM_0080, marked), null);
   assert.equal(Eligibility.excludeReason(KUKI, marked), null);
+});
+
+test('excludeReason accepts the legacy plain-key Set for compatibility', () => {
+  const marked = new Set([Eligibility.franchiseKey(GINTAMA_MARKED)]);
+  assert.equal(Eligibility.excludeReason(GINTAMA_RETRY, marked), 'watchedFranchise');
+  assert.equal(Eligibility.excludeReason(GUNDAM_0080, marked), null);
 });
