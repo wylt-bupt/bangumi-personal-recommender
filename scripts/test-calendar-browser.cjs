@@ -14,6 +14,7 @@ const calendar = days.map((name, n) => ({ weekday: { id: n + 1 }, items: [
 ] }));
 const rows = calendar.flatMap((day, n) => day.items.slice(0, 2).map((item, i) => ({ subject_id: item.id, type: i ? 2 : [1, 3, 4, 5][n % 4], rate: 8, private: false, comment: 'never cache this' })));
 const privateId = today * 10 + 3;
+const staleId = today * 10 + 4; // Cancelled on the server, but a stale cache still lists it.
 function pageHTML(full = false, signedIn = true, theme = 'light') {
   const content = full ? `<div class="columns"><div id="colunmSingle"><div class="BgmCalendar">${calendar.map((day, n) => `<dl><dt>${days[n]}</dt><dd class="${days[n]}"><ul class="coverList">${day.items.map(item => `<li style="background:url('//lain.bgm.tv/fixture.jpg')"><p><a href="/subject/${item.id}">站内标题 ${item.id}</a></p><p><a href="/subject/${item.id}">Original</a></p></li>`).join('')}</ul></dd></dl>`).join('')}</div></div></div>` : '<div id="home_calendar"><div class="original">原始每日放送</div></div>';
   return `<!doctype html><html data-theme="${theme}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:24px 16px;background:${theme === 'dark' ? '#181818' : '#fafafa'};font-family:Arial}main{max-width:${full ? 1100 : 817}px;margin:auto}#navMenuNeue{display:none}</style><body><nav id="navMenuNeue">${signedIn ? '<a href="/anime/list/test-user/do">在看</a>' : ''}</nav><main>${content}</main></body></html>`;
@@ -44,7 +45,7 @@ function collectionHTML(type, page, options) {
           // Capture the old response before a later forced refresh can finish.
           const value = options.scheduleTitles ? calendar.map(day => ({ ...day, items: day.items.map(item => ({ ...item, name_cn: `${index === 1 ? '后台旧响应' : '手动新响应'} ${item.id}` })) })) : calendar;
           if (options.holdCalendar && index === 1) await calendarGate;
-          if (options.fail) return route.fulfill({ status: 503, body: '{}' });
+          if (options.fail || options.failSchedule) return route.fulfill({ status: 503, body: '{}' });
           return route.fulfill({ json: value });
         }
         if (options.fail) return route.fulfill({ status: 503, body: '{}' });
@@ -55,18 +56,18 @@ function collectionHTML(type, page, options) {
       if (url.hostname === 'bgm.tv') {
         const match = url.pathname.match(/^\/anime\/list\/test-user\/([^/]+)$/);
         if (match) return route.fulfill({ contentType: 'text/html', body: collectionHTML(C.routes.indexOf(match[1]), Number(url.searchParams.get('page') || 1), options) });
-        if (options.fail && url.pathname === '/calendar' && !options.full) return route.fulfill({ status: 503, body: '' });
+        if ((options.fail || options.failSchedule) && url.pathname === '/calendar' && !options.full) return route.fulfill({ status: 503, body: '' });
         return route.fulfill({ contentType: 'text/html', body: pageHTML(options.full || url.pathname === '/calendar', options.signedIn !== false, options.theme) });
       }
       return route.abort();
     });
     if (options.siteMode) await page.addInitScript(() => localStorage.setItem('bgm-personal-calendar:v1:test-user:mode', '"site"'));
-    if (options.cached) await page.addInitScript(({ rows, calendar, privateId, options }) => {
+    if (options.cached) await page.addInitScript(({ rows, calendar, privateId, staleId, options }) => {
       const prefix = 'bgm-personal-calendar:v1:test-user:', mode = options.siteMode ? 'site' : 'public';
       const at = Date.now() - (options.cacheAge ?? 10 * 86400000);
-      if (!localStorage.getItem(prefix + `collections:${mode}`)) localStorage.setItem(prefix + `collections:${mode}`, options.corrupt ? '{broken' : JSON.stringify({ at, value: options.empty ? [] : [...rows.map(row => ({ id: row.subject_id, type: row.type })), ...(options.siteMode ? [{ id: privateId, type: 3 }] : []), ...Array.from({ length: options.large ? 5000 : 0 }, (_, n) => ({ id: 10000 + n, type: 2 }))] }));
+      if (!localStorage.getItem(prefix + `collections:${mode}`)) localStorage.setItem(prefix + `collections:${mode}`, options.corrupt ? '{broken' : JSON.stringify({ at, value: options.empty ? [] : [...rows.map(row => ({ id: row.subject_id, type: row.type })), ...(options.siteMode ? [{ id: privateId, type: 3 }] : []), ...(options.stale ? [{ id: staleId, type: 3 }] : []), ...Array.from({ length: options.large ? 5000 : 0 }, (_, n) => ({ id: 10000 + n, type: 2 }))] }));
       if (!localStorage.getItem(prefix + 'calendar')) localStorage.setItem(prefix + 'calendar', JSON.stringify({ at, value: calendar }));
-    }, { rows, calendar, privateId, options });
+    }, { rows, calendar, privateId, staleId, options });
     await page.goto(`https://bgm.tv/${options.full ? 'calendar' : ''}${options.off ? '?personal=off' : ''}`);
     await page.addScriptTag({ content: release });
     return { context, page, requests, errors, options, releaseCalendar };
@@ -118,6 +119,25 @@ function collectionHTML(type, page, options) {
       assert.ok((await p.locator('.message').innerText()).includes('保留上次放送'));
       assert.equal(f.requests.filter(u => /\/collections\?|\/anime\/list\//.test(u)).length, 0);
       assert.deepEqual(f.errors, []); await f.context.close(); report.push('failed schedule revalidation preserves the immediately displayed collection without a full collection sync');
+    }
+    {
+      const f = await fixture({ cached: true, cacheAge: 10 * 86400000, stale: true, failSchedule: true }), p = f.page;
+      assert.equal(await p.locator('.board').isVisible(), true);
+      assert.equal(await p.locator(`.subject[href="/subject/${staleId}"]`).count(), 1);
+      const before = await p.locator('.checked').innerText();
+      assert.ok(before.includes('收藏核对'));
+      await p.getByRole('button', { name: '更新', exact: true }).click();
+      await p.locator('.refresh:enabled').waitFor();
+      assert.equal(await p.locator(`.subject[href="/subject/${staleId}"]`).count(), 0);
+      const after = await p.locator('.checked').innerText();
+      assert.notEqual(after, before);
+      assert.ok(after.includes('收藏核对'));
+      assert.ok((await p.locator('.message.error').innerText()).includes('放送表更新失败'));
+      assert.equal(await p.locator('.board').isVisible(), true);
+      const saved = await p.evaluate(() => JSON.parse(Object.entries(localStorage).find(([key]) => key.includes('collections:public'))[1]));
+      assert.ok(!saved.value.some(row => row.id === staleId), 'a cancelled entry must not stay in the stored collection');
+      assert.ok(Date.now() - saved.at < 120000, 'the stored collection timestamp must advance');
+      assert.deepEqual(f.errors, []); await f.context.close(); report.push('a failing schedule no longer blocks the collection sync: cancelled entries disappear, the checked time advances and the failure is still reported');
     }
     {
       const f = await fixture({ cached: true, corrupt: true }), p = f.page;

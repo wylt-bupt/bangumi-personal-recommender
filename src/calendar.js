@@ -20,13 +20,13 @@
     :host{--ink:#333;--muted:#707070;--line:#e7e7e7;--surface:#fff;--soft:#f7f7f7;--accent:#ac3d58;--pink:#f09199;--pink-soft:#fff1f3;display:block;font:14px/1.6 Arial,"Microsoft YaHei",sans-serif;color:var(--ink);color-scheme:light}
     :host([data-theme=dark]){--ink:#ddd;--muted:#aaa;--line:#414141;--surface:#202020;--soft:#292929;--accent:#ef9caf;--pink:#ed8fa5;--pink-soft:#39282d;color-scheme:dark}
     *,*::before,*::after{box-sizing:border-box}[hidden]{display:none!important}button,select{font:inherit;color:inherit}button,a,select{touch-action:manipulation}a{color:inherit;text-decoration:none}a:hover{color:var(--accent)}button{cursor:pointer;background:transparent;border:0}button:disabled{cursor:default;opacity:.4}button:focus-visible,a:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-    .panel{padding:18px 14px 14px;background:var(--surface);border:1px solid var(--line);border-radius:15px;margin:0 0 20px;min-width:0}.toolbar{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap}.heading{display:flex;align-items:center;gap:12px;margin-right:auto;flex-wrap:wrap}.toolbar h2{font-size:18px;font-weight:normal;line-height:1.4;margin:0}.today-jump{min-height:44px;padding:6px 10px;font-size:12px;color:var(--muted);border-radius:50px}.today-jump:hover{background:var(--soft);color:var(--accent)}.refresh{min-height:36px;min-width:44px;padding:6px 10px;font-size:12px;color:var(--muted);border-radius:6px;transition:background .18s,color .18s}.refresh:hover:not(:disabled){color:var(--accent);background:var(--pink-soft)}
+    .panel{padding:18px 14px 14px;background:var(--surface);border:1px solid var(--line);border-radius:15px;margin:0 0 20px;min-width:0}.toolbar{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap}.heading{display:flex;align-items:center;gap:12px;margin-right:auto;flex-wrap:wrap}.toolbar h2{font-size:18px;font-weight:normal;line-height:1.4;margin:0}.checked{font-size:12px;color:var(--muted)}.today-jump{min-height:44px;padding:6px 10px;font-size:12px;color:var(--muted);border-radius:50px}.today-jump:hover{background:var(--soft);color:var(--accent)}.refresh{min-height:36px;min-width:44px;padding:6px 10px;font-size:12px;color:var(--muted);border-radius:6px;transition:background .18s,color .18s}.refresh:hover:not(:disabled){color:var(--accent);background:var(--pink-soft)}
     .week-nav{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--line);margin-top:10px}.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));flex:1;min-width:0}.days button{position:relative;min-height:44px;padding:6px 0;color:var(--muted);font-size:13px}.days button[aria-pressed=true]{color:var(--accent);font-weight:bold}.days button[aria-pressed=true]::before{content:'';position:absolute;top:0;left:12%;right:12%;height:3px;background:var(--pink)}.arrow{min-width:44px;min-height:44px;font-size:24px;color:var(--muted)}.board{display:grid;grid-template-columns:repeat(var(--columns,3),minmax(0,1fr));gap:24px;margin-top:20px}.day{min-width:0}.day-head{margin-bottom:20px;padding:0 0 8px;border-bottom:3px solid var(--line)}.day.today .day-head{border-color:var(--pink)}.date{font-size:13px;color:var(--muted)}.day-head h3{margin:0;font-size:18px;font-weight:normal}.day.today h3{color:var(--accent);font-weight:bold}.relative{font-size:12px;color:var(--muted);margin-left:8px}.day-list{list-style:none;margin:0 0 0 3px;padding:0 0 0 14px;border-left:1px solid var(--line)}.entry{position:relative;margin-bottom:22px}.entry::before{content:'';position:absolute;left:-18px;top:8px;width:6px;height:6px;background:var(--line);border-radius:50%}.day.today .entry::before{background:var(--pink)}.subject{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px;align-items:start;min-height:100px}.cover{display:block;width:72px;height:100px;object-fit:contain;background:var(--soft);border-radius:3px}.no-cover{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}.title{display:block;font-size:14px;line-height:1.6;overflow-wrap:anywhere}.empty{color:var(--muted);font-size:13px;padding:8px 0;min-height:100px}.message{margin:8px 0;font-size:13px;overflow-wrap:anywhere}.message:empty{display:none}.message.error{color:var(--accent)}
     @media(max-width:480px){.panel{padding:12px 10px}.toolbar{gap:0 8px}.heading{flex:1;min-width:0;gap:8px}.refresh{min-height:44px}.board{gap:16px}.subject{grid-template-columns:78px minmax(0,1fr)}.cover{width:78px;height:108px}.title{font-size:16px}.days button{font-size:12px}.arrow{min-width:36px}}
   `;
-  shadow.innerHTML = `<style>${css}</style><section class="panel" aria-label="我的放送表"><div class="toolbar"><div class="heading"><h2>我的放送表</h2><nav class="today-nav" aria-label="今天定位" hidden><button class="today-jump"></button></nav></div><button class="refresh update-button" type="button" title="核对个人收藏与最新放送表" aria-live="polite">更新</button></div><p class="message" role="status" aria-live="polite"></p><nav class="week-nav" aria-label="放送日期" hidden><button class="arrow prev" aria-label="前一天">‹</button><div class="days"></div><button class="arrow next" aria-label="后一天">›</button></nav><div class="board" hidden></div></section>`;
+  shadow.innerHTML = `<style>${css}</style><section class="panel" aria-label="我的放送表"><div class="toolbar"><div class="heading"><h2>我的放送表</h2><span class="checked"></span><nav class="today-nav" aria-label="今天定位" hidden><button class="today-jump"></button></nav></div><button class="refresh update-button" type="button" title="核对个人收藏与最新放送表" aria-live="polite">更新</button></div><p class="message" role="status" aria-live="polite"></p><nav class="week-nav" aria-label="放送日期" hidden><button class="arrow prev" aria-label="前一天">‹</button><div class="days"></div><button class="arrow next" aria-label="后一天">›</button></nav><div class="board" hidden></div></section>`;
   const $ = selector => shadow.querySelector(selector);
-  let calendar, collections, source = 'public', selectedDate = C.dateKey(), columns = 0, ready = false, busy = false, navChanged = false, revision = 0;
+  let calendar, collections, source = 'public', selectedDate = C.dateKey(), columns = 0, ready = false, busy = false, navChanged = false, revision = 0, checkedAt = 0;
   const prefix = `bgm-personal-calendar:v1:${username}:`;
   function read(key) { try { return JSON.parse(localStorage.getItem(prefix + key)); } catch { return null; } }
   function save(key, value) { try { localStorage.setItem(prefix + key, JSON.stringify(value)); } catch {} }
@@ -45,6 +45,7 @@
     host.dataset.theme = value === 'dark' || (value !== 'light' && matchMedia('(prefers-color-scheme:dark)').matches) ? 'dark' : 'light';
   }
   function status(text, error = false) { $('.message').textContent = text; $('.message').className = `message${error ? ' error' : ''}`; }
+  function renderChecked() { $('.checked').textContent = checkedAt ? `收藏核对 ${new Date(checkedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''; }
   function element(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
   function render() {
     if (!ready) return;
@@ -157,6 +158,8 @@
     const savedCollection = cachedCollections(source);
     if (!savedCollection) { sync(); return; } // First use or damaged storage requires one complete sync.
     collections = savedCollection.rows;
+    checkedAt = savedCollection.at;
+    renderChecked();
     const savedCalendar = read('calendar');
     let next, fromDocument = false;
     if (full && !demo) {
@@ -183,14 +186,23 @@
     if (busy) return;
     revision++;
     busy = true; $('.refresh').disabled = true; $('.refresh').textContent = '更新中…'; $('.panel').setAttribute('aria-busy', 'true');
+    let nextCalendar = null, nextCollection = null, calendarError = null, collectionError = null;
     try {
-      const nextCalendar = await getCalendar(force), nextCollection = await getCollections(force, mode);
-      collections = nextCollection.rows; source = mode;
-      save(`collections:${mode}`, { at: nextCollection.at, value: collections }); save('mode', mode);
-      status(''); showCalendar(nextCalendar);
-    } catch (error) {
-      if (!ready) restore(true);
-      status(ready ? `核对失败，保留上次收藏：${error.message}` : `核对失败，显示原始放送表：${error.message}`, true);
+      // The schedule and the collection refresh independently: a failing schedule must never block a collection sync.
+      try { nextCalendar = await getCalendar(force); } catch (error) { calendarError = error; }
+      try { nextCollection = await getCollections(force, mode); } catch (error) { collectionError = error; }
+      if (nextCollection) {
+        collections = nextCollection.rows; source = mode; checkedAt = nextCollection.at;
+        save(`collections:${mode}`, { at: nextCollection.at, value: collections }); save('mode', mode);
+        renderChecked();
+      }
+      if (nextCalendar) { calendar = nextCalendar.rows; ready = true; save('calendar', { at: nextCalendar.at, value: calendar }); }
+      // Painting the personal board needs both a schedule and a collection; fall back to the site board when either is missing.
+      if (ready && collections) { restore(false); render(); } else restore(true);
+      const notes = [];
+      if (collectionError) notes.push(`收藏核对失败，保留上次收藏：${collectionError.message}`);
+      if (calendarError) notes.push(`放送表更新失败，保留上次放送：${calendarError.message}`);
+      status(notes.join('；'), notes.length > 0);
     } finally { busy = false; $('.refresh').disabled = false; $('.refresh').textContent = '更新'; $('.panel').setAttribute('aria-busy', 'false'); }
   }
   shadow.addEventListener('click', event => {
