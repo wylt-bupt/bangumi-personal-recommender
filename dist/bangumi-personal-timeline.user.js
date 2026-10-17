@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.17
+// @version      1.0.18
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -346,15 +346,20 @@
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems ${homeLayout ? 'home-layout' : 'profile-layout'}" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div><div class="hm-trend-area"></div></section>`;
-    if (homeLayout) new ResizeObserver(entries => {
-      const width = entries[0]?.contentRect.width || 0;
-      if (chartData && Math.abs(width - drawnWidth) > 0.5) drawHeatmap(chartData, false);
-    }).observe(shadow.querySelector('.hm-chart-area'));
-    new ResizeObserver(entries => {
-      const width = entries[0]?.contentRect.width || 0;
-      if (trendSeries && Math.abs(width - trendWidth) > 0.5) drawTrend(true);
-    }).observe(shadow.querySelector('.hm-trend-area'));
+    // 首页右栏只有 350px 宽，柱状图塞进去既挤又难读：首页只留热力图，
+    // 趋势图仅出现在个人主页。没有这块节点，drawTrend 自然不会被调用。
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="featuredItems ${homeLayout ? 'home-layout' : 'profile-layout'}" aria-label="活跃度热力图"><div style="margin-bottom:10px;"><h2 class="subtitle" style="color:#f09199;margin:0;font-size:14px;font-weight:700;border-bottom:none;">活跃度热力图</h2></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div>${homeLayout ? '' : '<div class="hm-trend-area"></div>'}</section>`;
+    if (homeLayout) {
+      new ResizeObserver(entries => {
+        const width = entries[0]?.contentRect.width || 0;
+        if (chartData && Math.abs(width - drawnWidth) > 0.5) drawHeatmap(chartData, false);
+      }).observe(shadow.querySelector('.hm-chart-area'));
+    } else {
+      new ResizeObserver(entries => {
+        const width = entries[0]?.contentRect.width || 0;
+        if (trendSeries && Math.abs(width - trendWidth) > 0.5) drawTrend(true);
+      }).observe(shadow.querySelector('.hm-trend-area'));
+    }
     shadow.addEventListener('click', event => {
       const rangeButton = event.target.closest('[data-range]');
       if (rangeButton) {
@@ -516,6 +521,7 @@
     drawTrend();
   }
   function drawTrend(useCache = false) {
+    if (homeLayout) return false; // 首页只留热力图
     const area = shadow.querySelector('.hm-trend-area');
     if (!area) return false;
     const width = area.clientWidth;
@@ -705,7 +711,8 @@
     try {
       db = await openDB(); state = await read(); idleUntil = C.nextSyncAt(state, Date.now());
       if (state.paused) { state.paused = false; await save(); }
-      if (range === 'all') ensureDeep();
+      // 深回溯只服务于趋势图，首页没有趋势图就别去翻十几年的旧记录。
+      if (!homeLayout && range === 'all') ensureDeep();
       render();
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('bgmtl-personal');

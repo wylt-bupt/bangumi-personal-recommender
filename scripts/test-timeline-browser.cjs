@@ -77,7 +77,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       tx.onerror = () => reject(tx.error);
     };
   }));
-  const readState = () => page.evaluate(() => new Promise((resolve, reject) => {
+  const readState = (target = page) => target.evaluate(() => new Promise((resolve, reject) => {
     const req = indexedDB.open('bangumi-personal-timeline', 1);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
@@ -99,8 +99,8 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     const cellCount = await page.locator('.hm-cell').count();
     assert.ok(cellCount >= 7 && cellCount <= 371, `expected visible days from aligned weeks, got ${cellCount} cells`);
     assert.ok(await page.locator('.hm-cell title').allTextContents().then(titles => titles.some(title => title.startsWith(core.dayKey(now)))), 'the current day must remain visible');
-    assert.equal(await page.locator('nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap and its trend chart');
-    assert.equal(await page.locator('.hm-trend-toggle button').count(), 2);
+    assert.equal(await page.locator('nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap');
+    assert.equal(await page.locator('.hm-trend-area').count(), 0, 'the homepage keeps the heatmap alone; the trend chart belongs to the profile');
     assert.equal(await page.locator('h2').textContent(), '活跃度热力图');
     assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-label'), '活跃度热力图');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
@@ -134,49 +134,6 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     const heatColors = await page.locator('#hm-dashboard').evaluate(element => ['empty', 'l1', 'l2', 'l3'].map(level => getComputedStyle(element).getPropertyValue(`--hm-cell-${level}`).trim()));
     assert.deepEqual(heatColors, ['#f2f2f2', '#f8cdd4', '#ed7790', '#c83d64']);
     assert.ok(await page.locator('.hm-scroll').evaluate(element => element.scrollWidth <= element.clientWidth), 'the heatmap must fit without horizontal scrolling');
-
-    // Trend chart under the heatmap: daily bars plus a 7-day moving average.
-    await page.locator('.hm-trend-area svg').waitFor();
-    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 3, 'year view shows exactly the three active days');
-    assert.ok(await page.locator('.hm-trend-area polyline').isVisible(), 'the 7-day average line is drawn');
-    assert.match(await page.locator('.hm-trend-total').textContent(), /共\s*3\s*集/);
-    assert.equal(await page.locator('.hm-trend-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
-    // 零安全对数轴的意义：1 集的日子不能被偶尔的高峰压成发丝。
-    const heights = await page.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('height'))));
-    assert.ok(Math.min(...heights) >= 20, `the log scale must lift ordinary days, got ${heights.join(', ')}`);
-    // 读数条取代原生 tooltip：悬到最右侧应读到今天（或最后一天）的日期与均线。
-    const plot = page.locator('.hm-trend-plot');
-    await plot.scrollIntoViewIfNeeded();
-    const box = await plot.boundingBox();
-    await page.mouse.move(box.x + box.width - 6, box.y + box.height / 2);
-    await page.locator('.hm-readout').waitFor({ state: 'visible' });
-    const readout = await page.locator('.hm-readout').textContent();
-    assert.match(readout, new RegExp(core.dayKey(now).replace(/-/g, '/')), `readout should show the hovered date: ${readout}`);
-    assert.match(readout, /7日均/);
-    // 图例可以关掉任一序列，但网格框架必须留着。
-    await page.locator('.hm-legend-key[data-series=count]').click();
-    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 0, 'hiding the bars leaves only the average');
-    assert.ok(await page.locator('.hm-trend-area .hm-grid-line').count() >= 2, 'the grid survives with a series hidden');
-    await page.locator('.hm-legend-key[data-series=count]').click();
-    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 3, 'bringing the bars back restores them');
-
-    // Selecting "all" backfills history beyond the one-year sync cutoff.
-    const beforeDeep = requests.length;
-    await page.locator('.hm-trend-toggle button[data-range=all]').click();
-    let deepDone = false;
-    for (let attempt = 0; attempt < 40 && !deepDone; attempt++) {
-      await page.waitForTimeout(500);
-      deepDone = await readState().then(value => value.streams.progress.deep === true);
-    }
-    assert.ok(deepDone, 'the full-history backfill must complete');
-    const deepRequests = requests.slice(beforeDeep).map(value => new URL(value));
-    assert.ok(deepRequests.some(url => url.searchParams.get('page') === '3'), `selecting all must backfill pages beyond the year cutoff: ${deepRequests.map(url => url.href).join(', ')}`);
-    assert.ok(await page.locator('.hm-trend-area .hm-bar').count() >= 5, 'the all view must keep every active day');
-    assert.match(await page.locator('.hm-trend-total').textContent(), /共\s*5\s*集/, 'the all view counts the backfilled days too');
-    assert.equal(await page.locator('.hm-trend-hint').count(), 0, 'the backfill hint disappears once history is complete');
-    assert.equal(await page.evaluate(() => localStorage.getItem('bgmtl-chart-range')), 'all');
-    await page.locator('.hm-trend-toggle button[data-range=year]').click();
-    assert.equal(await page.locator('.hm-trend-area .hm-bar').count(), 3, 'toggling back to one year hides the older bars');
 
     await peer.close();
 
@@ -213,6 +170,14 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(visibleWeeks[1200] > visibleWeeks[375], `wide layout should show more history: ${JSON.stringify(visibleWeeks)}`);
     assert.ok(oldestVisibleDays[1200] < oldestVisibleDays[375], 'a wider layout should reveal earlier dates');
 
+    // 首页没有趋势图，就不该为一条残留的“全部”偏好去翻十几年前的记录。
+    await page.evaluate(() => localStorage.setItem('bgmtl-chart-range', 'all'));
+    const beforeHomeDeep = requests.length;
+    await load(page); await page.locator('.hm-cell').first().waitFor(); await page.waitForTimeout(1500);
+    const homeDeep = requests.slice(beforeHomeDeep).map(value => new URL(value)).filter(url => url.pathname === '/user/wylt/timeline');
+    assert.ok(homeDeep.every(url => Number(url.searchParams.get('page')) === 1), `the homepage must not backfill old history: ${homeDeep.map(url => url.href).join(', ')}`);
+    await page.evaluate(() => localStorage.setItem('bgmtl-chart-range', 'year'));
+
     // The profile keeps the original full-year, horizontally scrollable chart.
     const profilePage = await context.newPage();
     profilePage.on('pageerror', error => errors.push(error.message));
@@ -232,6 +197,49 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       const element = document.querySelector('#bgmtl-personal')?.shadowRoot?.querySelector('.hm-scroll');
       return element && element.scrollLeft + element.clientWidth >= element.scrollWidth - 2;
     });
+
+    // 趋势图只挂在个人主页：每日集数柱 + 7 日均线。
+    await profilePage.locator('.hm-trend-area svg').waitFor();
+    assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 3, 'year view shows exactly the three active days');
+    assert.ok(await profilePage.locator('.hm-trend-area polyline').isVisible(), 'the 7-day average line is drawn');
+    assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*3\s*集/);
+    assert.equal(await profilePage.locator('.hm-trend-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
+    // 零安全对数轴的意义：1 集的日子不能被偶尔的高峰压成发丝。
+    const heights = await profilePage.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('height'))));
+    assert.ok(Math.min(...heights) >= 20, `the log scale must lift ordinary days, got ${heights.join(', ')}`);
+    // 读数条取代原生 tooltip：悬到最右侧应读到今天（或最后一天）的日期与均线。
+    const plot = profilePage.locator('.hm-trend-plot');
+    await plot.scrollIntoViewIfNeeded();
+    const box = await plot.boundingBox();
+    await profilePage.mouse.move(box.x + box.width - 6, box.y + box.height / 2);
+    await profilePage.locator('.hm-readout').waitFor({ state: 'visible' });
+    const readout = await profilePage.locator('.hm-readout').textContent();
+    assert.match(readout, new RegExp(core.dayKey(now).replace(/-/g, '/')), `readout should show the hovered date: ${readout}`);
+    assert.match(readout, /7日均/);
+    // 图例可以关掉任一序列，但网格框架必须留着。
+    await profilePage.locator('.hm-legend-key[data-series=count]').click();
+    assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 0, 'hiding the bars leaves only the average');
+    assert.ok(await profilePage.locator('.hm-trend-area .hm-grid-line').count() >= 2, 'the grid survives with a series hidden');
+    await profilePage.locator('.hm-legend-key[data-series=count]').click();
+    assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 3, 'bringing the bars back restores them');
+
+    // Selecting "all" backfills history beyond the one-year sync cutoff.
+    const beforeDeep = requests.length;
+    await profilePage.locator('.hm-trend-toggle button[data-range=all]').click();
+    let deepDone = false;
+    for (let attempt = 0; attempt < 40 && !deepDone; attempt++) {
+      await profilePage.waitForTimeout(500);
+      deepDone = await readState(profilePage).then(value => value.streams.progress.deep === true);
+    }
+    assert.ok(deepDone, 'the full-history backfill must complete');
+    const deepRequests = requests.slice(beforeDeep).map(value => new URL(value));
+    assert.ok(deepRequests.some(url => url.searchParams.get('page') === '3'), `selecting all must backfill pages beyond the year cutoff: ${deepRequests.map(url => url.href).join(', ')}`);
+    assert.ok(await profilePage.locator('.hm-trend-area .hm-bar').count() >= 5, 'the all view must keep every active day');
+    assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*5\s*集/, 'the all view counts the backfilled days too');
+    assert.equal(await profilePage.locator('.hm-trend-hint').count(), 0, 'the backfill hint disappears once history is complete');
+    assert.equal(await profilePage.evaluate(() => localStorage.getItem('bgmtl-chart-range')), 'all');
+    await profilePage.locator('.hm-trend-toggle button[data-range=year]').click();
+    assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 3, 'toggling back to one year hides the older bars');
     assert.deepEqual(errors, []);
     await profilePage.close();
 
@@ -262,6 +270,6 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await load(page); await page.locator('.hm-cell').first().waitFor();
     assert.equal(await page.locator('.hm-cell').first().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);
-    console.log('PASS: homepage adaptive heatmap without scrolling; trend chart with 7-day average, one-year/all toggle and full-history backfill; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
+    console.log('PASS: homepage adaptive heatmap only (no trend chart, no unnecessary backfill); profile trend chart with 7-day average, one-year/all toggle and full-history backfill; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

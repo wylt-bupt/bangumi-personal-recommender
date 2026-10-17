@@ -69,6 +69,10 @@ legacy/                     旧推荐源码、测试与备份
 
 ## 2026-10-18 维护记录
 
+独立活跃度热力图 `1.0.18`：用户要求“首页只显示热力图”，每日活跃图只留在 `https://bgm.tv/user/wylt`。`mount()` 在 `home-layout` 下不再生成 `.hm-trend-area` 节点（趋势图的 ResizeObserver 也只绑在 `profile-layout`），`drawTrend` 开头直接按 `homeLayout` 返回 false；随之去掉首页因本地残留 `bgmtl-chart-range=all` 触发的深回溯（`start()` 里 `ensureDeep` 增加 `!homeLayout` 前置条件）——首页只做常规增量同步。首页宽度约 350px，柱状图挤进右栏本来也读不清，这次是收回到该组件原本的“首页小热力图 / 主页完整视图”分工。
+
+验证：`npm run verify` 通过（65 + 25）。`test-timeline-browser.cjs` 的热力图断言拆开：首页断言 `.hm-trend-area` 数量为 0 且残留“全部”偏好时只请求第 1 页，趋势图整组断言（柱数、对数抬升、读数条、图例开关、全部范围深回溯）移到 `profile-layout` 页面执行。截图 `artifacts/timeline-heatmap-375-light.png` 等确认首页只剩热力图。
+
 独立活跃度热力图 `1.0.17`：用户反馈 1.0.16 的柱状图"压根不适合展示"，改以账本模块（wylt-bupt-ruc-gl.web.app 的 `charts.tsx` / `chartModel.ts`，日支出图）的视觉语言重画。核心层新增 `rollingMean(values, window)` 与 `countAxis(values, constant = 3)`：后者是零安全对数刻度 `sign(v)·log1p(|v|/c)`，刻度取 `niceStep(max/5)` 的整数倍并给峰值留 0.5 的头顶空隙——逐日集数是脉冲序列，线性轴会把普通日子压成发丝。`dailySeries` 改为在完整历史上滚动求 7 日均值后按窗口切片（与账本 `rollingMeanTail` 同理），每天携带自己的 `mean`；无进度记录时返回空 `days` 而不是全零年窗。UI 层重写 `drawTrend`：绘图区高度随视宽自适应（140–220px），柱按等宽槽位整体居中（`barGroupWidth = .55`，不足 1px 取 1px），发丝虚线网格 + 实线零线；去掉每柱原生 `<title>`（窄柱悬不准），换成右上角 `.hm-readout` 读数条 + 虚线竖向指示线，指针移动与键盘左右方向键都能逐日查看；图例改为 `data-series` 开关（关掉任一序列时值域退回全部序列，框架不消失），重绘签名 `trendKey()` 纳入隐藏集合。横轴标签抽稀间距 32px → 44px。
 
 验证：`npm run verify` 通过（65 项当前测试 + 25 项历史兼容）。`tests/timeline-core.test.cjs` 新增 rollingMean 窗口语义、countAxis 整数刻度/零下界/峰值留空/对数抬升、dailySeries 均线随窗口切片三例；`test-timeline-browser.cjs` 改为断言对数轴下普通日子柱高 ≥20px、悬停读数条内容、图例开关后网格保留。截图 `artifacts/trend-profile-820.png`、`trend-home-375.png`、`trend-dark-820.png`（合成两年数据）。
