@@ -111,7 +111,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       const dayCell = [...label.ownerSVGElement.querySelectorAll('.hm-cell')].find(cell => cell.querySelector('title')?.textContent.startsWith(`${date}:`));
       return { text: label.textContent, date, x: box.x, right: box.x + box.width, labelX: label.getAttribute('x'), dayX: dayCell?.getAttribute('x') };
     }));
-    assert.ok(monthLabelBoxes.every(label => label.date.endsWith('-01') && label.labelX === label.dayX), `month labels should align with day 1 columns: ${JSON.stringify(monthLabelBoxes)}`);
+    assert.ok(monthLabelBoxes.every(label => label.date.endsWith('-01') && Number(label.labelX) === Number(label.dayX)), `month labels should align with day 1 columns: ${JSON.stringify(monthLabelBoxes)}`);
     for (let index = 1; index < monthLabelBoxes.length; index++) {
       assert.ok(monthLabelBoxes[index - 1].right <= monthLabelBoxes[index].x, `month labels overlap: ${JSON.stringify(monthLabelBoxes)}`);
     }
@@ -199,7 +199,25 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     const figTitleSizes = await profilePage.locator('#hm-dashboard .hm-fig-title').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).fontSize));
     assert.deepEqual(figTitleSizes, ['13px', '13px'], 'both sub-figure titles use the same type scale');
     assert.equal(await profilePage.locator('.hm-cell').count(), cellCount, 'profile shows the same full-year day range');
-    assert.equal(await profilePage.locator('.hm-month-label').count(), 0, 'profile retains the original week-based month labels');
+    // 月标按「每月 1 号所在列」出，不再按每周一：窗口首月只剩一周尾巴时，
+    // 两种写法会让相邻两个标签只隔一列直接叠住；按月份名去重还会把跨年窗口
+    // 末尾的同名月份整块丢掉。所以这里逐项核对：每个 1 号恰好一个标签、位置
+    // 对齐所在列、相邻标签不重叠。
+    const expectedMonths = [];
+    for (let time = core.dayStart(now) - 364 * core.DAY; time <= core.dayStart(now); time += core.DAY) {
+      const key = core.dayKey(time);
+      if (key.endsWith('-01')) expectedMonths.push(key);
+    }
+    const profileMonths = await profilePage.locator('.hm-month-label').evaluateAll(labels => labels.map(label => {
+      const box = label.getBBox(), date = label.getAttribute('data-date');
+      const cell = [...label.ownerSVGElement.querySelectorAll('.hm-cell')].find(node => node.querySelector('title')?.textContent.startsWith(`${date}:`));
+      return { date, x: box.x, right: box.x + box.width, labelX: Number(label.getAttribute('x')), dayX: cell ? Number(cell.getAttribute('x')) : null };
+    }));
+    assert.deepEqual(profileMonths.map(month => month.date), expectedMonths, 'every first-of-month column is labelled exactly once');
+    assert.ok(profileMonths.slice(0, -1).every(month => month.labelX === month.dayX), `month labels start on their first day's column: ${JSON.stringify(profileMonths)}`);
+    for (let index = 1; index < profileMonths.length; index++) {
+      assert.ok(profileMonths[index - 1].right <= profileMonths[index].x, `month labels must not overlap: ${JSON.stringify(profileMonths)}`);
+    }
     const profileScroll = profilePage.locator('.hm-scroll');
     assert.equal(await profileScroll.evaluate(element => getComputedStyle(element).overflowX), 'auto');
     assert.ok(await profileScroll.evaluate(element => element.scrollWidth > element.clientWidth), 'profile retains horizontal scrolling on narrow screens');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.23
+// @version      1.0.24
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -360,6 +360,7 @@
     #hm-dashboard .hm-grid-line{stroke:var(--hm-border);stroke-width:1;stroke-dasharray:3 4}
     #hm-dashboard .hm-grid-line.zero{stroke:var(--hm-text-dim);stroke-dasharray:none;opacity:.55}
     #hm-dashboard .hm-tick,#hm-dashboard .hm-axis-label{fill:var(--hm-text-dim);font:9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
+    #hm-dashboard .hm-month-label{fill:var(--hm-text-dim);font:600 9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
     /* 柱子按周/月聚合后比原来粗，靠留缝分隔，圆角让柱墙不显得生硬。 */
     #hm-dashboard .hm-bar{fill:var(--hm-accent)}
     #hm-dashboard .hm-mean-line{fill:none;stroke:var(--hm-text-strong);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.9}
@@ -374,6 +375,15 @@
     #hm-dashboard .hm-trend-hint{margin-top:6px;font-size:11px;color:var(--hm-text-dim)}
     @media(prefers-reduced-motion:reduce){#hm-dashboard .hm-cell{transition:none!important}}
   `;
+
+  // 月标宽度实测一次即可：9px 下的「10月」和「1月」差 6px，按字符数估会把
+  // 相邻标签算重叠或算松。canvas 只建一次，重复取 context 不额外开销。
+  let labelCanvas;
+  function labelWidth(text) {
+    if (!labelCanvas) labelCanvas = document.createElement('canvas').getContext('2d');
+    if (labelCanvas) labelCanvas.font = '600 9px Arial, "Microsoft YaHei", sans-serif';
+    return labelCanvas ? labelCanvas.measureText(text).width : [...text].length * 9;
+  }
 
   function theme() {
     const attr = document.documentElement.getAttribute('data-theme');
@@ -452,7 +462,6 @@
     const width = padL + cols * (cell + gap) + padR;
     const height = padT + rows * (cell + gap) + 4;
     const weekdays = ['一', '', '三', '', '五', '', '日'];
-    const monthDrawn = Object.create(null);
     const monthLabels = [];
     const svgAttrs = homeLayout ? `width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"` : `viewBox="0 0 ${width} ${height}"`;
     let svg = `<svg ${svgAttrs} style="display:block${homeLayout ? '' : `;min-width:${width}px`}" role="img" aria-label="${homeLayout ? '每日观看集数' : '近一年每日观看集数'}热力图"><g transform="translate(${padL} ${padT})">`;
@@ -464,36 +473,39 @@
       cursor.setUTCDate(cursor.getUTCDate() + offset);
       const col = Math.floor((offset - firstOffset) / 7), row = offset % 7;
       const key = cursor.toISOString().slice(0, 10), count = counts.get(key) || 0;
-      if (homeLayout && cursor.getUTCDate() === 1) {
-        const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
-        monthLabels.push({ x: col * (cell + gap), text: mon, date: key });
-      } else if (!homeLayout && row === 0) {
-        const mon = cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' });
-        if (!monthDrawn[mon] && col > 0 && col < cols) {
-          monthDrawn[mon] = true;
-          svg += `<text x="${col * (cell + gap)}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${mon}</text>`;
-        }
+      // 月标只认「某月 1 号所在的列」：每月恰好出现一次，位置也就贴着真实的
+      // 月份边界。按每周一标会让窗口首月（只剩一周尾巴）的标签挤到下一个月标
+      // 旁边，两块文字直接叠住；按月份名去重还会把跨年窗口末尾的同名月份丢掉。
+      if (cursor.getUTCDate() === 1) {
+        monthLabels.push({ x: col * (cell + gap), text: cursor.toLocaleString('zh-CN', { month: 'short', timeZone: 'UTC' }), date: key });
       }
       const fill = count === 0 ? 'var(--hm-cell-empty)' : count <= 3 ? 'var(--hm-cell-l1)' : count <= 9 ? 'var(--hm-cell-l2)' : 'var(--hm-cell-l3)';
       svg += `<rect class="hm-cell" x="${col * (cell + gap)}" y="${row * (cell + gap)}" width="${cell}" height="${cell}" rx="2" fill="${fill}" opacity="0"><title>${key}: ${count} 集</title></rect>`;
     }
+    // 窄栏（首页）从右往左保留放得下的标签，宽图（个人主页）一年每月一个，
+    // 只做右边界收口与重叠兜底——两边都靠实测文字宽度判断，不靠字符数估。
+    const measured = monthLabels.map(label => ({ ...label, width: labelWidth(label.text) }));
+    const plotRight = cols * (cell + gap);
+    const visible = [];
     if (homeLayout) {
-      const measureCanvas = document.createElement('canvas').getContext('2d');
-      if (measureCanvas) measureCanvas.font = '600 9px Arial, "Microsoft YaHei", sans-serif';
-      const labelWidth = text => measureCanvas ? measureCanvas.measureText(text).width : [...text].length * 9;
       let nextLabelX = Infinity;
-      const visibleMonths = [];
-      for (let index = monthLabels.length - 1; index >= 0; index--) {
-        const label = monthLabels[index];
-        if (label.x + labelWidth(label.text) + 4 <= nextLabelX) {
-          visibleMonths.push(label);
-          nextLabelX = label.x;
-        }
+      for (let index = measured.length - 1; index >= 0; index--) {
+        const label = measured[index];
+        if (label.x + label.width + 4 <= nextLabelX) { visible.push(label); nextLabelX = label.x; }
       }
-      visibleMonths.reverse().forEach(label => {
-        svg += `<text class="hm-month-label" data-date="${label.date}" x="${label.x}" y="-8" fill="var(--hm-text-dim)" font-size="9" font-weight="600">${label.text}</text>`;
-      });
+      visible.reverse();
+    } else {
+      let previousRight = -Infinity;
+      for (const label of measured) {
+        const x = Math.min(label.x, plotRight - label.width);
+        if (x < previousRight + 4) continue;
+        visible.push({ ...label, x });
+        previousRight = x + label.width;
+      }
     }
+    visible.forEach(label => {
+      svg += `<text class="hm-month-label" data-date="${label.date}" x="${label.x.toFixed(1)}" y="-8">${label.text}</text>`;
+    });
     svg += '</g></svg>';
     const active = data.days.filter(day => day.count > 0).length;
     const activeRate = (active / data.days.length * 100).toFixed(1);
