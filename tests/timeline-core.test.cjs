@@ -195,6 +195,25 @@ test('count axis anchors the compression on the lowest labelled tick', () => {
   // 刻度从 5 起算：0 只作基线，不再标数字。
   assert.deepEqual(axis.ticks, [5, 10, 20, 50, 80], 'ticks are whole episodes starting at 5');
 });
+test('bucket series folds consecutive days and keeps the ragged tail', () => {
+  const days = Array.from({ length: 10 }, (_, index) => ({
+    key: `2026-05-${String(index + 1).padStart(2, '0')}`,
+    time: index * C.DAY,
+    count: index,
+    mean: index * 2,
+  }));
+  const weekly = C.bucketSeries(days, 7);
+  assert.equal(weekly.length, 2, 'ten days fold into one full week plus a tail');
+  assert.equal(weekly[0].days, 7);
+  assert.equal(weekly[0].count, 21, 'the bar carries the sum of the block');
+  assert.equal(weekly[0].mean, 6, 'the line carries the average of the block');
+  assert.equal(weekly[0].key, '2026-05-01');
+  assert.equal(weekly[0].endKey, '2026-05-07');
+  assert.equal(weekly[1].days, 3, 'the tail keeps its real length');
+  assert.equal(weekly[1].count, 24);
+  assert.deepEqual(C.bucketSeries(days, 1)[3], { key: '2026-05-04', endKey: '2026-05-04', days: 1, count: 3, mean: 6 });
+  assert.deepEqual(C.bucketSeries([], 7), []);
+});
 test('deep backfill keeps sync due until the stream reaches the oldest record', () => {
   const state = C.freshState('wylt');
   state.streams.progress.complete = true;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.22
+// @version      1.0.23
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -158,6 +158,23 @@
       return sum / Math.min(index + 1, size);
     });
   }
+  /* ── 逐日序列按固定天数聚合 ──
+     窄窗口里一天一根柱子会挤成发丝墙，噪声反倒是全部信息。按 7/14/30 天
+     聚合成桶之后，每根柱子的高度是一段时间的合计，形状才重新读得出来；
+     末尾不足一桶的照常保留，读数条会如实显示起止日期。 */
+  function bucketSeries(days, size) {
+    const step = Math.max(1, Math.floor(size || 1));
+    const source = days || [];
+    if (step === 1) return source.map(day => ({ key: day.key, endKey: day.key, days: 1, count: day.count, mean: day.mean }));
+    const buckets = [];
+    for (let start = 0; start < source.length; start += step) {
+      const slice = source.slice(start, start + step);
+      const count = slice.reduce((sum, day) => sum + day.count, 0);
+      const mean = slice.reduce((sum, day) => sum + day.mean, 0) / slice.length;
+      buckets.push({ key: slice[0].key, endKey: slice[slice.length - 1].key, days: slice.length, count, mean });
+    }
+    return buckets;
+  }
   function niceStep(value) {
     const power = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1))));
     const fraction = value / power;
@@ -235,7 +252,7 @@
     }));
     return { days, total: days.reduce((sum, day) => sum + day.count, 0), oldestTime };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, rollingMean, countAxis, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, bucketSeries, rollingMean, countAxis, importBackup, normalizeEvent, progressUnits };
 });
 
 
@@ -305,7 +322,7 @@
     #hm-dashboard .hm-fig-meta .sep{color:var(--hm-border)}
     #hm-dashboard .hm-fig-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-left:auto}
     /* 窄屏：标题行拆成两行时，图例跟着左对齐，不要孤零零地贴在右边。 */
-    @container (max-width:460px){#hm-dashboard .hm-fig-controls{margin-left:0}}
+    @container (max-width:460px){#hm-dashboard .hm-fig-controls{margin-left:0}#hm-dashboard .hm-mean-line{stroke-width:1.6}}
     /* 图例：色阶（热力图，展示用）与系列开关（柱状图）同一行高、同一字号、同一记号尺寸 */
     #hm-dashboard .hm-legend,#hm-dashboard .hm-scale{display:inline-flex;align-items:center;gap:2px;font-size:11px;color:var(--hm-text-dim);white-space:nowrap}
     #hm-dashboard .hm-legend-key{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 3px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--hm-text-dim);font:inherit;font-size:11px;cursor:pointer}
@@ -343,8 +360,9 @@
     #hm-dashboard .hm-grid-line{stroke:var(--hm-border);stroke-width:1;stroke-dasharray:3 4}
     #hm-dashboard .hm-grid-line.zero{stroke:var(--hm-text-dim);stroke-dasharray:none;opacity:.55}
     #hm-dashboard .hm-tick,#hm-dashboard .hm-axis-label{fill:var(--hm-text-dim);font:9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
-    #hm-dashboard .hm-bar{fill:var(--hm-accent);shape-rendering:crispEdges}
-    #hm-dashboard .hm-mean-line{fill:none;stroke:var(--hm-text-strong);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;opacity:.9}
+    /* 柱子按周/月聚合后比原来粗，靠留缝分隔，圆角让柱墙不显得生硬。 */
+    #hm-dashboard .hm-bar{fill:var(--hm-accent)}
+    #hm-dashboard .hm-mean-line{fill:none;stroke:var(--hm-text-strong);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;opacity:.9}
     #hm-dashboard .hm-guide-line{stroke:var(--hm-text-dim);stroke-width:1;stroke-dasharray:2 3}
     #hm-dashboard .hm-guide-bar{fill:var(--hm-accent)}
     #hm-dashboard .hm-guide-mean{fill:var(--hm-text-strong)}
@@ -499,24 +517,52 @@
       });
     }
   }
-  // Trend chart: daily episode bars with a 7-day moving average line, drawn in
-  // the ledger's idiom — hairline bars in even bands, a dashed hairline grid
-  // with a solid baseline, round integer ticks on a zero-safe log scale (a
-  // single binge day would otherwise flatten every ordinary day into a
-  // sliver), and a pointer/keyboard readout instead of native tooltips.
-  // Returns false when there is nothing drawable yet (zero-width container).
+  // Trend chart: episode bars with a smoothed average line, drawn in the
+  // ledger's idiom — hairline grid with a solid baseline, integer ticks on a
+  // zero-safe log scale (a single binge day would otherwise flatten every
+  // ordinary day into a sliver), and a pointer/keyboard readout instead of
+  // native tooltips.
+  // 一天一根柱子只在窗口够宽时才成立：365 天摊到 780px 上每根不到 1.2px，
+  // 画出来是一片毛刺墙，波动本身就是噪声。所以柱子按跨度自动收成
+  // 每周/每两周/每月，均线再在桶序列上取 30 天左右的窗口二次平滑。
   const TREND_SERIES = [
     { key: 'count', label: '每日集数', kind: 'bar' },
     { key: 'mean', label: '7 日均线', kind: 'line' },
   ];
+  // 只保留有日历意义的粒度：三天一档读起来既不像日也不像周，没有意义。
+  const BUCKET_STEPS = [1, 7, 14, 30, 90];
+  const UNIT_LABEL = { 1: '日', 7: '周', 14: '两周', 30: '月', 90: '季' };
   const hiddenSeries = new Set();
-  let trendGeom = null, trendIndex = -1;
+  let trendGeom = null, trendIndex = -1, trendView = null;
+
+  // 每根桶至少给 5.5px 的横向预算（柱宽约 4px + 缝隙）：低于这个宽度的柱子
+  // 会互相糊在一起。窄屏也尽量停在“周”这一档，均线的单位才和宽屏一致；
+  // 跨度超过两年就整体退到月桶，回顾视图不该堆上百根柱子。
+  function bucketStep(n, plotWidth) {
+    if (n <= 60) return 1;
+    if (n > 800) return 30;
+    const maxBuckets = Math.max(8, Math.floor(plotWidth / 5.5));
+    return BUCKET_STEPS.slice(1).find(step => Math.ceil(n / step) <= maxBuckets) || 30;
+  }
+  // 均线的平滑窗口按“约 30 天”折算成桶数：逐日视图仍是 7 日均线，
+  // 周桶 4 窗、双周桶 2 窗，月桶本身已经足够平滑，不再二次平均。
+  // 线算的是“每桶平均集数”，和柱子的合计同量纲，不会一高一低各说各话。
+  function smoothWindow(step) {
+    if (step === 1) return 7;
+    return Math.max(2, Math.min(6, Math.round(30 / step)));
+  }
+  function bucketSpan(bucket) {
+    const start = bucket.key.replace(/-/g, '/');
+    if (bucket.days === 1) return start;
+    const sameYear = bucket.endKey.slice(0, 4) === bucket.key.slice(0, 4);
+    return `${start}–${sameYear ? bucket.endKey.slice(5).replace('-', '/') : bucket.endKey.replace(/-/g, '/')}`;
+  }
 
   function trendKey() {
     return `${range}:${state.events.length}:${state.deep ? 1 : 0}:${state.streams.progress.deep ? 1 : 0}:${[...hiddenSeries].sort().join(',')}`;
   }
   // 指针读数：窄柱根本悬不准原生 <title>，改成竖线 + 右上角读数条（与账本一致），
-  // 键盘左右方向键也能逐日查看。元素每次重绘都是新的，直接绑在节点上即可。
+  // 键盘左右方向键也能逐桶查看。元素每次重绘都是新的，直接绑在节点上即可。
   function bindTrend(area) {
     const plot = area.querySelector('.hm-trend-plot'), svg = area.querySelector('svg.hm-trend');
     if (!plot || !svg) return;
@@ -541,21 +587,22 @@
     const area = shadow.querySelector('.hm-trend-area');
     const guide = area?.querySelector('.hm-guide'), readout = area?.querySelector('.hm-readout');
     if (!guide || !readout) { trendIndex = -1; return; }
-    const days = trendSeries?.days || [];
-    if (index < 0 || !days.length || !trendGeom) {
+    const view = trendView;
+    if (index < 0 || !view || !view.buckets.length || !trendGeom) {
       trendIndex = -1; guide.style.display = 'none'; readout.hidden = true; return;
     }
-    const day = days[index];
+    const bucket = view.buckets[index], count = bucket.count, mean = view.means[index];
     trendIndex = index;
     guide.style.display = '';
     guide.setAttribute('transform', `translate(${trendGeom.x(index).toFixed(2)},0)`);
-    const bar = guide.querySelector('.hm-guide-bar'), mean = guide.querySelector('.hm-guide-mean');
-    bar.setAttribute('x', '-1.5'); bar.setAttribute('y', (trendGeom.y(day.count) - 1.5).toFixed(2));
-    mean.setAttribute('x', '-1.5'); mean.setAttribute('y', (trendGeom.y(day.mean) - 1.5).toFixed(2));
-    bar.style.display = hiddenSeries.has('count') || !day.count ? 'none' : '';
-    mean.style.display = hiddenSeries.has('mean') ? 'none' : '';
+    const bar = guide.querySelector('.hm-guide-bar'), dot = guide.querySelector('.hm-guide-mean');
+    bar.setAttribute('x', '-1.5'); bar.setAttribute('y', (trendGeom.y(count) - 1.5).toFixed(2));
+    dot.setAttribute('x', '-1.5'); dot.setAttribute('y', (trendGeom.y(mean) - 1.5).toFixed(2));
+    bar.style.display = hiddenSeries.has('count') || !count ? 'none' : '';
+    dot.style.display = hiddenSeries.has('mean') ? 'none' : '';
     readout.hidden = false;
-    readout.innerHTML = `<time>${day.key.replace(/-/g, '/')}</time><span>每日 <b>${day.count}</b> 集</span><span>7日均 <b>${day.mean.toFixed(1)}</b></span>`;
+    readout.innerHTML = `<time>${bucketSpan(bucket)}</time><span>每${view.unit} <b>${count}</b> 集</span>` +
+      `<span>${view.meanLabel} <b>${mean.toFixed(1)}</b></span>`;
   }
   function toggleSeries(key) {
     if (!TREND_SERIES.some(item => item.key === key)) return;
@@ -573,28 +620,38 @@
     if (!useCache || !trendSeries) trendSeries = C.dailySeries(state, Date.now(), range);
     trendWidth = width;
     const days = trendSeries.days, n = days.length;
-    const toggle = `<span class="hm-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span>`;
-    const legend = `<span class="hm-legend">${TREND_SERIES.map(item => `<button type="button" class="hm-legend-key" data-series="${item.key}" aria-pressed="${!hiddenSeries.has(item.key)}"><i class="${item.kind === 'line' ? 'line' : ''}" aria-hidden="true"></i><span>${item.label}</span></button>`).join('')}</span>`;
-    // 头部行与热力图同构：左标题、中摘要、右图例 + 范围切换。
-    const head = `<div class="hm-fig-head"><h3 class="hm-fig-title">每日活跃</h3><span class="hm-fig-meta hm-trend-total">共 <b>${trendSeries.total}</b> 集</span><div class="hm-fig-controls">${legend}${toggle}</div></div>`;
     if (!n) {
-      trendGeom = null; trendIndex = -1;
-      area.innerHTML = head + '<div class="hm-trend-empty">还没有可统计的进度记录</div>';
+      trendGeom = null; trendView = null; trendIndex = -1;
+      area.innerHTML = `<div class="hm-fig-head"><h3 class="hm-fig-title">每日活跃</h3><span class="hm-fig-meta hm-trend-total">共 <b>${trendSeries.total}</b> 集</span><div class="hm-fig-controls"><span class="hm-legend"></span><span class="hm-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span></div></div><div class="hm-trend-empty">还没有可统计的进度记录</div>`;
       return true;
     }
-    const values = key => days.map(day => (key === 'count' ? day.count : day.mean));
-    // 刻度按“每日集数”标定：图的面积讲的是日子，均线只是参考线，把它混进
-    // 分位数会把压缩力度稀释掉。全部序列被关掉时退回集数，避免坐标算成 NaN。
-    const axis = C.countAxis(hiddenSeries.has('count') ? values('mean') : values('count'));
+    const toggle = `<span class="hm-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span>`;
     const plotH = Math.max(140, Math.min(220, Math.round(width * 0.36)));
     const padL = 36, padR = 8, padT = 12, padB = 22;
     const plotW = Math.max(1, width - padL - padR), height = padT + plotH + padB;
+    const step = bucketStep(n, plotW);
+    const buckets = C.bucketSeries(days, step);
+    const nb = buckets.length;
+    const counts = buckets.map(bucket => bucket.count);
+    const smoothing = smoothWindow(step);
+    const means = smoothing > 1 ? C.rollingMean(counts, smoothing) : counts.slice();
+    const unit = UNIT_LABEL[step];
+    const meanLabel = smoothing > 1 ? `${smoothing} ${unit}均线` : `${unit}均线`;
+    const unitLabel = `每${unit}`;
+    // 刻度按“集数”标定：图的面积讲的是记录，均线只是参考线，把它混进
+    // 分位数会把压缩力度稀释掉。隐藏集数时才改用均线标定。
+    const axis = C.countAxis(hiddenSeries.has('count') ? means : counts);
+    const legend = `<span class="hm-legend">${TREND_SERIES.map(item => `<button type="button" class="hm-legend-key" data-series="${item.key}" aria-pressed="${!hiddenSeries.has(item.key)}"><i class="${item.kind === 'line' ? 'line' : ''}" aria-hidden="true"></i><span>${item.key === 'count' ? `${unitLabel}集数` : meanLabel}</span></button>`).join('')}</span>`;
+    // 头部行与热力图同构：左标题、中摘要（带统计粒度）、右图例 + 范围切换。
+    const head = `<div class="hm-fig-head"><h3 class="hm-fig-title">每日活跃</h3><span class="hm-fig-meta hm-trend-total">共 <b>${trendSeries.total}</b> 集${step > 1 ? ` · 按${unit}` : ''}</span><div class="hm-fig-controls">${legend}${toggle}</div></div>`;
     const y = value => padT + (1 - axis.position(value)) * plotH;
-    // 等宽槽位整体居中：天数少时不贴左轴，天数多时自然铺满。
-    const band = Math.min(plotW / n, 120);
-    const bandX0 = padL + (plotW - band * n) / 2;
+    // 等宽槽位整体居中：桶少时不贴左轴，桶多时自然铺满。
+    const band = Math.min(plotW / nb, 64);
+    const bandX0 = padL + (plotW - band * nb) / 2;
     const x = index => bandX0 + (index + 0.5) * band;
-    const barW = Math.max(1, band * 0.55);
+    // 柱宽留缝 + 圆角：柱墙变粗之后，靠缝隙分隔比靠描边干净。
+    const barW = Math.max(1, Math.min(26, band * 0.72));
+    const radius = Math.min(2, barW / 3).toFixed(2);
     const base = y(0);
 
     // 对数轴上的刻度间距不再均匀：按像素筛一遍，太密的丢掉；顶部刻度优先，
@@ -618,21 +675,22 @@
     grid += `<line class="hm-grid-line zero" x1="${padL}" x2="${padL + plotW}" y1="${base.toFixed(1)}" y2="${base.toFixed(1)}"/>`;
     let bars = '';
     if (!hiddenSeries.has('count')) {
-      for (let index = 0; index < n; index++) {
-        const count = days[index].count;
-        if (!count) continue;
-        const top = y(count);
-        bars += `<rect class="hm-bar" x="${(x(index) - barW / 2).toFixed(2)}" y="${top.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(1, base - top).toFixed(2)}"/>`;
+      for (let index = 0; index < nb; index++) {
+        if (!counts[index]) continue;
+        const top = y(counts[index]);
+        bars += `<rect class="hm-bar" x="${(x(index) - barW / 2).toFixed(2)}" y="${top.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(1, base - top).toFixed(2)}" rx="${radius}"/>`;
       }
     }
-    const average = hiddenSeries.has('mean') || n < 2 ? '' : `<polyline class="hm-mean-line" points="${days.map((day, index) => `${x(index).toFixed(2)},${y(day.mean).toFixed(2)}`).join(' ')}"/>`;
-    // 横轴只标每月 1 号，且按屏幕距离抽稀，避免 365 天挤成一团。
-    // 跨度超过一年后改标年份：八年历史里的「18/1」会被读成 1 月 1 日。
+    const average = hiddenSeries.has('mean') || nb < 2 ? '' : `<polyline class="hm-mean-line" points="${means.map((value, index) => `${x(index).toFixed(2)},${y(value).toFixed(2)}`).join(' ')}"/>`;
+    // 横轴：桶边界不对齐日历，改成“月份变化时标一次”，再按像素抽稀；
+    // 跨度超过一年就直接标四位年份，八年历史里的「18/1」会被读成 1 月 1 日。
     const longSpan = n > 400;
-    let labels = '', previous = -Infinity;
-    for (let index = 0; index < n; index++) {
-      const key = days[index].key;
-      if (longSpan ? key.slice(5) !== '01-01' : key.slice(8) !== '01') continue;
+    let labels = '', previous = -Infinity, marker = '';
+    for (let index = 0; index < nb; index++) {
+      const key = buckets[index].key;
+      const current = longSpan ? key.slice(0, 4) : key.slice(0, 7);
+      if (current === marker) continue;
+      marker = current;
       const lx = x(index);
       if (lx - previous < 44) continue;
       previous = lx;
@@ -642,10 +700,11 @@
     const pending = range === 'all' && !state.streams.progress.deep;
     const hint = pending ? `<div class="hm-trend-hint">正在回溯更早的记录，已回溯到 ${days[0].key}…</div>` : '';
     area.innerHTML = head +
-      `<div class="hm-trend-plot" tabindex="0" role="img" aria-label="每日活跃柱状图与 7 日均线，当前${range === 'all' ? '全部' : '近一年'}范围，左右方向键可逐日查看"><svg class="hm-trend" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${grid}${bars}${average}${labels}<g class="hm-guide" style="display:none"><line class="hm-guide-line" x1="0" x2="0" y1="${padT}" y2="${padT + plotH}"/><rect class="hm-guide-bar" width="3" height="3"/><rect class="hm-guide-mean" width="3" height="3"/></g></svg><div class="hm-readout" hidden></div></div>` +
+      `<div class="hm-trend-plot" tabindex="0" role="img" aria-label="活跃趋势柱状图与${meanLabel}，按${unit}统计，当前${range === 'all' ? '全部' : '近一年'}范围，左右方向键可逐${unit}查看"><svg class="hm-trend" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${grid}${bars}${average}${labels}<g class="hm-guide" style="display:none"><line class="hm-guide-line" x1="0" x2="0" y1="${padT}" y2="${padT + plotH}"/><rect class="hm-guide-bar" width="3" height="3"/><rect class="hm-guide-mean" width="3" height="3"/></g></svg><div class="hm-readout" hidden></div></div>` +
       hint;
-    trendGeom = { width, n, band, bandX0, x, y };
-    if (trendIndex >= 0) showTrend(Math.min(trendIndex, n - 1));
+    trendView = { buckets, means, step, unit, meanLabel };
+    trendGeom = { width, n: nb, band, bandX0, x, y };
+    if (trendIndex >= 0) showTrend(Math.min(trendIndex, nb - 1));
     bindTrend(area);
     return true;
   }

@@ -147,6 +147,23 @@
       return sum / Math.min(index + 1, size);
     });
   }
+  /* ── 逐日序列按固定天数聚合 ──
+     窄窗口里一天一根柱子会挤成发丝墙，噪声反倒是全部信息。按 7/14/30 天
+     聚合成桶之后，每根柱子的高度是一段时间的合计，形状才重新读得出来；
+     末尾不足一桶的照常保留，读数条会如实显示起止日期。 */
+  function bucketSeries(days, size) {
+    const step = Math.max(1, Math.floor(size || 1));
+    const source = days || [];
+    if (step === 1) return source.map(day => ({ key: day.key, endKey: day.key, days: 1, count: day.count, mean: day.mean }));
+    const buckets = [];
+    for (let start = 0; start < source.length; start += step) {
+      const slice = source.slice(start, start + step);
+      const count = slice.reduce((sum, day) => sum + day.count, 0);
+      const mean = slice.reduce((sum, day) => sum + day.mean, 0) / slice.length;
+      buckets.push({ key: slice[0].key, endKey: slice[slice.length - 1].key, days: slice.length, count, mean });
+    }
+    return buckets;
+  }
   function niceStep(value) {
     const power = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1))));
     const fraction = value / power;
@@ -224,5 +241,5 @@
     }));
     return { days, total: days.reduce((sum, day) => sum + day.count, 0), oldestTime };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, rollingMean, countAxis, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, bucketSeries, rollingMean, countAxis, importBackup, normalizeEvent, progressUnits };
 });
