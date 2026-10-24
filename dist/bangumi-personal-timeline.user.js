@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.25
+// @version      1.0.26
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -66,7 +66,7 @@
     return { events, next, oldest: events.length ? Math.min(...events.map(e => e.time)) : null, newest: events.length ? Math.max(...events.map(e => e.time)) : null };
   }
   function freshState(user) {
-    return { schema: 1, user, deep: false, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, deep: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
+    return { schema: 1, user, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
   }
   function mergeEvents(old, incoming) {
     const map = new Map(old.map(e => [e.id, e]));
@@ -79,8 +79,6 @@
     for (const type of SYNC_TYPES) {
       const stream = state?.streams?.[type];
       if (!stream || !stream.complete || stream.refresh) return 0;
-      // Full-history backfill requested but not finished: keep working now.
-      if (state.deep && !stream.deep) return 0;
       const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
       if (!checkedAt) return 0;
       next = Math.min(next, checkedAt + REFRESH_INTERVAL);
@@ -162,137 +160,32 @@
      窄窗口里一天一根柱子会挤成发丝墙，噪声反倒是全部信息。按 7/14/30 天
      聚合成桶之后，每根柱子的高度是一段时间的合计，形状才重新读得出来；
      末尾不足一桶的照常保留，读数条会如实显示起止日期。 */
-  function bucketSeries(days, size) {
-    const step = Math.max(1, Math.floor(size || 1));
-    const source = days || [];
-    if (step === 1) return source.map(day => ({ key: day.key, endKey: day.key, days: 1, count: day.count, mean: day.mean }));
-    const buckets = [];
-    for (let start = 0; start < source.length; start += step) {
-      const slice = source.slice(start, start + step);
-      const count = slice.reduce((sum, day) => sum + day.count, 0);
-      const mean = slice.reduce((sum, day) => sum + day.mean, 0) / slice.length;
-      buckets.push({ key: slice[0].key, endKey: slice[slice.length - 1].key, days: slice.length, count, mean });
-    }
-    return buckets;
-  }
   function niceStep(value) {
     const power = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1))));
     const fraction = value / power;
     return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power;
   }
-  /* ── 纵轴：零安全对数刻度（与账本日支出图同一套视觉语言）──
-     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下普通日子
-     全部压成发丝。但对数压缩也不能一味往上抬——抬过头了，1 集的日子会顶到
-     绘图区四分之一高，图片面积跟数量又对不上。所以压缩力度锚在最低刻度线
-     上：纵轴最低标 5 集，让它固定落在 22% 高度，5 集以下按对数自然收在底部，
-     顶部留给少数高峰。刻度只出 5/10/20/50… 这类整数，像素密度交给调用方筛。 */
-  const AXIS_BASE = 5, BASE_HEIGHT = 0.22, MIN_COMPRESS = 0.05, MAX_COMPRESS = 25;
-  function countAxis(values) {
-    const finite = (values || []).filter(value => Number.isFinite);
-    const max = finite.length ? Math.max(...finite) : 0;
-    const unit = Math.max(1, niceStep(max / 5 || 1));
-    // +0.5：最大值正好落在刻度上时也要留出头顶的一点空隙，否则最高的柱子贴边。
-    // 下限取最低刻度：再小的值域也得有一条刻度线撑着。
-    const hi = Math.max(AXIS_BASE, Math.ceil((max + 0.5) / unit) * unit);
-    // ratio(c) 随 c 单调递减：c 越小，低值被抬得越高。
-    const ratio = c => Math.log1p(AXIS_BASE / c) / Math.log1p(hi / c);
-    let c = MAX_COMPRESS;
-    if (ratio(MIN_COMPRESS) <= BASE_HEIGHT) c = MIN_COMPRESS;
-    else if (ratio(MAX_COMPRESS) > BASE_HEIGHT) c = MAX_COMPRESS;
-    else {
-      let low = MIN_COMPRESS, high = MAX_COMPRESS;
-      for (let step = 0; step < 40; step++) {
-        const mid = Math.sqrt(low * high);
-        if (ratio(mid) > BASE_HEIGHT) low = mid; else high = mid;
-      }
-      c = Math.sqrt(low * high);
-    }
-    const transform = value => Math.sign(value) * Math.log1p(Math.abs(value) / c);
-    const top = transform(hi);
-    const ticks = [];
-    for (let power = 1; power <= hi; power *= 10) {
-      for (const multiple of [1, 2, 5]) {
-        const value = power * multiple;
-        if (value >= AXIS_BASE && value < hi && value !== ticks[ticks.length - 1]) ticks.push(value);
-      }
-    }
-    ticks.push(hi);
-    return { lo: 0, hi, unit, constant: c, ticks, position: value => transform(value) / top };
-  }
-  /* ── 日历桶：按周一锚定的自然周 / 自然月聚合 ──
-     固定步长折叠的桶边界跟着窗口起点漂移，读数条里的“每周 N 集”其实是
-     任意七天。按日历对齐后，桶的语义与标签一致（每周从周一起、每月从
-     1 号起），横轴的月份标签也落在真实边界上。首尾不满一周/月的桶保留
-     并标记 partial（进行中的当前周/月天然 partial），动量统计只认完整桶。 */
-  function weekStartKey(key) {
-    const time = Date.parse(`${key}T12:00:00+08:00`);
-    return new Date(time - ((new Date(time).getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10);
-  }
-  function daysInMonth(key) {
-    return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
-  }
-  function calendarBuckets(days, mode) {
-    if (mode !== 'week' && mode !== 'month') return [];
-    const buckets = [];
-    let current = null;
-    for (const day of days || []) {
-      const key = mode === 'week' ? weekStartKey(day.key) : day.key.slice(0, 7);
-      if (!current || current.key !== key) {
-        current = { key, endKey: day.key, days: 0, count: 0, partial: false };
-        buckets.push(current);
-      }
-      current.endKey = day.key;
-      current.days += 1;
-      current.count += day.count;
-    }
-    for (const bucket of buckets) {
-      bucket.partial = bucket.days < (mode === 'week' ? 7 : daysInMonth(bucket.key));
-    }
-    return buckets;
-  }
-  /* ── 周/月桶的线性轴：长度重新与集数成正比 ──
-     对数轴救的是“按日”粒度（p50=3、峰值 63，20 倍偏态）；聚合到周/月后
-     偏态只剩 3.5 倍 / 1.8 倍，继续用对数反而让 128 集的周看起来只有 33 集
-     周的 1.5 倍。hi 常规取阶梯上盖住峰值的档；仅当峰值远超中位数（2.5 倍）
-     时收到 p90 一档，让普通周占住绘图区主体，少数爆发桶封顶画到顶——
-     截断是显式标注的，比对数轴悄悄扭曲所有柱子诚实。 */
-  function volumeAxis(values) {
+  /* ── 趋势曲线的线性轴 ──
+     7 日均已经把逐日脉冲抹平（本账号均值峰值约 15-20、中位约 3-4，偏态
+     温和），曲线只讲形状与水平，线性刻度即可：长度与集数严格成正比。
+     hi 取阶梯上盖住峰值的档并留头顶空隙，值域极小时退到 5 一条撑底线。 */
+  function meanAxis(values) {
     const finite = (values || []).filter(value => Number.isFinite(value));
     const max = finite.length ? Math.max(...finite) : 0;
-    if (max <= 0) return { lo: 0, hi: 5, unit: 5, ticks: [5], cap: false, position: value => Math.min(Math.max(value, 0), 5) / 5 };
-    const sorted = finite.slice().sort((a, b) => a - b);
-    const p50 = sorted[Math.floor((sorted.length - 1) / 2)];
-    const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
-    let anchor = max;
-    if (max > 2.5 * Math.max(p50, 1)) {
-      const unit90 = Math.max(1, niceStep(p90 / 4));
-      const hi90 = Math.ceil((p90 + 0.5) / unit90) * unit90;
-      // 封顶只该截住少数爆发桶：一成半以上的桶都在 hi 之上，说明 p90 档
-      // 也罩不住这条分布，退回峰值档。
-      if (finite.filter(value => value > hi90).length <= finite.length * 0.15) anchor = p90;
-    }
-    const unit = Math.max(1, niceStep(anchor / (anchor === max ? 5 : 4)));
-    const hi = Math.max(5, Math.ceil((anchor + 0.5) / unit) * unit);
-    const step = Math.max(1, niceStep(hi / 4));
+    if (max <= 0) return { lo: 0, hi: 5, ticks: [5], position: value => Math.min(Math.max(value, 0), 5) / 5 };
+    const unit = Math.max(0.5, niceStep(max / 4));
+    const hi = Math.max(5, Math.ceil((max + 0.5) / unit) * unit);
+    if (hi === 5) return { lo: 0, hi: 5, ticks: [5], position: value => Math.min(Math.max(value, 0), 5) / 5 };
+    const step = niceStep(hi / 4);
     const ticks = [];
-    for (let value = step; value < hi; value += step) ticks.push(value);
+    for (let value = step; value < hi; value += step) ticks.push(Number(value.toFixed(2)));
     if (!ticks.length || ticks[ticks.length - 1] !== hi) ticks.push(hi);
-    return { lo: 0, hi, unit: step, ticks, cap: max > hi, position: value => Math.min(Math.max(value, 0), hi) / hi };
+    return { lo: 0, hi, ticks, position: value => Math.min(Math.max(value, 0), hi) / hi };
   }
-  /* 动量：最近 k 个完整桶的平均量，对比再往前 k 个。partial（进行中的
-     当前周/月、窗口边缘）不参与；完整桶不足 2k 个时不给百分比。 */
-  function momentum(buckets, k = 4) {
-    const complete = (buckets || []).filter(bucket => bucket && !bucket.partial);
-    if (complete.length < k) return { count: complete.length, recent: null, previous: null, delta: null };
-    const average = list => list.reduce((sum, bucket) => sum + bucket.count, 0) / list.length;
-    const recent = average(complete.slice(-k));
-    const previous = complete.length >= 2 * k ? average(complete.slice(-2 * k, -k)) : null;
-    return { count: complete.length, recent, previous, delta: previous > 0 ? (recent - previous) / previous : null };
-  }
-  // Continuous daily series for the trend chart: "year" mirrors the heatmap
-  // window, "all" stretches back to the oldest synced progress record. Each day
-  // carries its own trailing mean so the line never restarts mid-window.
-  function dailySeries(state, now = Date.now(), range = 'year') {
+  // Continuous daily series for the trend chart: the past 365 days, each day
+  // carrying its own 7-day rolling mean so the curve never starts with a
+  // warm-up dip — the mean is computed over the full history before slicing.
+  function dailySeries(state, now = Date.now()) {
     const events = state.events.filter(e => e.type === 'progress' && e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
     const progress = new Map();
     const daily = Object.create(null);
@@ -304,10 +197,9 @@
       const key = dayKey(e.time);
       daily[key] = (daily[key] || 0) + amount;
     }
-    const end = dayStart(now);
-    let start = end - 364 * DAY;
-    if (range === 'all' && Number.isFinite(oldestTime)) start = Math.min(start, dayStart(oldestTime));
     if (!Number.isFinite(oldestTime)) return { days: [], total: 0, oldestTime: null };
+    const end = dayStart(now);
+    const start = end - 364 * DAY;
     // 均线要看得到窗口之前的日子：只拿可见段求平均会让头 6 天整体偏低。
     const fullStart = Math.min(start, dayStart(oldestTime));
     const counts = [];
@@ -322,7 +214,7 @@
     }));
     return { days, total: days.reduce((sum, day) => sum + day.count, 0), oldestTime };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, bucketSeries, calendarBuckets, momentum, rollingMean, countAxis, volumeAxis, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, rollingMean, meanAxis, importBackup, normalizeEvent, progressUnits };
 });
 
 
@@ -338,8 +230,7 @@
 
   let db, host, shadow, state = C.freshState(USER), busy = false, channel, timer;
   let aborted = false, storageBlocked = false, message = '', drawnSignature = '', drawnWidth = -1, chartData = null;
-  let range = 'year', trendSignature = '', trendWidth = -1, trendSeries = null;
-  try { if (localStorage.getItem('bgmtl-chart-range') === 'all') range = 'all'; } catch (error) { /* 私密模式忽略 */ }
+  let trendSignature = '', trendWidth = -1, trendSeries = null;
   // Idle streams only need attention every 15 minutes. Remembering the next
   // due time lets the 30-second poll skip the full IndexedDB read meanwhile.
   let idleUntil = 0;
@@ -393,24 +284,15 @@
     #hm-dashboard .hm-fig-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-left:auto}
     /* 窄屏：标题行拆成两行时，图例跟着左对齐，不要孤零零地贴在右边。 */
     @container (max-width:460px){#hm-dashboard .hm-fig-controls{margin-left:0}}
-    /* 图例：色阶（热力图，展示用）与系列开关（柱状图）同一行高、同一字号、同一记号尺寸 */
-    #hm-dashboard .hm-legend,#hm-dashboard .hm-scale{display:inline-flex;align-items:center;gap:2px;font-size:11px;color:var(--hm-text-dim);white-space:nowrap}
-    #hm-dashboard .hm-legend-key{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 3px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--hm-text-dim);font:inherit;font-size:11px;cursor:pointer}
-    #hm-dashboard .hm-legend-key i{display:block;width:8px;height:8px;flex:none;border:1px solid var(--hm-border);border-radius:1px;background:var(--hm-accent)}
-    #hm-dashboard .hm-legend-key:hover{border-color:var(--hm-border);color:var(--hm-text)}
-    #hm-dashboard .hm-legend-key:focus-visible{outline:1px solid var(--hm-accent);outline-offset:1px}
-    #hm-dashboard .hm-legend-key[aria-pressed=false]{opacity:.45}
-    #hm-dashboard .hm-legend-key[aria-pressed=false] span{text-decoration:line-through}
+    /* 图例：色阶（热力图，展示用）同一行高、同一字号、同一记号尺寸 */
+    #hm-dashboard .hm-scale{display:inline-flex;align-items:center;gap:2px;font-size:11px;color:var(--hm-text-dim);white-space:nowrap}
     #hm-dashboard .hm-scale{padding-left:2px}
     #hm-dashboard .hm-scale i{display:block;width:9px;height:9px;border-radius:2px}
     #hm-dashboard .hm-scale .sw-empty{background:var(--hm-cell-empty)}
     #hm-dashboard .hm-scale .sw-l1{background:var(--hm-cell-l1)}
     #hm-dashboard .hm-scale .sw-l2{background:var(--hm-cell-l2)}
     #hm-dashboard .hm-scale .sw-l3{background:var(--hm-cell-l3)}
-    #hm-dashboard .hm-toggle{display:inline-flex;border:1px solid var(--hm-border);border-radius:4px;overflow:hidden}
-    #hm-dashboard .hm-toggle button{padding:4px 9px;border:0;border-radius:0;background:transparent;color:var(--hm-text-dim);font:inherit;font-size:11px;line-height:1.3;cursor:pointer}
-    #hm-dashboard .hm-toggle button+button{border-left:1px solid var(--hm-border)}
-    #hm-dashboard .hm-toggle button[aria-pressed=true]{color:var(--hm-accent);background:var(--hm-accent-soft)}
+    #hm-dashboard .hm-scale{padding-left:2px}
     #hm-dashboard.home-layout .hm-scroll{overflow:hidden;padding:4px 0}
     #hm-dashboard.profile-layout .hm-scroll{overflow-x:auto;padding:4px 0 10px;scrollbar-width:thin;scrollbar-color:transparent transparent}
     #hm-dashboard.profile-layout .hm-scroll::-webkit-scrollbar{height:7px}
@@ -422,10 +304,6 @@
     #hm-dashboard .hm-loading{height:112px;display:flex;align-items:center;justify-content:center;color:var(--hm-text-dim);font-size:11px}
     #hm-dashboard .hm-trend-total{white-space:nowrap;font-variant-numeric:tabular-nums}
     #hm-dashboard .hm-trend-total b{color:var(--hm-accent);font-weight:400}
-    /* 动量：势头用文字表达，涨粉、跌灰，不往图里添墨。 */
-    #hm-dashboard .hm-delta{white-space:nowrap}
-    #hm-dashboard .hm-delta.up{color:var(--hm-accent)}
-    #hm-dashboard .hm-delta.down{color:var(--hm-text-dim)}
     #hm-dashboard .hm-trend-plot{position:relative}
     #hm-dashboard .hm-trend-plot:focus-visible{outline:1px solid var(--hm-accent);outline-offset:3px}
     #hm-dashboard .hm-trend{display:block;width:100%;height:auto}
@@ -434,20 +312,17 @@
     #hm-dashboard .hm-grid-line.zero{stroke:var(--hm-text-dim);stroke-dasharray:none;opacity:.55}
     #hm-dashboard .hm-tick,#hm-dashboard .hm-axis-label{fill:var(--hm-text-dim);font:9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
     #hm-dashboard .hm-month-label{fill:var(--hm-text-dim);font:600 9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
-    /* 柱子按周/月聚合后比原来粗，靠留缝分隔，圆角让柱墙不显得生硬。
-       峰值桶用色阶最深的一档并标真值，是整张图的视觉入口；封顶桶顶部
-       加一条深色切角帽，说明“这条被截断了”，读数条里有完整数字。 */
-    #hm-dashboard .hm-bar{fill:var(--hm-accent)}
-    #hm-dashboard .hm-bar.peak,#hm-dashboard .hm-bar-cap{fill:var(--hm-cell-l3)}
-    #hm-dashboard .hm-peak-label{fill:var(--hm-text-dim);font:600 9px Arial,"Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
+    /* 活跃趋势：一条 7 日均平滑曲线 + 淡粉面积托底，线性刻度下长度与
+       集数成正比；除面积外不叠加第二编码，逐日明细交给读数条。 */
+    #hm-dashboard .hm-trend-line{fill:none;stroke:var(--hm-accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+    #hm-dashboard .hm-trend-fill{fill:var(--hm-accent-soft);stroke:none}
     #hm-dashboard .hm-guide-line{stroke:var(--hm-text-dim);stroke-width:1;stroke-dasharray:2 3}
-    #hm-dashboard .hm-guide-bar{fill:var(--hm-accent)}
+    #hm-dashboard .hm-guide-dot{fill:var(--hm-accent);stroke:var(--hm-panel-bg);stroke-width:1.5}
     /* 读数条：图给形状，这里给精确读数，位置固定在右上角不遮挡主体。 */
     #hm-dashboard .hm-readout{position:absolute;top:6px;right:8px;max-width:calc(100% - 16px);display:flex;align-items:baseline;flex-wrap:wrap;justify-content:flex-end;gap:2px 12px;padding:3px 8px;border:1px solid var(--hm-border);background:var(--hm-readout-bg);font-size:11px;color:var(--hm-text-dim);font-variant-numeric:tabular-nums;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.06)}
     #hm-dashboard .hm-readout time{color:var(--hm-text)}
     #hm-dashboard .hm-readout b{color:var(--hm-text);font-weight:400}
     #hm-dashboard .hm-trend-empty{height:120px;display:flex;align-items:center;justify-content:center;border:1px solid var(--hm-border);color:var(--hm-text-dim);font-size:11px}
-    #hm-dashboard .hm-trend-hint{margin-top:6px;font-size:11px;color:var(--hm-text-dim)}
     @media(prefers-reduced-motion:reduce){#hm-dashboard .hm-cell{transition:none!important}}
   `;
 
@@ -505,15 +380,6 @@
         if (trendSeries && Math.abs(width - trendWidth) > 0.5) drawTrend(true);
       }).observe(shadow.querySelector('.hm-trend-area'));
     }
-    shadow.addEventListener('click', event => {
-      const rangeButton = event.target.closest('[data-range]');
-      if (rangeButton) {
-        if (rangeButton.getAttribute('aria-pressed') !== 'true') setRange(rangeButton.dataset.range);
-        return;
-      }
-      const legendButton = event.target.closest('[data-series]');
-      if (legendButton) toggleSeries(legendButton.dataset.series);
-    });
     theme();
     new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
@@ -604,39 +470,19 @@
       });
     }
   }
-  // Trend chart: weekly/monthly totals as honest-length bars, drawn in the
-  // ledger's idiom — a few hairline gridlines with a solid baseline, a linear
-  // axis where height ∝ episodes (extreme binge buckets are capped at the
-  // ceiling and labelled rather than squeezed by a log transform), and a
-  // pointer/keyboard readout instead of native tooltips.
-  // 趋势图与热力图分工：热力图回答“哪天看了多少”，这里回答宏观三件事——
-  // 势头（动量进标题行文字，不画进图）、周/月之间的体量对比、补番爆发的
-  // 位置与强度。柱子按日历周（周一起）/自然月聚合，长度与集数严格成正比；
-  // 峰值桶深色并标真值，超过轴顶的爆发桶封顶加切角帽。只有 ≤60 天的日粒度
-  // （新账号）才保留零安全对数轴——20 倍的按日偏态线性轴罩不住。
-  const UNIT_LABEL = { day: '日', week: '周', month: '月' };
-  const hiddenSeries = new Set();
+  // Trend chart: one smooth curve — the 7-day rolling mean of daily episodes
+  // over the past year, drawn in the ledger's idiom (a few hairline gridlines,
+  // a solid baseline, a pointer/keyboard readout instead of native tooltips).
+  // 「活跃趋势」只讲势头：7 日均本身就是平滑器，逐日的补番脉冲被抹成一条
+  // 可读的水平线，线性刻度下长度与集数严格成正比。“哪天看了多少”的逐日
+  // 明细是热力图与读数条的职责，不再画第二遍。
   let trendGeom = null, trendIndex = -1, trendView = null;
 
-  // 粒度由数据跨度与绘图区宽度决定：≤60 天逐日；跨两年以上、或周桶挤不进
-  // 每桶 5.5px 的横向预算时退到自然月；其余一律日历周。
-  function trendGrain(n, plotWidth) {
-    if (n <= 60) return 'day';
-    if (n > 800 || Math.ceil(n / 7) * 5.5 > plotWidth) return 'month';
-    return 'week';
-  }
-  function bucketSpan(bucket) {
-    const start = bucket.key.replace(/-/g, '/');
-    if (bucket.days === 1) return start;
-    const sameYear = bucket.endKey.slice(0, 4) === bucket.key.slice(0, 4);
-    return `${start}–${sameYear ? bucket.endKey.slice(5).replace('-', '/') : bucket.endKey.replace(/-/g, '/')}`;
-  }
-
   function trendKey() {
-    return `${range}:${state.events.length}:${state.deep ? 1 : 0}:${state.streams.progress.deep ? 1 : 0}:${[...hiddenSeries].sort().join(',')}`;
+    return `${C.dayKey(Date.now())}:${state.events.length}`;
   }
-  // 指针读数：窄柱根本悬不准原生 <title>，改成竖线 + 右上角读数条（与账本一致），
-  // 键盘左右方向键也能逐桶查看。元素每次重绘都是新的，直接绑在节点上即可。
+  // 指针读数：竖线 + 曲线圆点 + 右上角读数条（与账本一致），
+  // 键盘左右方向键也能逐日查看。元素每次重绘都是新的，直接绑在节点上即可。
   function bindTrend(area) {
     const plot = area.querySelector('.hm-trend-plot'), svg = area.querySelector('svg.hm-trend');
     if (!plot || !svg) return;
@@ -644,7 +490,7 @@
       const bounds = svg.getBoundingClientRect();
       if (!bounds.width || !trendGeom) return -1;
       const pointer = (clientX - bounds.left) / bounds.width * trendGeom.width;
-      return Math.max(0, Math.min(trendGeom.n - 1, Math.floor((pointer - trendGeom.bandX0) / trendGeom.band)));
+      return Math.max(0, Math.min(trendGeom.n - 1, Math.round((pointer - trendGeom.padL) / trendGeom.plotW * (trendGeom.n - 1))));
     };
     plot.addEventListener('pointermove', event => showTrend(at(event.clientX)));
     plot.addEventListener('pointerleave', () => showTrend(-1));
@@ -662,26 +508,17 @@
     const guide = area?.querySelector('.hm-guide'), readout = area?.querySelector('.hm-readout');
     if (!guide || !readout) { trendIndex = -1; return; }
     const view = trendView;
-    if (index < 0 || !view || !view.buckets.length || !trendGeom) {
+    if (index < 0 || !view || !view.days.length || !trendGeom) {
       trendIndex = -1; guide.style.display = 'none'; readout.hidden = true; return;
     }
-    const bucket = view.buckets[index], count = bucket.count;
     trendIndex = index;
     guide.style.display = '';
     guide.setAttribute('transform', `translate(${trendGeom.x(index).toFixed(2)},0)`);
-    const bar = guide.querySelector('.hm-guide-bar');
-    bar.setAttribute('x', '-1.5'); bar.setAttribute('y', (trendGeom.y(count) - 1.5).toFixed(2));
-    bar.style.display = hiddenSeries.has('count') || !count ? 'none' : '';
-    const current = index === view.buckets.length - 1 ? `（${view.unit === '月' ? '本月' : view.unit === '周' ? '本周' : '今日'}）` : '';
+    const dot = guide.querySelector('.hm-guide-dot');
+    dot.setAttribute('cy', trendGeom.y(view.means[index]).toFixed(2));
+    const day = view.days[index];
     readout.hidden = false;
-    readout.innerHTML = `<time>${bucketSpan(bucket)}</time><span>每${view.unit} <b>${count}</b> 集${current}</span>`;
-  }
-  function toggleSeries(key) {
-    if (key !== 'count') return;
-    if (hiddenSeries.has(key)) hiddenSeries.delete(key); else hiddenSeries.add(key);
-    trendIndex = -1;
-    trendSignature = trendKey();
-    drawTrend();
+    readout.innerHTML = `<time>${day.key.replace(/-/g, '/')}</time><span>当日 <b>${day.count}</b> 集</span><span>7日均 <b>${day.mean.toFixed(1)}</b></span>`;
   }
   function drawTrend(useCache = false) {
     if (homeLayout) return false; // 首页只留热力图
@@ -689,54 +526,25 @@
     if (!area) return false;
     const width = area.clientWidth;
     if (width < 80) return false;
-    if (!useCache || !trendSeries) trendSeries = C.dailySeries(state, Date.now(), range);
+    if (!useCache || !trendSeries) trendSeries = C.dailySeries(state, Date.now());
     trendWidth = width;
     const days = trendSeries.days, n = days.length;
     if (!n) {
       trendGeom = null; trendView = null; trendIndex = -1;
-      area.innerHTML = `<div class="hm-fig-head"><h3 class="hm-fig-title">每日活跃</h3><span class="hm-fig-meta hm-trend-total">共 <b>${trendSeries.total}</b> 集</span><div class="hm-fig-controls"><span class="hm-legend"></span><span class="hm-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span></div></div><div class="hm-trend-empty">还没有可统计的进度记录</div>`;
+      area.innerHTML = `<div class="hm-fig-head"><h3 class="hm-fig-title">活跃趋势</h3><span class="hm-fig-meta hm-trend-total">近1年 · 7日均 — 集/日</span></div><div class="hm-trend-empty">还没有可统计的进度记录</div>`;
       return true;
     }
-    const toggle = `<span class="hm-toggle"><button type="button" data-range="year" aria-pressed="${range === 'year'}">近一年</button><button type="button" data-range="all" aria-pressed="${range === 'all'}">全部</button></span>`;
     const plotH = Math.max(140, Math.min(220, Math.round(width * 0.36)));
-    // padT 留出峰值真值标签（9px）的呼吸空间。
-    const padL = 36, padR = 8, padT = 18, padB = 22;
+    const padL = 30, padR = 12, padT = 12, padB = 22;
     const plotW = Math.max(1, width - padL - padR), height = padT + plotH + padB;
-    const grain = trendGrain(n, plotW);
-    const buckets = grain === 'day' ? C.bucketSeries(days, 1) : C.calendarBuckets(days, grain);
-    const nb = buckets.length;
-    const counts = buckets.map(bucket => bucket.count);
-    const unit = UNIT_LABEL[grain];
-    const unitLabel = `每${unit}`;
-    // 轴随粒度走：逐日 20 倍偏态用零安全对数轴；周/月桶用线性轴，长度恢复
-    // “与集数成正比”的比较契约，剩余偏态交给封顶与峰值标注。
-    const axis = grain === 'day' ? C.countAxis(counts) : C.volumeAxis(counts);
-    // 势头是趋势图的职责之一，但它是派生统计：一行文字说得比一条叠在柱上
-    // 的折线更准。只统计完整桶，当前周/月不参与。
-    const trend = C.momentum(buckets, 4);
-    const momentumChip = trend.recent == null || trend.count < 8 ? '' :
-      ` · 近4${unit} 均<b>${Number(trend.recent.toFixed(1))}</b> 集/${unit}` +
-      (trend.delta == null ? '' : ` <span class="hm-delta ${trend.delta >= 0 ? 'up' : 'down'}">${trend.delta >= 0 ? '↑' : '↓'}${Math.abs(Math.round(trend.delta * 100))}%</span>`);
-    const legend = `<span class="hm-legend"><button type="button" class="hm-legend-key" data-series="count" aria-pressed="${!hiddenSeries.has('count')}"><i aria-hidden="true"></i><span>${unitLabel}集数</span></button></span>`;
-    // 头部行与热力图同构：左标题、中摘要（合计、粒度、动量）、右图例 + 范围切换。
-    const head = `<div class="hm-fig-head"><h3 class="hm-fig-title">每日活跃</h3><span class="hm-fig-meta hm-trend-total">共 <b>${trendSeries.total}</b> 集${grain !== 'day' ? ` · 按${unit}` : ''}${momentumChip}</span><div class="hm-fig-controls">${legend}${toggle}</div></div>`;
+    const means = days.map(day => day.mean);
+    const axis = C.meanAxis(means);
+    // 头部行与热力图同构：标题 + 当前 7 日均水平。曲线本身就是动量叙事，
+    // 不再往标题里塞涨跌幅文字。
+    const head = `<div class="hm-fig-head"><h3 class="hm-fig-title">活跃趋势</h3><span class="hm-fig-meta hm-trend-total">近1年 · 7日均 <b>${means[n - 1].toFixed(1)}</b> 集/日</span></div>`;
+    const x = index => padL + (n === 1 ? plotW / 2 : index / (n - 1) * plotW);
     const y = value => padT + (1 - axis.position(value)) * plotH;
-    // 等宽槽位整体居中：桶少时不贴左轴，桶多时自然铺满。
-    const band = Math.min(plotW / nb, 64);
-    const bandX0 = padL + (plotW - band * nb) / 2;
-    const x = index => bandX0 + (index + 0.5) * band;
-    // 柱宽留缝 + 圆角：柱墙变粗之后，靠缝隙分隔比靠描边干净。
-    const barW = Math.max(1, Math.min(26, band * 0.72));
-    const radius = Math.min(2, barW / 3).toFixed(2);
-    const base = y(0);
-    // 峰值桶是整张图的视觉入口：深色 + 顶部真值，一眼知道最猛的一段在哪。
-    let peakIndex = -1, peakValue = 0;
-    for (let index = 0; index < nb; index++) {
-      if (counts[index] > peakValue) { peakValue = counts[index]; peakIndex = index; }
-    }
-
-    // 线性轴的刻度间距均匀，16px 抽稀一般不会触发；保留同一套逻辑兜底
-    // （日粒度对数轴与极窄容器仍需要），顶部刻度优先。
+    // 均值序列的刻度间距均匀，16px 抽稀一般不会触发；保留同一套兜底逻辑。
     const placedTicks = [];
     for (const tick of axis.ticks) {
       const gy = y(tick);
@@ -752,64 +560,29 @@
       grid += `<line class="hm-grid-line" x1="${padL}" x2="${padL + plotW}" y1="${gy}" y2="${gy}"/>` +
         `<text class="hm-tick" x="${padL - 5}" y="${(Number(gy) + 3).toFixed(1)}" text-anchor="end">${tick}</text>`;
     }
-    // 刻度标签从最低一档起算，但柱子总要有个落地线，基线单独画。
-    grid += `<line class="hm-grid-line zero" x1="${padL}" x2="${padL + plotW}" y1="${base.toFixed(1)}" y2="${base.toFixed(1)}"/>`;
-    let bars = '';
-    if (!hiddenSeries.has('count')) {
-      for (let index = 0; index < nb; index++) {
-        if (!counts[index]) continue;
-        // 爆发桶超出轴顶：柱子封顶画到头，切角帽标出“这不是全部”，峰值
-        // 桶再标真值——截断是显式的，读数条里也拿得到完整数字。
-        const clipped = axis.cap && counts[index] > axis.hi;
-        const top = clipped ? padT : y(counts[index]);
-        const classes = ['hm-bar'];
-        if (index === peakIndex) classes.push('peak');
-        if (clipped) classes.push('capped');
-        bars += `<rect class="${classes.join(' ')}" x="${(x(index) - barW / 2).toFixed(2)}" y="${top.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(1, base - top).toFixed(2)}" rx="${radius}"/>`;
-        if (clipped) bars += `<rect class="hm-bar-cap" x="${(x(index) - barW / 2).toFixed(2)}" y="${padT.toFixed(2)}" width="${barW.toFixed(2)}" height="2.5"/>`;
-        if (index === peakIndex) bars += `<text class="hm-peak-label" x="${x(index).toFixed(1)}" y="${(clipped ? padT - 4 : top - 4).toFixed(1)}" text-anchor="middle">${peakValue}</text>`;
-      }
-    }
-    // 横轴由日历桶驱动：周桶在月份变化处标 M/D（落在真实周一上），月桶在
-    // 每年 1 月标四位年份，日桶沿用按月变化标 M/D。按像素抽稀保留。
-    const yearLabels = grain === 'month';
-    let labels = '', previous = -Infinity, marker = '';
-    for (let index = 0; index < nb; index++) {
-      const key = buckets[index].key;
-      const current = yearLabels ? key.slice(0, 4) : key.slice(0, 7);
-      if (current === marker) continue;
-      marker = current;
-      if (yearLabels && key.slice(5, 7) !== '01') continue;
+    // 刻度只标均值档，基线（0）单独画实线。
+    grid += `<line class="hm-grid-line zero" x1="${padL}" x2="${padL + plotW}" y1="${(padT + plotH).toFixed(1)}" y2="${(padT + plotH).toFixed(1)}"/>`;
+    // 曲线：365 个日点，7 日均已抹平脉冲，直段连线即是平滑曲线；淡粉面积
+    // 帮眼睛托住“线上方的量”，除它之外不再叠加任何第二编码。
+    const points = days.map((day, index) => `${x(index).toFixed(1)},${y(day.mean).toFixed(1)}`).join(' ');
+    const fill = `${padL},${(padT + plotH).toFixed(1)} ${points} ${x(n - 1).toFixed(1)},${(padT + plotH).toFixed(1)}`;
+    // 横轴：每月 1 号标 M/D，44px 抽稀。
+    let labels = '', previous = -Infinity;
+    for (let index = 0; index < n; index++) {
+      const key = days[index].key;
+      if (key.slice(8) !== '01') continue;
       const lx = x(index);
       if (lx - previous < 44) continue;
       previous = lx;
-      const text = yearLabels ? key.slice(0, 4) : `${Number(key.slice(5, 7))}/${Number(key.slice(8))}`;
-      labels += `<text class="hm-axis-label" x="${lx.toFixed(1)}" y="${height - 6}" text-anchor="middle">${text}</text>`;
+      labels += `<text class="hm-axis-label" x="${lx.toFixed(1)}" y="${height - 6}" text-anchor="middle">${Number(key.slice(5, 7))}/${Number(key.slice(8))}</text>`;
     }
-    const pending = range === 'all' && !state.streams.progress.deep;
-    const hint = pending ? `<div class="hm-trend-hint">正在回溯更早的记录，已回溯到 ${days[0].key}…</div>` : '';
     area.innerHTML = head +
-      `<div class="hm-trend-plot" tabindex="0" role="img" aria-label="活跃趋势柱状图，按${unit}统计，当前${range === 'all' ? '全部' : '近一年'}范围，左右方向键可逐${unit}查看"><svg class="hm-trend" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${grid}${bars}${labels}<g class="hm-guide" style="display:none"><line class="hm-guide-line" x1="0" x2="0" y1="${padT}" y2="${padT + plotH}"/><rect class="hm-guide-bar" width="3" height="3"/></g></svg><div class="hm-readout" hidden></div></div>` +
-      hint;
-    trendView = { buckets, unit, grain };
-    trendGeom = { width, n: nb, band, bandX0, x, y };
-    if (trendIndex >= 0) showTrend(Math.min(trendIndex, nb - 1));
+      `<div class="hm-trend-plot" tabindex="0" role="img" aria-label="活跃趋势曲线：近一年每日 7 日均观看集数，左右方向键可逐日查看"><svg class="hm-trend" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${grid}<polygon class="hm-trend-fill" points="${fill}"/><polyline class="hm-trend-line" points="${points}"/>${labels}<g class="hm-guide" style="display:none"><line class="hm-guide-line" x1="0" x2="0" y1="${padT}" y2="${padT + plotH}"/><circle class="hm-guide-dot" r="3"/></g></svg><div class="hm-readout" hidden></div></div>`;
+    trendView = { days, means };
+    trendGeom = { width, n, padL, plotW, x, y };
+    if (trendIndex >= 0) showTrend(Math.min(trendIndex, n - 1));
     bindTrend(area);
     return true;
-  }
-  function ensureDeep() {
-    if (state.deep || state.streams.progress.deep) return;
-    state.deep = true;
-    save().catch(() => {});
-    idleUntil = 0;
-    run();
-  }
-  function setRange(value) {
-    if (value !== 'all' && value !== 'year') return;
-    range = value;
-    try { localStorage.setItem('bgmtl-chart-range', range); } catch (error) { /* 私密模式忽略 */ }
-    if (range === 'all') ensureDeep();
-    render();
   }
   function render() {
     if (!shadow) return;
@@ -880,11 +653,10 @@
           for (const t of C.SYNC_TYPES) {
             if (aborted || made >= 24) break;
             const s = state.streams[t];
-            if (s.complete && !s.refresh && (s.deep || !state.deep)) continue;
+            if (s.complete && !s.refresh) continue;
             const page = s.refresh?.page || s.page;
             const result = await fetchPage(t, page);
-            // A deep backfill has no date cutoff: only the last page completes it.
-            const cutoff = state.deep ? 0 : C.dayStart(Date.now()) - 364 * C.DAY;
+            const cutoff = C.dayStart(Date.now()) - 364 * C.DAY;
             state.events = C.mergeEvents(state.events, result.events);
             if (result.oldest !== null) s.oldest = s.oldest === null ? result.oldest : Math.min(s.oldest, result.oldest);
             if (s.refresh) {
@@ -895,10 +667,7 @@
             } else {
               if (page === 1) { s.latestTime = result.newest || s.latestTime; s.headAt = Date.now(); }
               s.page = result.next || page;
-              if (result.next === null || result.oldest < cutoff) {
-                s.complete = true;
-                if (result.next === null) s.deep = true;
-              }
+              if (result.next === null || result.oldest < cutoff) s.complete = true;
             }
             state.updatedAt = Date.now(); state.failures = 0; state.retryAt = 0;
             await save(); render(); made++; worked = true;
@@ -923,8 +692,6 @@
     try {
       db = await openDB(); state = await read(); idleUntil = C.nextSyncAt(state, Date.now());
       if (state.paused) { state.paused = false; await save(); }
-      // 深回溯只服务于趋势图，首页没有趋势图就别去翻十几年的旧记录。
-      if (!homeLayout && range === 'all') ensureDeep();
       render();
       if (typeof BroadcastChannel !== 'undefined') {
         channel = new BroadcastChannel('bgmtl-personal');

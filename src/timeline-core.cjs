@@ -55,7 +55,7 @@
     return { events, next, oldest: events.length ? Math.min(...events.map(e => e.time)) : null, newest: events.length ? Math.max(...events.map(e => e.time)) : null };
   }
   function freshState(user) {
-    return { schema: 1, user, deep: false, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, deep: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
+    return { schema: 1, user, events: [], streams: Object.fromEntries(SYNC_TYPES.map(t => [t, { page: 1, complete: false, oldest: null, headAt: 0 }])), paused: false, retryAt: 0, failures: 0, updatedAt: 0 };
   }
   function mergeEvents(old, incoming) {
     const map = new Map(old.map(e => [e.id, e]));
@@ -68,8 +68,6 @@
     for (const type of SYNC_TYPES) {
       const stream = state?.streams?.[type];
       if (!stream || !stream.complete || stream.refresh) return 0;
-      // Full-history backfill requested but not finished: keep working now.
-      if (state.deep && !stream.deep) return 0;
       const checkedAt = Number(stream.headAt || state?.updatedAt || 0);
       if (!checkedAt) return 0;
       next = Math.min(next, checkedAt + REFRESH_INTERVAL);
@@ -151,137 +149,32 @@
      窄窗口里一天一根柱子会挤成发丝墙，噪声反倒是全部信息。按 7/14/30 天
      聚合成桶之后，每根柱子的高度是一段时间的合计，形状才重新读得出来；
      末尾不足一桶的照常保留，读数条会如实显示起止日期。 */
-  function bucketSeries(days, size) {
-    const step = Math.max(1, Math.floor(size || 1));
-    const source = days || [];
-    if (step === 1) return source.map(day => ({ key: day.key, endKey: day.key, days: 1, count: day.count, mean: day.mean }));
-    const buckets = [];
-    for (let start = 0; start < source.length; start += step) {
-      const slice = source.slice(start, start + step);
-      const count = slice.reduce((sum, day) => sum + day.count, 0);
-      const mean = slice.reduce((sum, day) => sum + day.mean, 0) / slice.length;
-      buckets.push({ key: slice[0].key, endKey: slice[slice.length - 1].key, days: slice.length, count, mean });
-    }
-    return buckets;
-  }
   function niceStep(value) {
     const power = Math.pow(10, Math.floor(Math.log10(Math.max(value, 1))));
     const fraction = value / power;
     return (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * power;
   }
-  /* ── 纵轴：零安全对数刻度（与账本日支出图同一套视觉语言）──
-     逐日集数是典型的脉冲序列：一个补番日能顶平时二十天。线性轴下普通日子
-     全部压成发丝。但对数压缩也不能一味往上抬——抬过头了，1 集的日子会顶到
-     绘图区四分之一高，图片面积跟数量又对不上。所以压缩力度锚在最低刻度线
-     上：纵轴最低标 5 集，让它固定落在 22% 高度，5 集以下按对数自然收在底部，
-     顶部留给少数高峰。刻度只出 5/10/20/50… 这类整数，像素密度交给调用方筛。 */
-  const AXIS_BASE = 5, BASE_HEIGHT = 0.22, MIN_COMPRESS = 0.05, MAX_COMPRESS = 25;
-  function countAxis(values) {
-    const finite = (values || []).filter(value => Number.isFinite);
-    const max = finite.length ? Math.max(...finite) : 0;
-    const unit = Math.max(1, niceStep(max / 5 || 1));
-    // +0.5：最大值正好落在刻度上时也要留出头顶的一点空隙，否则最高的柱子贴边。
-    // 下限取最低刻度：再小的值域也得有一条刻度线撑着。
-    const hi = Math.max(AXIS_BASE, Math.ceil((max + 0.5) / unit) * unit);
-    // ratio(c) 随 c 单调递减：c 越小，低值被抬得越高。
-    const ratio = c => Math.log1p(AXIS_BASE / c) / Math.log1p(hi / c);
-    let c = MAX_COMPRESS;
-    if (ratio(MIN_COMPRESS) <= BASE_HEIGHT) c = MIN_COMPRESS;
-    else if (ratio(MAX_COMPRESS) > BASE_HEIGHT) c = MAX_COMPRESS;
-    else {
-      let low = MIN_COMPRESS, high = MAX_COMPRESS;
-      for (let step = 0; step < 40; step++) {
-        const mid = Math.sqrt(low * high);
-        if (ratio(mid) > BASE_HEIGHT) low = mid; else high = mid;
-      }
-      c = Math.sqrt(low * high);
-    }
-    const transform = value => Math.sign(value) * Math.log1p(Math.abs(value) / c);
-    const top = transform(hi);
-    const ticks = [];
-    for (let power = 1; power <= hi; power *= 10) {
-      for (const multiple of [1, 2, 5]) {
-        const value = power * multiple;
-        if (value >= AXIS_BASE && value < hi && value !== ticks[ticks.length - 1]) ticks.push(value);
-      }
-    }
-    ticks.push(hi);
-    return { lo: 0, hi, unit, constant: c, ticks, position: value => transform(value) / top };
-  }
-  /* ── 日历桶：按周一锚定的自然周 / 自然月聚合 ──
-     固定步长折叠的桶边界跟着窗口起点漂移，读数条里的“每周 N 集”其实是
-     任意七天。按日历对齐后，桶的语义与标签一致（每周从周一起、每月从
-     1 号起），横轴的月份标签也落在真实边界上。首尾不满一周/月的桶保留
-     并标记 partial（进行中的当前周/月天然 partial），动量统计只认完整桶。 */
-  function weekStartKey(key) {
-    const time = Date.parse(`${key}T12:00:00+08:00`);
-    return new Date(time - ((new Date(time).getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10);
-  }
-  function daysInMonth(key) {
-    return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
-  }
-  function calendarBuckets(days, mode) {
-    if (mode !== 'week' && mode !== 'month') return [];
-    const buckets = [];
-    let current = null;
-    for (const day of days || []) {
-      const key = mode === 'week' ? weekStartKey(day.key) : day.key.slice(0, 7);
-      if (!current || current.key !== key) {
-        current = { key, endKey: day.key, days: 0, count: 0, partial: false };
-        buckets.push(current);
-      }
-      current.endKey = day.key;
-      current.days += 1;
-      current.count += day.count;
-    }
-    for (const bucket of buckets) {
-      bucket.partial = bucket.days < (mode === 'week' ? 7 : daysInMonth(bucket.key));
-    }
-    return buckets;
-  }
-  /* ── 周/月桶的线性轴：长度重新与集数成正比 ──
-     对数轴救的是“按日”粒度（p50=3、峰值 63，20 倍偏态）；聚合到周/月后
-     偏态只剩 3.5 倍 / 1.8 倍，继续用对数反而让 128 集的周看起来只有 33 集
-     周的 1.5 倍。hi 常规取阶梯上盖住峰值的档；仅当峰值远超中位数（2.5 倍）
-     时收到 p90 一档，让普通周占住绘图区主体，少数爆发桶封顶画到顶——
-     截断是显式标注的，比对数轴悄悄扭曲所有柱子诚实。 */
-  function volumeAxis(values) {
+  /* ── 趋势曲线的线性轴 ──
+     7 日均已经把逐日脉冲抹平（本账号均值峰值约 15-20、中位约 3-4，偏态
+     温和），曲线只讲形状与水平，线性刻度即可：长度与集数严格成正比。
+     hi 取阶梯上盖住峰值的档并留头顶空隙，值域极小时退到 5 一条撑底线。 */
+  function meanAxis(values) {
     const finite = (values || []).filter(value => Number.isFinite(value));
     const max = finite.length ? Math.max(...finite) : 0;
-    if (max <= 0) return { lo: 0, hi: 5, unit: 5, ticks: [5], cap: false, position: value => Math.min(Math.max(value, 0), 5) / 5 };
-    const sorted = finite.slice().sort((a, b) => a - b);
-    const p50 = sorted[Math.floor((sorted.length - 1) / 2)];
-    const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
-    let anchor = max;
-    if (max > 2.5 * Math.max(p50, 1)) {
-      const unit90 = Math.max(1, niceStep(p90 / 4));
-      const hi90 = Math.ceil((p90 + 0.5) / unit90) * unit90;
-      // 封顶只该截住少数爆发桶：一成半以上的桶都在 hi 之上，说明 p90 档
-      // 也罩不住这条分布，退回峰值档。
-      if (finite.filter(value => value > hi90).length <= finite.length * 0.15) anchor = p90;
-    }
-    const unit = Math.max(1, niceStep(anchor / (anchor === max ? 5 : 4)));
-    const hi = Math.max(5, Math.ceil((anchor + 0.5) / unit) * unit);
-    const step = Math.max(1, niceStep(hi / 4));
+    if (max <= 0) return { lo: 0, hi: 5, ticks: [5], position: value => Math.min(Math.max(value, 0), 5) / 5 };
+    const unit = Math.max(0.5, niceStep(max / 4));
+    const hi = Math.max(5, Math.ceil((max + 0.5) / unit) * unit);
+    if (hi === 5) return { lo: 0, hi: 5, ticks: [5], position: value => Math.min(Math.max(value, 0), 5) / 5 };
+    const step = niceStep(hi / 4);
     const ticks = [];
-    for (let value = step; value < hi; value += step) ticks.push(value);
+    for (let value = step; value < hi; value += step) ticks.push(Number(value.toFixed(2)));
     if (!ticks.length || ticks[ticks.length - 1] !== hi) ticks.push(hi);
-    return { lo: 0, hi, unit: step, ticks, cap: max > hi, position: value => Math.min(Math.max(value, 0), hi) / hi };
+    return { lo: 0, hi, ticks, position: value => Math.min(Math.max(value, 0), hi) / hi };
   }
-  /* 动量：最近 k 个完整桶的平均量，对比再往前 k 个。partial（进行中的
-     当前周/月、窗口边缘）不参与；完整桶不足 2k 个时不给百分比。 */
-  function momentum(buckets, k = 4) {
-    const complete = (buckets || []).filter(bucket => bucket && !bucket.partial);
-    if (complete.length < k) return { count: complete.length, recent: null, previous: null, delta: null };
-    const average = list => list.reduce((sum, bucket) => sum + bucket.count, 0) / list.length;
-    const recent = average(complete.slice(-k));
-    const previous = complete.length >= 2 * k ? average(complete.slice(-2 * k, -k)) : null;
-    return { count: complete.length, recent, previous, delta: previous > 0 ? (recent - previous) / previous : null };
-  }
-  // Continuous daily series for the trend chart: "year" mirrors the heatmap
-  // window, "all" stretches back to the oldest synced progress record. Each day
-  // carries its own trailing mean so the line never restarts mid-window.
-  function dailySeries(state, now = Date.now(), range = 'year') {
+  // Continuous daily series for the trend chart: the past 365 days, each day
+  // carrying its own 7-day rolling mean so the curve never starts with a
+  // warm-up dip — the mean is computed over the full history before slicing.
+  function dailySeries(state, now = Date.now()) {
     const events = state.events.filter(e => e.type === 'progress' && e.time <= now).sort((a, b) => a.time - b.time || Number(a.id) - Number(b.id));
     const progress = new Map();
     const daily = Object.create(null);
@@ -293,10 +186,9 @@
       const key = dayKey(e.time);
       daily[key] = (daily[key] || 0) + amount;
     }
-    const end = dayStart(now);
-    let start = end - 364 * DAY;
-    if (range === 'all' && Number.isFinite(oldestTime)) start = Math.min(start, dayStart(oldestTime));
     if (!Number.isFinite(oldestTime)) return { days: [], total: 0, oldestTime: null };
+    const end = dayStart(now);
+    const start = end - 364 * DAY;
     // 均线要看得到窗口之前的日子：只拿可见段求平均会让头 6 天整体偏低。
     const fullStart = Math.min(start, dayStart(oldestTime));
     const counts = [];
@@ -311,5 +203,5 @@
     }));
     return { days, total: days.reduce((sum, day) => sum + day.count, 0), oldestTime };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, bucketSeries, calendarBuckets, momentum, rollingMean, countAxis, volumeAxis, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, rollingMean, meanAxis, importBackup, normalizeEvent, progressUnits };
 });
