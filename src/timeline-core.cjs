@@ -208,6 +208,76 @@
     ticks.push(hi);
     return { lo: 0, hi, unit, constant: c, ticks, position: value => transform(value) / top };
   }
+  /* ── 日历桶：按周一锚定的自然周 / 自然月聚合 ──
+     固定步长折叠的桶边界跟着窗口起点漂移，读数条里的“每周 N 集”其实是
+     任意七天。按日历对齐后，桶的语义与标签一致（每周从周一起、每月从
+     1 号起），横轴的月份标签也落在真实边界上。首尾不满一周/月的桶保留
+     并标记 partial（进行中的当前周/月天然 partial），动量统计只认完整桶。 */
+  function weekStartKey(key) {
+    const time = Date.parse(`${key}T12:00:00+08:00`);
+    return new Date(time - ((new Date(time).getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10);
+  }
+  function daysInMonth(key) {
+    return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0)).getUTCDate();
+  }
+  function calendarBuckets(days, mode) {
+    if (mode !== 'week' && mode !== 'month') return [];
+    const buckets = [];
+    let current = null;
+    for (const day of days || []) {
+      const key = mode === 'week' ? weekStartKey(day.key) : day.key.slice(0, 7);
+      if (!current || current.key !== key) {
+        current = { key, endKey: day.key, days: 0, count: 0, partial: false };
+        buckets.push(current);
+      }
+      current.endKey = day.key;
+      current.days += 1;
+      current.count += day.count;
+    }
+    for (const bucket of buckets) {
+      bucket.partial = bucket.days < (mode === 'week' ? 7 : daysInMonth(bucket.key));
+    }
+    return buckets;
+  }
+  /* ── 周/月桶的线性轴：长度重新与集数成正比 ──
+     对数轴救的是“按日”粒度（p50=3、峰值 63，20 倍偏态）；聚合到周/月后
+     偏态只剩 3.5 倍 / 1.8 倍，继续用对数反而让 128 集的周看起来只有 33 集
+     周的 1.5 倍。hi 常规取阶梯上盖住峰值的档；仅当峰值远超中位数（2.5 倍）
+     时收到 p90 一档，让普通周占住绘图区主体，少数爆发桶封顶画到顶——
+     截断是显式标注的，比对数轴悄悄扭曲所有柱子诚实。 */
+  function volumeAxis(values) {
+    const finite = (values || []).filter(value => Number.isFinite(value));
+    const max = finite.length ? Math.max(...finite) : 0;
+    if (max <= 0) return { lo: 0, hi: 5, unit: 5, ticks: [5], cap: false, position: value => Math.min(Math.max(value, 0), 5) / 5 };
+    const sorted = finite.slice().sort((a, b) => a - b);
+    const p50 = sorted[Math.floor((sorted.length - 1) / 2)];
+    const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
+    let anchor = max;
+    if (max > 2.5 * Math.max(p50, 1)) {
+      const unit90 = Math.max(1, niceStep(p90 / 4));
+      const hi90 = Math.ceil((p90 + 0.5) / unit90) * unit90;
+      // 封顶只该截住少数爆发桶：一成半以上的桶都在 hi 之上，说明 p90 档
+      // 也罩不住这条分布，退回峰值档。
+      if (finite.filter(value => value > hi90).length <= finite.length * 0.15) anchor = p90;
+    }
+    const unit = Math.max(1, niceStep(anchor / (anchor === max ? 5 : 4)));
+    const hi = Math.max(5, Math.ceil((anchor + 0.5) / unit) * unit);
+    const step = Math.max(1, niceStep(hi / 4));
+    const ticks = [];
+    for (let value = step; value < hi; value += step) ticks.push(value);
+    if (!ticks.length || ticks[ticks.length - 1] !== hi) ticks.push(hi);
+    return { lo: 0, hi, unit: step, ticks, cap: max > hi, position: value => Math.min(Math.max(value, 0), hi) / hi };
+  }
+  /* 动量：最近 k 个完整桶的平均量，对比再往前 k 个。partial（进行中的
+     当前周/月、窗口边缘）不参与；完整桶不足 2k 个时不给百分比。 */
+  function momentum(buckets, k = 4) {
+    const complete = (buckets || []).filter(bucket => bucket && !bucket.partial);
+    if (complete.length < k) return { count: complete.length, recent: null, previous: null, delta: null };
+    const average = list => list.reduce((sum, bucket) => sum + bucket.count, 0) / list.length;
+    const recent = average(complete.slice(-k));
+    const previous = complete.length >= 2 * k ? average(complete.slice(-2 * k, -k)) : null;
+    return { count: complete.length, recent, previous, delta: previous > 0 ? (recent - previous) / previous : null };
+  }
   // Continuous daily series for the trend chart: "year" mirrors the heatmap
   // window, "all" stretches back to the oldest synced progress record. Each day
   // carries its own trailing mean so the line never restarts mid-window.
@@ -241,5 +311,5 @@
     }));
     return { days, total: days.reduce((sum, day) => sum + day.count, 0), oldestTime };
   }
-  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, bucketSeries, rollingMean, countAxis, importBackup, normalizeEvent, progressUnits };
+  return { DAY, REFRESH_INTERVAL, TYPES, SYNC_TYPES, dayKey, dayStart, parseTime, parsePage, freshState, mergeEvents, nextSyncAt, aggregate, dailySeries, bucketSeries, calendarBuckets, momentum, rollingMean, countAxis, volumeAxis, importBackup, normalizeEvent, progressUnits };
 });

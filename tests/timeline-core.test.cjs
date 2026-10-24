@@ -214,6 +214,97 @@ test('bucket series folds consecutive days and keeps the ragged tail', () => {
   assert.deepEqual(C.bucketSeries(days, 1)[3], { key: '2026-05-04', endKey: '2026-05-04', days: 1, count: 3, mean: 6 });
   assert.deepEqual(C.bucketSeries([], 7), []);
 });
+test('calendar buckets align weeks to Monday and months to the calendar, marking partial edges', () => {
+  // 2026-06-01 是周一：两周的完整窗口恰好切成两个 7 天桶。
+  const june = Array.from({ length: 14 }, (_, index) => ({
+    key: `2026-06-${String(index + 1).padStart(2, '0')}`,
+    count: index + 1,
+  }));
+  const weeks = C.calendarBuckets(june, 'week');
+  assert.equal(weeks.length, 2, 'two calendar weeks');
+  assert.equal(weeks[0].key, '2026-06-01', 'the week starts on Monday');
+  assert.equal(weeks[0].endKey, '2026-06-07');
+  assert.equal(weeks[0].days, 7);
+  assert.equal(weeks[0].count, 28, 'totals are conserved');
+  assert.equal(weeks[1].count, 77);
+  assert.ok(weeks.every(bucket => !bucket.partial), 'full weeks are complete');
+  // 窗口从周六开始：首桶只剩周六周日，必须标记 partial。
+  const weekend = june.slice(5);
+  const edge = C.calendarBuckets(weekend, 'week');
+  assert.equal(edge[0].key, '2026-06-01', 'a Saturday still folds into its Monday week');
+  assert.equal(edge[0].days, 2);
+  assert.equal(edge[0].partial, true, 'the ragged leading week is partial');
+  assert.equal(edge[1].partial, false);
+  // 跨月的自然周：6/29 周一起，桶整体属于那一周。
+  const crossMonth = C.calendarBuckets([
+    { key: '2026-06-29', count: 1 }, { key: '2026-06-30', count: 2 },
+    { key: '2026-07-01', count: 3 }, { key: '2026-07-02', count: 4 },
+  ], 'week');
+  assert.equal(crossMonth.length, 1);
+  assert.equal(crossMonth[0].key, '2026-06-29');
+  assert.equal(crossMonth[0].count, 10);
+  // 自然月按 key 前七位聚合，边界月按真实天数判 partial。
+  const months = C.calendarBuckets([
+    { key: '2026-01-30', count: 5 }, { key: '2026-01-31', count: 6 },
+    { key: '2026-02-01', count: 7 }, { key: '2026-02-02', count: 8 },
+  ], 'month');
+  assert.equal(months.length, 2);
+  assert.equal(months[0].key, '2026-01');
+  assert.equal(months[0].count, 11);
+  assert.equal(months[0].partial, true, 'January is missing 29 days');
+  assert.equal(months[1].partial, true, 'February is missing 26 days');
+  assert.deepEqual(C.calendarBuckets([], 'week'), []);
+  assert.deepEqual(C.calendarBuckets(june, 'day'), [], 'unknown modes produce no buckets');
+});
+test('volume axis keeps lengths proportional and caps only the binge buckets', () => {
+  // 真实账号近一年的 53 个周合计：p50=33、峰值 128（3.5 倍偏态）。
+  const weekly = [4, 5, 16, 33, 16, 31, 13, 18, 16, 28, 22, 66, 46, 23, 90, 47, 74, 49, 58, 40, 14, 34, 40, 38, 10, 20, 18, 28, 56, 36, 49, 5, 6, 4, 17, 10, 57, 72, 62, 26, 53, 17, 53, 50, 128, 63, 110, 60, 36, 29, 38, 12, 1];
+  const axis = C.volumeAxis(weekly);
+  assert.equal(axis.hi, 80, 'the axis covers p90, not the 128-episode binge week');
+  assert.deepEqual(axis.ticks, [20, 40, 60, 80], 'evenly spaced whole-episode ticks');
+  assert.equal(axis.cap, true, 'the peak exceeds the ceiling and gets capped');
+  assert.equal(axis.position(0), 0);
+  assert.equal(axis.position(128), 1, 'capped buckets land exactly on the ceiling');
+  assert.ok(Math.abs(axis.position(33) - 0.4125) < 0.01, `the median week owns about 41% of the plot, got ${axis.position(33).toFixed(3)}`);
+  assert.ok(Math.abs(axis.position(66) - 66 / 80) < 1e-9, 'length stays proportional below the cap');
+  // 月合计偏态温和（峰值 276、p50 141）：常规档盖住峰值，不封顶。
+  const monthly = C.volumeAxis([9, 99, 84, 235, 228, 141, 95, 153, 64, 242, 248, 276, 73]);
+  assert.equal(monthly.hi, 300);
+  assert.deepEqual(monthly.ticks, [100, 200, 300]);
+  assert.equal(monthly.cap, false);
+  assert.ok(monthly.position(141) > 0.44 && monthly.position(141) < 0.5, 'the median month fills about half the plot');
+  // 小数据与全零：退到最低档，也要有一条刻度线撑着。
+  const tiny = C.volumeAxis([1, 2, 1, 3, 2]);
+  assert.equal(tiny.cap, false);
+  assert.ok(tiny.ticks.at(-1) >= 3 && tiny.ticks.every(Number.isInteger));
+  const flat = C.volumeAxis([0, 0, 0]);
+  assert.equal(flat.hi, 5);
+  assert.deepEqual(flat.ticks, [5]);
+  assert.equal(flat.position(0), 0);
+});
+test('momentum compares the last complete buckets and skips partial edges', () => {
+  const bucket = (count, partial) => ({ key: '2026-01-01', endKey: '2026-01-07', days: 7, count, partial: Boolean(partial) });
+  // 8 个完整桶：近 4 周均值 10，前 4 周均值 5，动量 +100%。
+  const rising = [4, 5, 6, 5, 8, 10, 12, 10].map(count => bucket(count));
+  const up = C.momentum(rising, 4);
+  assert.equal(up.count, 8);
+  assert.equal(up.recent, 10);
+  assert.equal(up.previous, 5);
+  assert.ok(Math.abs(up.delta - 1) < 1e-9);
+  // partial（进行中的当前周）不参与均值。
+  const withPartial = [...rising, bucket(999, true)];
+  assert.deepEqual(C.momentum(withPartial, 4), up);
+  // 完整桶不足 2k：只给水平，不给百分比；不足 k：全空。
+  const short = C.momentum(rising.slice(2), 4);
+  assert.equal(short.recent, 10);
+  assert.equal(short.previous, null);
+  assert.equal(short.delta, null);
+  assert.equal(C.momentum(rising.slice(0, 3), 4).recent, null);
+  // 前段为 0 时百分比没有意义，delta 为 null 但水平仍可读。
+  const fromZero = C.momentum([0, 0, 0, 0, 6, 8, 10, 12].map(count => bucket(count)), 4);
+  assert.equal(fromZero.recent, 9);
+  assert.equal(fromZero.delta, null);
+});
 test('deep backfill keeps sync due until the stream reaches the oldest record', () => {
   const state = C.freshState('wylt');
   state.streams.progress.complete = true;

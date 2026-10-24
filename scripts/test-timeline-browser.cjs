@@ -227,30 +227,30 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       return element && element.scrollLeft + element.clientWidth >= element.scrollWidth - 2;
     });
 
-    // 趋势图只挂在个人主页：按跨度聚合的集数柱 + 平滑均线。
+    // 趋势图只挂在个人主页：按日历周聚合的集数柱 + 线性封顶轴。
     await profilePage.locator('.hm-trend-area svg').waitFor();
-    // fixture 的三天紧挨着，聚合后落在同一周桶里：柱子数应当远少于天数。
+    // fixture 的三天紧挨着，聚合后落在同一个（进行中的）周桶里：柱子数应当远少于天数。
     const barCount = await profilePage.locator('.hm-trend-area .hm-bar').count();
     assert.ok(barCount >= 1 && barCount <= 3, `bucketing folds neighbouring days into one bar, got ${barCount}`);
     const barWidths = await profilePage.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('width'))));
     assert.ok(Math.min(...barWidths) >= 4, `bucketed bars must stay readable, got ${barWidths.join(', ')}`);
-    assert.ok(await profilePage.locator('.hm-trend-area polyline').isVisible(), 'the moving average line is drawn');
-    assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*3\s*集\s*·\s*按(周|两周|月|季)/, 'the summary states the bucket grain');
+    assert.equal(await profilePage.locator('.hm-trend-area polyline').count(), 0, 'the trend is carried by the bars and the header chip, not an overlaid line');
+    assert.equal(await profilePage.locator('.hm-trend-area .hm-peak-label').textContent(), '3', 'the peak bucket carries its true value above the bar');
+    assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*3\s*集\s*·\s*按(周|月)/, 'the summary states the bucket grain');
     assert.equal(await profilePage.locator('.hm-toggle button[data-range=year]').getAttribute('aria-pressed'), 'true');
-    // 零安全对数轴的意义：1 集的日子不能被偶尔的高峰压成发丝。
+    // 线性轴：柱高与集数成正比，柱子必须落在绘图区内。
     const heights = await profilePage.locator('.hm-trend-area .hm-bar').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('height'))));
-    assert.ok(Math.min(...heights) >= 20, `the log scale must lift ordinary days, got ${heights.join(', ')}`);
-    // 柱子必须落在绘图区内：标定失了准，最高的那根会顶穿画布。
-    const plotHeight = await profilePage.locator('.hm-trend').evaluate(node => Number(node.getAttribute('height')) - 12 - 22);
+    const plotHeight = await profilePage.locator('.hm-trend').evaluate(node => Number(node.getAttribute('height')) - 18 - 22);
     assert.ok(Math.max(...heights) <= plotHeight, `bars must stay inside the plot, got ${Math.max(...heights)} of ${plotHeight}`);
     assert.ok(Math.min(...heights) > plotHeight * 0.12, `a light bucket must still be visible, got ${Math.min(...heights)} of ${plotHeight}`);
     const tickLabels = await profilePage.locator('.hm-tick').allTextContents();
     assert.ok(tickLabels.every(label => /^\d+$/.test(label)), `the axis only labels whole episodes: ${tickLabels.join(', ')}`);
-    assert.ok(Number(tickLabels[0]) >= 5, `the lowest labelled tick is 5 episodes: ${tickLabels.join(', ')}`);
-    // 图例与摘要要说清楚当前统计粒度，免得把“每周”读成“每日”。
-    assert.match(await profilePage.locator('.hm-legend').textContent(), /每(周|两周|月|季)集数/);
-    assert.match(await profilePage.locator('.hm-legend').textContent(), /(日|周|两周|月|季)均线$/);
-    // 读数条取代原生 tooltip：悬到最右侧应读到今天所在的区间、合计与均线。
+    assert.ok(Number(tickLabels[0]) >= 1, `ticks start at a whole episode count: ${tickLabels.join(', ')}`);
+    // 图例只剩柱序列一个开关，均线已并入标题行动量。
+    assert.match(await profilePage.locator('.hm-legend').textContent(), /每(周|月)集数/);
+    assert.equal(await profilePage.locator('.hm-legend-key').count(), 1);
+    assert.equal(await profilePage.locator('.hm-legend-key i.line').count(), 0, 'the mean series is gone');
+    // 读数条取代原生 tooltip：悬到最右侧应读到今天所在区间、合计与“本周”标记。
     const plot = profilePage.locator('.hm-trend-plot');
     await plot.scrollIntoViewIfNeeded();
     const box = await plot.boundingBox();
@@ -258,8 +258,9 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await profilePage.locator('.hm-readout').waitFor({ state: 'visible' });
     const readout = await profilePage.locator('.hm-readout').textContent();
     assert.match(readout, /\d{4}\/\d{2}\/\d{2}/, `readout should name the bucket range: ${readout}`);
-    assert.match(readout, /每(周|两周|月|季)\s*\d+\s*集/, `readout states the bucket total: ${readout}`);
-    assert.match(readout, /(日|周|两周|月|季)均线\s*[\d.]+/, `readout carries the smoothed average: ${readout}`);
+    assert.match(readout, /每(周|月)\s*\d+\s*集/, `readout states the bucket total: ${readout}`);
+    assert.match(readout, /（本周）/, `the in-progress bucket is labelled: ${readout}`);
+    assert.ok(!readout.includes('均线'), `no smoothed-average copy remains: ${readout}`);
     // 图例可以关掉任一序列，但网格框架必须留着。
     await profilePage.locator('.hm-legend-key[data-series=count]').click();
     assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), 0, 'hiding the bars leaves only the average');
@@ -278,15 +279,15 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(deepDone, 'the full-history backfill must complete');
     const deepRequests = requests.slice(beforeDeep).map(value => new URL(value));
     assert.ok(deepRequests.some(url => url.searchParams.get('page') === '3'), `selecting all must backfill pages beyond the year cutoff: ${deepRequests.map(url => url.href).join(', ')}`);
-    // 全部视图跨度约三年：按月聚合，柱数应当远少于天数。
+    // 全部视图跨度约三年：仍是日历周桶，柱数应当远少于天数。
     const allBars = await profilePage.locator('.hm-trend-area .hm-bar').count();
     assert.ok(allBars >= 3, `the all view keeps a bar for each active stretch, got ${allBars}`);
     assert.ok(allBars <= 12, `the all view must aggregate instead of drawing every day, got ${allBars}`);
     assert.match(await profilePage.locator('.hm-trend-total').textContent(), /共\s*5\s*集/, 'the all view counts the backfilled days too');
     assert.equal(await profilePage.locator('.hm-trend-hint').count(), 0, 'the backfill hint disappears once history is complete');
-    // 跨度超过一年后横轴改标年份，避免「18/1」被读成 1 月 1 日。
+    // 375px 视口装不下 72 根周桶（5.5px/桶预算），全部视图退到自然月，横轴标年份。
     const allLabels = await profilePage.locator('.hm-axis-label').allTextContents();
-    assert.ok(allLabels.length > 0 && allLabels.every(label => /^\d{4}$/.test(label)), `the all view labels years, got ${allLabels.join(', ')}`);
+    assert.ok(allLabels.length > 0 && allLabels.every(label => /^\d{4}$/.test(label)), `the narrow all view drops to months and labels years, got ${allLabels.join(', ')}`);
     assert.equal(await profilePage.evaluate(() => localStorage.getItem('bgmtl-chart-range')), 'all');
     await profilePage.locator('.hm-toggle button[data-range=year]').click();
     assert.equal(await profilePage.locator('.hm-trend-area .hm-bar').count(), barCount, 'toggling back to one year hides the older bars');
@@ -320,6 +321,6 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await load(page); await page.locator('.hm-cell').first().waitFor();
     assert.equal(await page.locator('.hm-cell').first().evaluate(element => getComputedStyle(element).transitionDuration), '0s');
     assert.deepEqual(errors, []);
-    console.log('PASS: homepage adaptive heatmap only (no trend chart, no unnecessary backfill); profile trend chart with adaptive weekly bucket bars, smoothed average, one-year/all toggle and full-history backfill; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
+    console.log('PASS: homepage adaptive heatmap only (no trend chart, no unnecessary backfill); profile trend chart with calendar-week buckets, linear capped axis, peak label and header momentum, one-year/all toggle and full-history backfill; profile full-year scroll layout; parsing protection, current-day visibility, multi-tab lock, local cache reload, automatic incremental sync, 429 backoff, desktop/mobile/dark/reduced-motion, no external requests');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
