@@ -40,7 +40,7 @@ test('preview navigation links exist and release helpers derive actual versions'
   for (const match of text.matchAll(/href="([^"]+)"/g)) {
     assert.ok(fs.existsSync(path.resolve('demo', match[1])), match[1]);
   }
-  for (const file of ['demo/publish-source.html', 'demo/timeline-source.html']) {
+  for (const file of ['demo/publish-source.html', 'demo/stats-source.html', 'demo/timeline-source.html']) {
     const helper = fs.readFileSync(file, 'utf8');
     assert.match(helper, /@version/);
     assert.doesNotMatch(helper, /<h1>[^<]*\d+\.\d+\.\d+/);

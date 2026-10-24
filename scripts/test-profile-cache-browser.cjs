@@ -4,12 +4,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const Core = require('../src/stats-core.cjs');
 const release = fs.readFileSync('dist/bangumi-personal-recommender.user.js', 'utf8');
+const statsRelease = fs.readFileSync('dist/bangumi-personal-stats.user.js', 'utf8');
 const at = Date.now() - 120 * 86400000;
 const rows = Array.from({ length: 120 }, (_, i) => ({ subject_id: i + 1, type: 2, rate: 7,
   tags: ['日常'], subject: { id: i + 1, type: 2, name: `动画 ${i}`, date: '2020-01-01', eps: 12 } }));
 const feed = title => ({ schema: 1, owner: 'wylt', generatedAt: '2026-10-01T00:00:00Z',
   candidates: Array.from({ length: 18 }, (_, i) => ({ subject: { id: 9000 + i, type: 2, nameCn: title + i, tags: [], rating: {} }, predicted: 8 - i / 100 })) });
-const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:20px}#user_home{max-width:1000px;margin:auto}</style><div id="user_home"><div id="blog"></div></div><script src="/bundle.js"></script></html>`;
+const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:20px}#user_home{max-width:1000px;margin:auto}</style><div id="user_home"><div id="blog"></div></div><script src="/bundle-stats.js"></script><script src="/bundle-recommender.js"></script></html>`;
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   async function fixture(options = {}) {
@@ -21,7 +22,8 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'bgm.tv') {
-        if (url.pathname === '/bundle.js') return route.fulfill({ contentType: 'application/javascript', body: release });
+        if (url.pathname === '/bundle-recommender.js') return route.fulfill({ contentType: 'application/javascript', body: release });
+        if (url.pathname === '/bundle-stats.js') return route.fulfill({ contentType: 'application/javascript', body: statsRelease });
         return route.fulfill({ contentType: 'text/html', body: url.pathname === '/seed' ? '<!doctype html>' : html(options.theme || 'light') });
       }
       requests.push(url.href);

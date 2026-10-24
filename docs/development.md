@@ -27,8 +27,8 @@ legacy/                     旧推荐源码、测试与备份
 | 入口 | 责任 |
 | --- | --- |
 | `src/profile-ui.js` | 精确限定 `wylt` 主页，挂载、主题、懒加载与共享样式 |
-| `src/recommendation-feed.cjs`、`src/recommender-v2.js` | 校验清单、过滤全部已标记动画，展示推荐与分页 |
-| `src/stats-core.cjs`、`src/stats-viz.cjs`、`src/stats.js` | 动画回顾、年代、词云、创作与声优统计 |
+| `src/recommendation-feed.cjs`、`src/recommender-v2.js` | 校验清单、过滤全部已标记动画，展示个性推荐与分页 |
+| `src/stats-core.cjs`、`src/stats-viz.cjs`、`src/stats.js` | 独立动画回顾：年代与标签、创作、声优排行 |
 | `src/timeline-core.cjs`、`src/timeline.js` | 独立活跃度热力图；只统计看过的集数，不统计收藏操作次数 |
 | `src/calendar-core.cjs`、`src/calendar.js` | 独立个人放送表；七天放送表与当前登录用户收藏的 ID 交集，展示时排除看过 |
 | `src/series-family.cjs`、`scripts/family-folds.cjs` | 离线评测的系列分组；不包含旧推荐资格规则或权重 |
@@ -44,7 +44,7 @@ legacy/                     旧推荐源码、测试与备份
 4. 按风险做浏览器验收。使用者视角检查窄屏/暗色、分页、解释、隐藏撤销、错误回退与数据口径；实现者视角检查请求数量、训练是否泄漏到网页、包体积、依赖和维护成本。目录整理尤其检查链接、相对导入和夹具入口。
 5. 更新文档，只声称实际验证过的结果。版本以 `package.json` 为准，源码辅助页从构建头读取版本；本地构建与远程清单不能混称为已上线。
 
-本地预览：执行 `python -m http.server 8765 --bind 127.0.0.1`，打开 `http://127.0.0.1:8765/demo/`。导航页包含个人主页、热力图、放送表、分页夹具及三个发布源码页。源码页只是复制入口，不会自动发布到 Bangumi；预览不修改线上收藏，但演示封面可能请求 Bangumi 图片服务。
+本地预览：执行 `python -m http.server 8765 --bind 127.0.0.1`，打开 `http://127.0.0.1:8765/demo/`。导航页包含个人主页、热力图、放送表、分页夹具及四个发布源码页。源码页只是复制入口，不会自动发布到 Bangumi；预览不修改线上收藏，但演示封面可能请求 Bangumi 图片服务。
 
 `demo/profile.html` 使用演示推荐与回顾数据；分页夹具禁止真实 API/清单请求。`demo/timeline.html` 只验证本地挂载、读取该本地站点的已有缓存，不自动采集或造出观看记录；首次没有缓存时会保持“正在整理”外壳，不能把它算成完整热力图验收。完整解析/同步/绘图测试使用下述隔离夹具脚本。
 
@@ -62,9 +62,11 @@ legacy/                     旧推荐源码、测试与备份
 
 “我的放送表”使用 `package.json.calendarVersion` 和 `scripts/build-calendar.mjs` 独立构建，产物为 `dist/bangumi-personal-calendar.user.js` 与逐字相同的 `.bgm.txt`。浏览器回归为 `node scripts/test-calendar-browser.cjs`（隔离请求夹具，不需本地服务器）；预览与源码入口为 `demo/calendar.html`、`demo/calendar-source.html`。数据来源、私密同步、缓存和失败边界见 [放送组件说明](calendar.md)。独立发布至 [应用 7211](https://bgm.tv/dev/app/7211)，不占用应用 6931 或 7057。
 
+“动画回顾”使用 `package.json.statsVersion` 和 `scripts/build-stats.mjs` 独立构建，产物为 `dist/bangumi-personal-stats.user.js` 与逐字相同的 `.bgm.txt`；发布源码页为 `demo/stats-source.html`，独立发布至 [应用 7382](https://bgm.tv/dev/app/7382)。个性推荐（`scripts/build.mjs`，`version`）与回顾共享 `src/profile-ui.js` 挂载助手，各自内嵌一份；页面顺序由挂载区 flex order 决定（回顾 10、推荐 20），缓存键不相交。
+
 - 月度流水线为 [.github/workflows/monthly-recommendations.yml](../.github/workflows/monthly-recommendations.yml)，每月 1 日北京时间 11:17 计划执行，实际启动时间由 GitHub 调度决定。本地正式刷新入口为 `node scripts/refresh-recommendations.cjs`，需要 Node.js 22、Python 3.12、NumPy 2.x；持续请求公开 API，不是日常构建步骤。
 - 月度任务只提交 `public/recommendations.json`，不发布逐人评分，不修改收藏。网页“更新”核对收藏和清单，不即时重训；失败时保留可用旧清单并显示真实日期。
-- 产品变更遵循 [AGENTS.md](../AGENTS.md)：验证、受影响版本、README、构建、提交、推送、Bangumi 个人开发版本保存与线上验收，未经用户明确要求不提交全站审核。应用 6931 对应推荐/回顾，7057 对应热力图，7211 对应放送表；推荐与放送表各自的 `.user.js` 与 `.bgm.txt` 必须一致。
+- 产品变更遵循 [AGENTS.md](../AGENTS.md)：验证、受影响版本、README、构建、提交、推送、Bangumi 个人开发版本保存与线上验收，未经用户明确要求不提交全站审核。应用 6931 对应个性推荐，7382 对应动画回顾，7057 对应热力图，7211 对应放送表；推荐、回顾与放送表各自的 `.user.js` 与 `.bgm.txt` 必须一致。
 - 纯文档或行为不变的目录整理仍验证、提交、推送；若 `dist/` 和聚合清单逐字未变，就没有需要升级或重发的组件版本。
 
 ## 2026-10-18 维护记录

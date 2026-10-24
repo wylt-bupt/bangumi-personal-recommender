@@ -13,10 +13,17 @@
 
 ## 当前版本
 
-- 推荐与回顾组件：`0.12.2`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
+- 个性推荐组件：`0.13.0`，对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
+- 独立动画回顾：`0.12.3`，对应 [Bangumi 应用 7382](https://bgm.tv/dev/app/7382)；产物为 [用户脚本](dist/bangumi-personal-stats.user.js)和逐字相同的[粘贴版](dist/bangumi-personal-stats.bgm.txt)；仅更新作者个人开发版本，不提交全站审核。
 - 独立活跃度热力图：`1.0.24`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
 - 独立我的放送表：`1.0.8`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的 [粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码与月度聚合推荐清单：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
+
+## 0.13.0 / 0.12.3：个性推荐与动画回顾拆分为独立组件
+
+- 原「个性推荐」合并组件拆为两个独立用户脚本：应用 6931 只保留个性推荐（升 0.13.0），动画回顾迁到新建的 [应用 7382](https://bgm.tv/dev/app/7382)（版本续用 0.12.3）。两个模块本就互不调用、缓存键不相交（推荐 localStorage `bgmpr:v2:*`，回顾 IndexedDB `bgmpr-stats`），拆分不改变任何页面行为、数据口径或已有缓存。
+- 页面顺序仍由共享挂载区的 flex order 决定：动画回顾（10）在个性推荐（20）之上；两个脚本各自内嵌同一份挂载助手，执行先后互不影响。
+- 构建拆为 `scripts/build.mjs`（推荐）与 `scripts/build-stats.mjs`（回顾），产物分别为 `dist/bangumi-personal-recommender.user.js` 与 `dist/bangumi-personal-stats.user.js`（各带逐字相同的 `.bgm.txt`）；版本字段相应拆为 `package.json` 的 `version` 与 `statsVersion`，本地预览与发布源码页同步拆分，新增发布测试 `tests/stats-release.test.cjs` 校验产物版本、双份一致与互不混装。
 
 ## 0.12.2：均分榜入榜门槛改为 20 部
 
@@ -78,7 +85,7 @@
 
 ## 构建与验证
 
-在仓库根目录执行 `npm run verify`，会重建三个组件、检查语法，并分别运行当前测试和历史兼容测试。`npm test` 只验证当前实现，`npm run test:legacy` 单独验证归档源码。浏览器预览从 `demo/index.html` 导航至 `demo/profile.html` 等页面；验收应覆盖桌面/窄屏、暗色、分页、展开理由、隐藏/撤销和网络回退。发布产物为 `dist/bangumi-personal-recommender.user.js`；同目录 `.bgm.txt` 与它逐字相同，可粘贴到 Bangumi。热力图产物为 `dist/bangumi-personal-timeline.user.js`。浏览器验收条件详见开发维护说明，`npm run verify` 不自动启动浏览器。
+在仓库根目录执行 `npm run verify`，会重建四个组件、检查语法，并分别运行当前测试和历史兼容测试。`npm test` 只验证当前实现，`npm run test:legacy` 单独验证归档源码。浏览器预览从 `demo/index.html` 导航至 `demo/profile.html` 等页面；验收应覆盖桌面/窄屏、暗色、分页、展开理由、隐藏/撤销和网络回退。个性推荐产物为 `dist/bangumi-personal-recommender.user.js`，动画回顾产物为 `dist/bangumi-personal-stats.user.js`；两者同目录 `.bgm.txt` 与其逐字相同，可粘贴到 Bangumi。热力图产物为 `dist/bangumi-personal-timeline.user.js`。浏览器验收条件详见开发维护说明，`npm run verify` 不自动启动浏览器。
 
 首次生成或月度刷新聚合数据：`node scripts/refresh-recommendations.cjs`。需要 Node.js 22、Python 3.12 与 NumPy 2.x，且会持续读取大量公开 API 页面；不要在普通页面加载时运行。测试原始数据放在 `scripts/.cache/`，已被 Git 忽略。
 
