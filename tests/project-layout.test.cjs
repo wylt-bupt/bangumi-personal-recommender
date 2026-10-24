@@ -28,10 +28,12 @@ test('production scripts do not depend on the archived recommendation core', () 
   assert.ok(!fs.existsSync('src/component.js'));
   assert.ok(fs.existsSync('legacy/src/core.cjs'));
   assert.ok(fs.existsSync('legacy/src/component.js'));
-  const folds = fs.readFileSync('scripts/family-folds.cjs', 'utf8');
-  assert.match(folds, /src\/series-family\.cjs/);
-  for (const file of ['scripts/build.mjs', 'scripts/family-folds.cjs', 'scripts/build-recommendations.py', 'scripts/refresh-recommendations.cjs']) {
+  for (const file of ['scripts/build.mjs', 'scripts/build-stats.mjs', 'scripts/build-timeline.mjs', 'scripts/build-calendar.mjs']) {
     assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /legacy\//, file);
+  }
+  // 旧的月度协同过滤管线已整体退役：生产目录里不应再有它的任何入口。
+  for (const gone of ['src/recommender-v2.js', 'src/recommendation-feed.cjs', 'src/series-family.cjs', 'src/candidate-eligibility.cjs', 'scripts/refresh-recommendations.cjs', 'scripts/build-recommendations.py', 'scripts/grow-peer-cohort.cjs', 'data/peer-cohort.json', 'public/recommendations.json', '.github/workflows/monthly-recommendations.yml']) {
+    assert.ok(!fs.existsSync(gone), `${gone} should stay deleted`);
   }
 });
 

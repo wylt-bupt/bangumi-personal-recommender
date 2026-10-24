@@ -7,14 +7,11 @@
 ```text
 AGENTS.md                   用户设计原则与交付要求
 README.md                   当前功能、版本和文档导航
-src/                        当前组件与离线系列归并工具
-scripts/                    构建、月度训练、浏览器验收工具
+src/                        当前组件
+scripts/                    构建、浏览器验收工具
 tests/                      当前实现测试与本地夹具
 demo/                       预览导航、组件预览、发布源码页
-data/peer-cohort.json        固定公开用户样本的账号 ID
-public/recommendations.json  网页读取的聚合推荐清单
 dist/                       可直接发布的构建产物
-.github/workflows/          月度推荐刷新
 docs/                       维护说明与旧版本说明
 experiments/                按日期保存的方法、结果与复现代码
 legacy/                     旧推荐源码、测试与备份
@@ -27,14 +24,14 @@ legacy/                     旧推荐源码、测试与备份
 | 入口 | 责任 |
 | --- | --- |
 | `src/profile-ui.js` | 精确限定 `wylt` 主页，挂载、主题、懒加载与共享样式 |
-| `src/recommendation-feed.cjs`、`src/recommender-v2.js` | 校验清单、过滤全部已标记动画，展示个性推荐与分页 |
+| `src/recommender-core.cjs`、`src/recommender.js` | 标签分数库、评分与选优（纯函数）；手动刷新的采集编排与动画/书籍双模块展示 |
 | `src/stats-core.cjs`、`src/stats-viz.cjs`、`src/stats.js` | 独立动画回顾：年代与标签、创作、声优排行 |
 | `src/timeline-core.cjs`、`src/timeline.js` | 独立活跃度热力图；只统计看过的集数，不统计收藏操作次数 |
 | `src/calendar-core.cjs`、`src/calendar.js` | 独立个人放送表；七天放送表与当前登录用户收藏的 ID 交集，展示时排除看过 |
 | `src/series-family.cjs`、`scripts/family-folds.cjs` | 离线评测的系列分组；不包含旧推荐资格规则或权重 |
 | `scripts/refresh-recommendations.cjs`、`scripts/build-recommendations.py` | 限速读取公开数据，比较模型，生成聚合清单 |
 
-构建只打包当前网页模块；系列归并只用于离线训练，不进入 userscript。旧模型见 [legacy 说明](../legacy/README.md)，实验状态见 [实验索引](../experiments/README.md)。历史文件里的“当前”“主模型”只指当时版本。
+构建只打包当前网页模块；旧协同过滤管线（月度采集、模型训练、聚合清单）已在推荐 1.0.0 退役，历史实现见 [legacy 说明](../legacy/README.md)，实验状态见 [实验索引](../experiments/README.md)。历史文件里的“当前”“主模型”只指当时版本。
 
 ## 修改与验收
 
@@ -50,13 +47,13 @@ legacy/                     旧推荐源码、测试与备份
 
 `scripts/test-profile-browser.cjs`、`scripts/test-stats-viz-browser.cjs`、`scripts/test-timeline-browser.cjs` 为隔离浏览器回归脚本，需要外部安装的 `playwright` 和 Chrome，不是组件运行依赖，不包含在 `npm run verify` 中。前两者需要本地服务器；热力图脚本通过请求夹具独立运行。浏览器与电脑交互工具选择遵循 [AGENTS.md](../AGENTS.md#浏览器与电脑交互工具)，不用这些脚本接管用户的登录浏览器。
 
-`node scripts/test-profile-cache-browser.cjs` 独立运行，无需本地服务器；其网络全部由夹具接管，验证推荐与回顾的真实构建脚本、长期缓存、无自动收藏/人物请求、推荐清单独立后台更新、空/损坏缓存、完整分页、手动失败保留以及迟到响应竞争，不使用演示页面的推荐结果覆盖逻辑。
+`node scripts/test-profile-cache-browser.cjs` 独立运行，无需本地服务器；其网络全部由夹具接管，验证推荐与回顾的真实构建脚本、长期缓存、挂载零请求、手动刷新全流程（收藏→标签库→候选池→关联复核）、失败保留与关联缓存复用，不使用演示页面的推荐结果覆盖逻辑。
 
 ## 数据刷新与交付
 
-推荐与回顾使用现有的 `bgmpr:v2` localStorage 与 `stats:v1:wylt` IndexedDB 缓存键，不迁移或上传个人原始记录。有效收藏（包括空数组）不定时过期；新增、移除收藏或修改评分/状态后需手动更新相应组件。回顾在挂载时读取本地收藏，先显示年代/标签，随后批量读取人物缓存；推荐在挂载时同步显示缓存清单与收藏交集，不等待滚动触发联网。首次没有有效收藏缓存才自动采集；存储不可用时仍可能在下次打开重新同步。
+推荐组件使用 localStorage `bgmpr:v3:*` 缓存键（收藏带标签、两份结果、关联缓存），不迁移或上传个人原始记录；旧 `bgmpr:v2:*` 键在挂载时清除。挂载零网络请求，只渲染缓存结果；「更新」按钮按限速依次核对公开收藏（动画/书籍分开，读取每部作品的全站用户标签）、分页读取全站排行候选（评分人数 ≥ 500）、本地打分排序并逐个复核「不同演绎」关联（缓存 30 天），取满动画 30 部 / 书籍 20 部。失败保留上次结果并提示；不存在自动或定时刷新，也没有任何远端清单。回顾组件使用 `bgmpr-stats` IndexedDB 缓存键，不迁移或上传个人原始记录。回顾在挂载时读取本地收藏，先显示年代/标签，随后批量读取人物缓存。首次没有有效收藏缓存才自动采集；存储不可用时仍可能在下次打开重新同步。
 
-推荐清单沿用六小时检查间隔，进入可见范围后独立后台读取 GitHub 月度聚合清单；有完整缓存就先显示完整列表，缺少有效清单缓存则使用构建内的 50 条快照。手动核对启动后旧后台结果不可覆盖新 UI/缓存；后台更新保留当前页和暂时隐藏集合。失败不隐藏已有结果，不滑动收藏核对时间。回顾不会因旧的 `enrichment:state.enabled` 自动补全；已有且超过 90 天的人物缓存仍供展示，只有显式补全时更新过期/缺失关联。人物本地读取按类别使用一个只读事务，避免为每条收藏创建事务。收藏分页验证成功后才覆盖缓存，同数量的评分/年份变更也会清除聚合记忆。
+回顾在创作/声优页手动补全人物关联；已有且超过 90 天的人物缓存仍供展示，只有显式补全时更新过期/缺失关联。人物本地读取按类别使用一个只读事务，避免为每条收藏创建事务。收藏分页验证成功后才覆盖缓存。
 
 缓存策略参考 [Chrome 官方 Cache First 与后台更新说明](https://developer.chrome.com/docs/workbox/modules/workbox-strategies)，仅使用该思路，不引入 Workbox、新依赖或 Service Worker。这里的快速加载指组件启动后不等待收藏网络遍历；Bangumi 页面/脚本和未缓存图片自身的加载仍有网络成本。两个模块继续限定在 `wylt` 个人主页，推荐模型、收藏排除口径和独立热力图/放送组件保持各自原有职责。
 
@@ -64,8 +61,6 @@ legacy/                     旧推荐源码、测试与备份
 
 “动画回顾”使用 `package.json.statsVersion` 和 `scripts/build-stats.mjs` 独立构建，产物为 `dist/bangumi-personal-stats.user.js` 与逐字相同的 `.bgm.txt`；发布源码页为 `demo/stats-source.html`，独立发布至 [应用 7382](https://bgm.tv/dev/app/7382)。个性推荐（`scripts/build.mjs`，`version`）与回顾共享 `src/profile-ui.js` 挂载助手，各自内嵌一份；页面顺序由挂载区 flex order 决定（回顾 10、推荐 20），缓存键不相交。
 
-- 月度流水线为 [.github/workflows/monthly-recommendations.yml](../.github/workflows/monthly-recommendations.yml)，每月 1 日北京时间 11:17 计划执行，实际启动时间由 GitHub 调度决定。本地正式刷新入口为 `node scripts/refresh-recommendations.cjs`，需要 Node.js 22、Python 3.12、NumPy 2.x；持续请求公开 API，不是日常构建步骤。
-- 月度任务只提交 `public/recommendations.json`，不发布逐人评分，不修改收藏。网页“更新”核对收藏和清单，不即时重训；失败时保留可用旧清单并显示真实日期。
 - 产品变更遵循 [AGENTS.md](../AGENTS.md)：验证、受影响版本、README、构建、提交、推送、Bangumi 个人开发版本保存与线上验收，未经用户明确要求不提交全站审核。应用 6931 对应个性推荐，7382 对应动画回顾，7057 对应热力图，7211 对应放送表；推荐、回顾与放送表各自的 `.user.js` 与 `.bgm.txt` 必须一致。
 - 纯文档或行为不变的目录整理仍验证、提交、推送；若 `dist/` 和聚合清单逐字未变，就没有需要升级或重发的组件版本。
 

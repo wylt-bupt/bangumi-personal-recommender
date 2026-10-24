@@ -11,20 +11,46 @@ if(query.has('width')){document.querySelector('.layout').style.display='block';d
 const fixtureNames=['鲁邦三世 -名为峰不二子的女人-','玉响～毕业写真～','星之梦～星之人～','强风吹拂','悠久之翼2'];
 const fixtureImages=['https://lain.bgm.tv/r/400/pic/cover/l/e6/33/36355_dt0WH.jpg','https://lain.bgm.tv/r/400/pic/cover/l/2b/30/109869_w5vOo.jpg','https://lain.bgm.tv/r/400/pic/cover/l/5e/b1/178884_5tZ0I.jpg'];
 const fixtureTags=['日常','治愈','青春','科幻','悬疑','恋爱','奇幻','校园','原创','轻小说改','漫画改','冒险','战斗','搞笑','音乐','运动','成长','群像','公路片','少女','历史','机战','魔法','异世界','亲情','友情','温馨','偶像','致郁','推理','剧情','短篇','实验动画','OVA','剧场版','TV','夏天','旅行','社团','青春期的细腻情感与成长','京都动画','吉卜力','经典','童年','美食','职场','文学','复古','家庭','童话','未来','宇宙','妖怪','节奏舒缓','画面优美','都市'];
-const fixtureCollections = Array.from({length:80},(_,i)=>({subject_id:i+1,type:2,rate:6+i%5,tags:fixtureTags.filter((tag,j)=>(i*17+j*3)%80<Math.max(1,70-j*1.2)),ep_status:12,subject:{id:i+1,type:2,name:fixtureNames[i%5],date:(1980+Math.floor(Math.sqrt(i/79)*46))+ '-' + String(i%12+1).padStart(2,'0') + '-01',eps:i<36?12:i<48?24:i<58?13:i<66?1:i<72?26:30+i,images:{small:fixtureImages[i%3]}}}));
+const fixtureCollections = Array.from({length:80},(_,i)=>({subject_id:i+1,type:2,rate:6+i%5,tags:fixtureTags.filter((tag,j)=>(i*17+j*3)%80<Math.max(1,70-j*1.2)),ep_status:12,subject:{id:i+1,type:2,name:fixtureNames[i%5],date:(1980+Math.floor(Math.sqrt(i/79)*46))+ '-' + String(i%12+1).padStart(2,'0') + '-01',eps:i<36?12:i<48?24:i<58?13:i<66?1:i<72?26:30+i,images:{small:fixtureImages[i%3]},tags:[{name:fixtureTags[i%8],count:200-i},{name:fixtureTags[(i+3)%8],count:90}]}}));
 if(query.has('dense'))fixtureCollections.forEach((row,i)=>{row.tags=['日常','原创',...Array.from({length:700},(_,n)=>n).filter(n=>n%80===i).map(n=>n%2?'标签'+n:'Animation-'+n)];});
-window.fetch=async(input)=>{const url=String(input);if(query.has('error'))throw new Error('演示网络不可用');let data=[];if(url.includes('/collections'))return new Response(JSON.stringify({total:query.has('empty')?0:80,data:query.has('empty')?[]:fixtureCollections}),{status:200});if(url.includes('/persons'))data=[{id:100+Number(url.match(/subjects\/(\d+)/)[1])%15,name:['山田尚子','京都动画','新房昭之','今敏','汤浅政明'][Number(url.match(/subjects\/(\d+)/)[1])%5],relation:'导演'}];if(url.includes('/characters'))data=[{id:1,actors:[{id:201,name:'花泽香菜'}]}];return new Response(JSON.stringify(data),{status:200});};
+
+/* 推荐夹具：收藏（带全站标签）、排行候选、关联，全部走本页 fetch 拦截。 */
+const animeCollectionRows = Array.from({length:12},(_,i)=>({subject_id:100+i,subject_type:2,type:2,rate:i<9?7:0,subject:{id:100+i,tags:[{name:'日常',count:120},{name:'治愈',count:60}]}}));
+animeCollectionRows[2].subject.tags = [{name:'科幻',count:300}];
+const bookCollectionRows = Array.from({length:4},(_,i)=>({subject_id:200+i,subject_type:1,type:2,rate:i<3?9:0,subject:{id:200+i,tags:[{name:'漫画',count:80}]}}));
+const animeCandidates = Array.from({length:46},(_,i)=>({id:5000+i,name:`候选动画${i}`,name_cn:`推荐候选·动画${i}`,platform:i===45?'OVA':'TV',images:{common:fixtureImages[i%3]},rating:{score:8.9-i*0.04,total:i===44?300:900-i*8},tags:[{name:['科幻','日常','治愈','战斗'][i%4],count:200}]}));
+animeCandidates[5].rating = {score:9.4,total:980};
+const bookCandidates = Array.from({length:24},(_,i)=>({id:7000+i,name:`候选书籍${i}`,name_cn:`推荐候选·书籍${i}`,platform:'漫画',images:{common:fixtureImages[(i+1)%3]},rating:{score:8.5-i*0.03,total:800-i*8},tags:[{name:'漫画',count:150}]}));
+window.fetch = async (input) => {
+  if(query.has('error'))throw new Error('演示网络不可用');
+  const url = new URL(String(input), location.origin);
+  if(url.hostname !== 'api.bgm.tv') return new Response('[]',{status:200});
+  if(url.pathname === '/v0/users/wylt/collections'){
+    const type = Number(url.searchParams.get('subject_type'));
+    const rows = type === 1 ? bookCollectionRows : (query.has('empty') ? [] : fixtureCollections);
+    const offset = Number(url.searchParams.get('offset')) || 0;
+    return new Response(JSON.stringify({total:rows.length, data:rows.slice(offset, offset+50)}),{status:200});
+  }
+  if(url.pathname === '/v0/subjects' && url.searchParams.get('sort') === 'rank'){
+    const type = Number(url.searchParams.get('type'));
+    const offset = Number(url.searchParams.get('offset')) || 0;
+    const rows = type === 1 ? bookCandidates : animeCandidates;
+    return new Response(JSON.stringify({total:rows.length, data:rows.slice(offset, offset+100)}),{status:200});
+  }
+  const remake = url.pathname.match(/^\/v0\/subjects\/(\d+)\/subjects$/);
+  if(remake) return new Response(JSON.stringify(Number(remake[1]) === 5005 ? [{id:102,relation:'不同演绎',name:'动画102'}] : []),{status:200});
+  if(url.pathname.includes('/persons'))return new Response(JSON.stringify([{id:100+Number(url.pathname.match(/subjects\/(\d+)/)[1])%15,name:['山田尚子','京都动画','新房昭之','今敏','汤浅政明'][Number(url.pathname.match(/subjects\/(\d+)/)[1])%5],relation:'导演'}]),{status:200});
+  if(url.pathname.includes('/characters'))return new Response(JSON.stringify([{id:1,actors:[{id:201,name:'花泽香菜'}]}]),{status:200});
+  return new Response('[]',{status:200});
+};
+/* 预置两份推荐结果缓存：页面一打开就有卡片，「更新」会走上面的夹具重新计算。 */
+const round2 = value => Number(value.toFixed(2));
+const seedItems = (prefix, n) => Array.from({length:n},(_,i)=>({id:9000+i, name:`${prefix}候选${i}`, nameCn:`${prefix}推荐·候选${i}`, image:fixtureImages[i%3], site:round2(4.3-i*0.02), tag:round2(3.9-i*0.015), total:1500-i*10, final:round2(((4.3-i*0.02)+(3.9-i*0.015))/2)}));
+if(!query.has('empty')){
+  localStorage.setItem('bgmpr:v3:result:anime', JSON.stringify({storedAt:Date.now(), value:{generatedAt:Date.now(), items:seedItems('动画',30)}}));
+  localStorage.setItem('bgmpr:v3:result:book', JSON.stringify({storedAt:Date.now(), value:{generatedAt:Date.now(), items:seedItems('书籍',20)}}));
+}
+if(query.has('error'))document.addEventListener('DOMContentLoaded',()=>{const attempt=()=>{const app=window.BangumiPersonalRecommender;if(app)app.refresh('anime');else setTimeout(attempt,100);};attempt();});
 </script><script src="../dist/bangumi-personal-stats.user.js"></script>
 <script src="../dist/bangumi-personal-recommender.user.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded',()=>{
-const app=window.BangumiPersonalRecommender;
-if(!app?.host)return;
-app.state.open=true;
-if(query.has('empty'))return;
-if(query.has('error')){app.ensureRecommendations({force:true});return;}
-const tags=['治愈','青春','奇幻','日常','成长'];
-app.state.pageOrder=Array.from({length:18},(_,i)=>({subject:{id:900000+i,name:fixtureNames[i%5],nameCn:fixtureNames[i%5],image:fixtureImages[i%3],rating:{score:7.9,total:1200},tags:[tags[i%5],'日本动画']},predicted:8.5-i*.03,reasons:[`你对“${tags[i%5]}”相关作品的历史评分较高。`],collaborativeLift:.2}));
-app.state.profile={collectionCount:80,ratedCount:80};app.state.feed={ratedCount:80,peerCount:100,neighborCount:40,model:'content'};app.renderFromPool();
-});
-</script></body></html>
+</body></html>

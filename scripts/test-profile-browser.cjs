@@ -14,37 +14,55 @@ const preview = require('./static-server.cjs');
       await page.setViewportSize({width,height});
       await page.goto(`${origin}/demo/profile.html?theme=${theme}`);
       await page.locator('.year-chart').waitFor();
-      await page.locator('.recommendation-card').first().waitFor();
-      assert.equal(await page.locator('.recommendation-card').count(),5);
-      assert.equal(await page.locator('.launcher,.scrim,[role="dialog"]').count(),0);
+      await page.locator('.rec-card').first().waitFor();
+      assert.equal(await page.locator('[data-module="anime"] .rec-card').count(),5);
+      assert.equal(await page.locator('[data-module="book"] .rec-card').count(),5);
+      // 卡片只有封面、名字、推荐评分与一行小字，没有其他冗余内容。
+      const anatomy = await page.locator('[data-module="anime"] .rec-card').first().evaluate(node => ({
+        children: node.children.length,
+        cover: node.querySelectorAll('.cover').length,
+        name: node.querySelectorAll('.rec-name').length,
+        final: node.querySelectorAll('.rec-final').length,
+        parts: node.querySelectorAll('.rec-parts').length,
+      }));
+      assert.deepEqual(anatomy, {children:4, cover:1, name:1, final:1, parts:1});
+      assert.match(await page.locator('[data-module="anime"] .rec-name a').first().getAttribute('href'), /\/subject\/\d+$/);
+      assert.match(await page.locator('[data-module="anime"] .cover').first().getAttribute('href'), /\/subject\/\d+$/);
+      assert.match(await page.locator('[data-module="anime"] .rec-final').first().textContent(), /^\d\.\d{2}$/);
+      assert.match(await page.locator('[data-module="anime"] .rec-parts').first().textContent(), /全站评分 \d\.\d{2} · 标签评分 (\d\.\d{2}|—)/);
+      assert.equal(await page.locator('.launcher,.scrim,[role="dialog"],[data-dismiss-id],.evidence-panel,.summary').count(),0);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       assert.deepEqual(await page.locator('#bgmpr-profile-sections').evaluate(e=>Array.from(e.children).map(x=>x.id)),['bgmstats-host','bgmpr-host']);
-      await page.getByRole('button',{name:'标签',exact:true}).click();await page.locator('[data-search="tags"]').waitFor();assert.equal(await page.locator('.person-bar').count(),12);
-      await page.getByRole('button',{name:'创作',exact:true}).click();assert.ok(await page.locator('[data-search="staff"]').isVisible());
-      await page.getByRole('button',{name:'声优',exact:true}).click();assert.ok(await page.locator('[data-search="cast"]').isVisible());
-      await page.getByRole('button',{name:'年代',exact:true}).click();
-      await page.locator('[data-page-direction="1"]').click();assert.equal(await page.locator('[data-page-select]').inputValue(),'2');
-      await page.locator('[data-page-select]').selectOption('4');assert.equal(await page.locator('.recommendation-card').count(),3);
-      await page.locator('[data-page-select]').selectOption('1');
-      const first=await page.locator('.cover').first().getAttribute('href');
-      await page.locator('.evidence-panel summary').first().click();
-      await page.locator('[data-dismiss-id]').first().click();assert.notEqual(await page.locator('.cover').first().getAttribute('href'),first);
-      await page.getByRole('button',{name:'撤销',exact:true}).click();assert.equal(await page.locator('.cover').first().getAttribute('href'),first);
+      // 分页：上一页/下一页与页码下拉，动画 30 部 6 页、书籍 20 部 4 页。
+      await page.locator('[data-module="anime"] [data-page-direction="1"]').click();
+      assert.equal(await page.locator('[data-module="anime"] [data-page-select]').inputValue(),'2');
+      await page.locator('[data-module="anime"] [data-page-select]').selectOption('6');
+      assert.equal(await page.locator('[data-module="anime"] .rec-card').count(),5);
+      await page.locator('[data-module="anime"] [data-page-select]').selectOption('1');
+      assert.equal(await page.locator('[data-module="book"] [data-page-select] option').count(),4);
       await page.screenshot({path:`artifacts/profile-${width}-${height}-${theme}.png`,fullPage:true});
-      report.push(`${width}×${height} ${theme}: layout, tabs, pagination, details, dismiss/undo passed`);
+      report.push(`${width}×${height} ${theme}: minimal cards, both modules, pagination passed`);
     }
     for(const state of ['empty','error']) {
       // Isolate storage so a previous successful fixture cannot mask an error.
       const context=await browser.newContext();const probe=await context.newPage();
       await probe.goto(`${origin}/demo/profile.html?${state}=1`);
       await probe.locator('#bgmstats-host').waitFor();
-      if(state==='error')await probe.locator('.error').waitFor();
-      else await probe.locator('.welcome').waitFor();
+      if(state==='empty'){
+        await probe.locator('[data-module="anime"] .empty').waitFor();
+        assert.match(await probe.locator('[data-module="anime"] .empty').textContent(),/暂无推荐结果/);
+      } else {
+        await probe.locator('[data-module="anime"] .error').waitFor();
+        assert.match(await probe.locator('[data-module="anime"] .error').textContent(),/更新失败/);
+      }
       await context.close();report.push(`${state} state passed`);
     }
+    await page.setViewportSize({width:1440,height:1000});
     await page.emulateMedia({reducedMotion:'reduce'});
-    assert.equal(await page.locator('.cover img').first().evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
+    await page.goto(`${origin}/demo/profile.html`);
+    await page.locator('.rec-card').first().waitFor();
+    assert.equal(await page.locator('.rec-card img').first().evaluate(e=>getComputedStyle(e).transitionDuration),'0s');
     assert.deepEqual(errors,[]);
-    console.log(report.join('\n'));
+    console.log('PASS: ' + report.join('; ') + '; reduced motion respected; no page errors');
   } finally { await browser.close(); server.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

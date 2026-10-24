@@ -1,61 +1,27 @@
 <!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>推荐分页测试</title>
-    <style>
-      body { margin: 0; min-height: 100vh; background: #f4f1f2; }
-    </style>
-  </head>
-  <body data-bgm-profile-demo>
-    <div id="user_home"><div id="blog"></div></div>
-    <script>
-      document.title = "分页测试：载入中";
-      document.querySelectorAll("#bgmpr-host, #bgmstats-host").forEach((element) => element.remove());
-      // A fixture must not read real collections or the remote feed.
-      window.fetch = async (input) => {
-        if (String(input).includes("/collections")) {
-          return new Response(JSON.stringify({ total: 0, data: [] }), { status: 200 });
-        }
-        throw new Error("分页夹具禁止外部请求");
-      };
-    </script>
-    <script src="/dist/bangumi-personal-recommender.user.js"></script>
-    <script>
-      document.title = "分页测试：脚本已载入";
-      document.addEventListener("DOMContentLoaded", () => {
-        const app = window.BangumiPersonalRecommender;
-        if (!app) {
-          document.title = "分页测试：组件未挂载";
-          return;
-        }
-        const labels = ["治愈", "青春", "奇幻", "日常", "成长"];
-        const pageOrder = Array.from({ length: 180 }, (_, index) => ({
-          subject: {
-            id: 900001 + index,
-            name: `Pagination Test ${index + 1}`,
-            nameCn: `分页测试作品 ${index + 1}`,
-            image: "invalid:",
-            rating: { score: 8.4 - index * 0.08, total: 1200 - index * 25 },
-            tags: [labels[index % labels.length], "日本动画"],
-          },
-          predicted: 8.7 - index * 0.06,
-          reasons: [`你对“${labels[index % labels.length]}”相关作品的历史评分较高。`],
-          collaborativeLift: 0.1,
-        }));
-        app.state.open = true;
-        try {
-          app.state.profile = { collectionCount: 240, ratedCount: 168 };
-          app.state.eligibleCandidateCount = 180;
-          app.state.pageOrder = pageOrder;
-          app.renderFromPool();
-          const pageSelect = app.shadow.querySelector("[data-page-select]");
-          document.title = `分页测试：${app.state.current.length} 个｜第 ${pageSelect.value} / ${pageSelect.options.length} 页`;
-        } catch (error) {
-          document.title = `分页测试错误：${error.message}`;
-        }
-      });
-    </script>
-  </body>
-</html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>推荐分页测试</title>
+<style>body { margin: 0; min-height: 100vh; background: #f4f1f2; }</style></head>
+<body data-bgm-profile-demo>
+<div id="user_home"><div id="blog"></div></div>
+<script>
+// 只验证分页：预置动画 30 部（6 页）与书籍 20 部（4 页）的结果缓存，
+// 禁止一切网络，组件应从缓存直接渲染。
+const items = (prefix, n) => Array.from({ length: n }, (_, i) => ({ id: 9000 + i, name: `${prefix} ${i + 1}`, nameCn: `分页测试条目 ${i + 1}`, image: '', site: 4, tag: 3.5, total: 900 - i, final: 3.75 }));
+localStorage.setItem('bgmpr:v3:result:anime', JSON.stringify({ storedAt: Date.now(), value: { generatedAt: Date.now(), items: items('动画', 30) } }));
+localStorage.setItem('bgmpr:v3:result:book', JSON.stringify({ storedAt: Date.now(), value: { generatedAt: Date.now(), items: items('书籍', 20) } }));
+window.fetch = async () => { throw new Error('分页夹具禁止外部请求'); };
+</script>
+<script src="/dist/bangumi-personal-recommender.user.js"></script>
+<script>
+document.title = '分页测试：脚本已载入';
+document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  const host = document.getElementById('bgmpr-host');
+  const scope = host && host.shadowRoot;
+  if (!scope) { document.title = '分页测试：组件未挂载'; return; }
+  const animePages = scope.querySelectorAll('[data-module="anime"] [data-page-select] option').length;
+  const bookPages = scope.querySelectorAll('[data-module="book"] [data-page-select] option').length;
+  const cards = scope.querySelectorAll('[data-module="anime"] .rec-card').length;
+  document.title = `分页测试：首页 ${cards} 个｜动画 ${animePages} 页｜书籍 ${bookPages} 页`;
+}, 200));
+</script>
+</body></html>
