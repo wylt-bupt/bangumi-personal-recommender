@@ -13,11 +13,18 @@
 
 ## 当前版本
 
-- 个性推荐组件：`1.0.1`（标签均分制 + 探索因子），对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
+- 个性推荐组件：`1.0.2`（标签均分制 + 探索因子 + 地区过滤），对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
 - 独立动画回顾：`0.12.3`，对应 [Bangumi 应用 7382](https://bgm.tv/dev/app/7382)；产物为 [用户脚本](dist/bangumi-personal-stats.user.js)和逐字相同的[粘贴版](dist/bangumi-personal-stats.bgm.txt)；仅更新作者个人开发版本，不提交全站审核。
 - 独立活跃度热力图：`1.0.26`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
 - 独立我的放送表：`1.0.8`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的[粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
+
+## 1.0.2：地区标签过滤、全站权重降至 1 与卡片标题两行截断
+
+- 新增排除规则：全站用户标签中出现超过 10 人标注「国产」「中国」「欧美」的条目不参与推荐（阈值与名单是常量，便于扩充）。
+- 探索因子加强：全站评分权重由 3 降至 **1**（`final = 全站分×0.125 + 标签分×0.875`），全站口碑的影响进一步压低；无已知标签的作品仍只用全站分。
+- 卡片小字改为「标签评分 X.XX · 全站评分 X.XX」——标签分在前，与它的权重相称。
+- 作品名固定两行并截断（完整名字在链接悬停提示里）：长标题换行不再把评分行顶得高低不齐，整排卡片保持对齐。
 
 ## 1.0.1：推荐评分加入探索因子（全站 3 : 标签 7）
 

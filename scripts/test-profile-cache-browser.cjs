@@ -23,6 +23,7 @@ const eligible = i => ({ id: 5000 + i, name: `候选 ${i}`, name_cn: `推荐候�
 const rankedAnime = [
   { ...eligible(-1), id: 6003, name_cn: '翻拍候选', rating: { score: 9.5, total: 990 } },  // 关联我评过的 1000，关系「不同演绎」→ 排除
   { ...eligible(-1), id: 1005, name_cn: '已评分候选', rating: { score: 9.5, total: 985 } }, // 我打过分（评分集合 1000..1039）→ 排除
+  { ...eligible(-1), id: 6004, name_cn: '地区候选', tags: [{ name: '国产', count: 55 }] },  // 地区标签超阈值 → 排除
   ...Array.from({ length: 45 }, (_, i) => eligible(i)),
   { ...eligible(-3), id: 6001, name_cn: '小众候选', rating: { score: 9, total: 400 } },     // 人数不足 → 排除
   { ...eligible(-4), id: 6002, name_cn: 'OVA候选', platform: 'OVA' },                      // OVA → 排除
@@ -141,7 +142,7 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
         assert.equal(result.items.length, 30, 'the anime module fills its 30-slot limit');
         assert.deepEqual(result.items.map(item => item.id), Array.from({ length: 30 }, (_, i) => 5000 + i), 'remakes, rated, thin and OVA candidates are excluded; ties break by rating count');
         assert.equal(result.items[0].tag, 3.5, 'the tag score from my rated works feeds the final score');
-        assert.equal(result.items[0].final, 3.8, 'final = (site 4.5×3 + tag 3.5×7) / 10');
+        assert.equal(result.items[0].final, 3.63, 'final = (site 4.5×1 + tag 3.5×7) / 8');
         assert.ok(result.items.every(item => item.id !== 5004 || true), 'a different-adaptation link to an unrated subject does not exclude');
         const collections = await stored(f, 'collections:anime');
         assert.equal(collections.length, 40, 'only rated rows feed the tag database');

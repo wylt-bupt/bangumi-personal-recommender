@@ -94,7 +94,8 @@
           platform: subject.platform || "",
           images: subject.images || {},
           rating: { score: Number(subject.rating && subject.rating.score) || 0, total: Number(subject.rating && subject.rating.total) || 0 },
-          tags: Array.isArray(subject.tags) ? subject.tags.filter(tag => tag && typeof tag.name === "string").map(tag => tag.name) : [],
+          // 保留 {name, count} 形状：标签分用名字，地区排除规则用人数。
+          tags: Array.isArray(subject.tags) ? subject.tags.filter(tag => tag && typeof tag.name === "string" && tag.name).map(tag => ({ name: tag.name, count: Number(tag.count) || 0 })) : [],
         });
       }
       if (onProgress) onProgress(rows.length);
@@ -221,9 +222,9 @@
       const image = /^https?:\/\//.test(item.image || "") ? item.image : "";
       return `<article class="rec-card">
   <a class="cover" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" width="140" height="196">` : ""}</a>
-  <h3 class="rec-name"><a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
+  <h3 class="rec-name"><a href="${url}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(title)}">${escapeHtml(title)}</a></h3>
   <p class="rec-final"><b>${item.final.toFixed(2)}</b></p>
-  <p class="rec-parts">全站评分 ${item.site.toFixed(2)} · 标签评分 ${item.tag == null ? "—" : item.tag.toFixed(2)}</p>
+  <p class="rec-parts">标签评分 ${item.tag == null ? "—" : item.tag.toFixed(2)} · 全站评分 ${item.site.toFixed(2)}</p>
 </article>`;
     }
 
@@ -286,7 +287,9 @@
     .rec-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px}
     .cover{display:block;aspect-ratio:140/196;background:var(--soft);border-radius:6px;overflow:hidden}
     .cover img{display:block;width:100%;height:100%;object-fit:cover}
-    .rec-name{margin:8px 0 0;font-size:13px;line-height:1.5}
+    /* 标题固定两行并截断：长名换行会把评分行顶得高低不齐，破坏整排卡片的
+       对齐；完整名字放在链接的 title 与 aria-label 里。 */
+    .rec-name{margin:8px 0 0;font-size:13px;line-height:1.5;height:3em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
     .rec-final{margin:6px 0 0;font-size:15px;color:var(--pink)}
     .rec-final b{font-weight:600}
     .rec-parts{margin:3px 0 0;font-size:11px;color:var(--muted)}

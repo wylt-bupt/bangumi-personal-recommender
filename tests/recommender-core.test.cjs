@@ -45,17 +45,32 @@ test('a candidate borrows its tags\u2019 mean score divided by two, on a 1-5 sca
   assert.equal(Core.tagScore([], db), null);
 });
 
-test('final score weights site 3 : tag 7, kept to two decimals', () => {
+test('final score weights site 1 : tag 7, kept to two decimals', () => {
   const db = Core.buildTagDb([{ rate: 9, subject: { tags: [{ name: '科幻' }] } }]);
   const rows = [subject(10, { rating: { score: 7.6, total: 1000 }, tags: [{ name: '科幻' }] })];
   const scored = Core.scoreCandidates(rows, db, new Set());
   assert.equal(scored[0].site, 3.8);
   assert.equal(scored[0].tag, 4.5);
-  assert.equal(scored[0].final, 4.29, 'exploration factor: (3.8×3 + 4.5×7) / 10');
+  assert.equal(scored[0].final, 4.41, 'exploration factor: (3.8×1 + 4.5×7) / 8');
   // 只用全站分：没有已知标签时没有可混合的第二项。
   const tagless = Core.scoreCandidates([subject(11, { tags: [{ name: '完全未知' }] })], db, new Set());
   assert.equal(tagless[0].tag, null);
   assert.equal(tagless[0].final, 4);
+});
+
+test('candidates with heavily-tagged region labels are excluded', () => {
+  const rows = [
+    subject(21, { tags: [{ name: '国产', count: 11 }] }),  // 超过 10 人 → 排除
+    subject(22, { tags: [{ name: '中国', count: 30 }] }),  // 排除
+    subject(23, { tags: [{ name: '欧美', count: 12 }] }),  // 排除
+    subject(24, { tags: [{ name: '国产', count: 10 }] }),  // 恰好 10 人 → 保留
+    subject(25, { tags: [{ name: '美国', count: 99 }] }),  // 不在排除名单 → 保留
+    subject(26, { tags: ['国产'] }),                       // 无人数（字符串形状）→ 无法判定，保留
+  ];
+  const scored = Core.scoreCandidates(rows, new Map(), new Set());
+  assert.deepEqual(scored.map(row => row.id), [24, 25, 26]);
+  assert.deepEqual([...Core.REGION_EXCLUSION_TAGS], ['国产', '中国', '欧美']);
+  assert.equal(Core.REGION_EXCLUSION_COUNT, 10);
 });
 
 test('candidates exclude my rated works, thin ratings and OVA releases; collected-but-unrated stays', () => {

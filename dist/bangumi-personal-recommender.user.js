@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.1
+// @version      1.0.2
 // @description  个人主页的动画与书籍推荐：按标签均分与全站评分折算排序，仅手动更新。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -120,15 +120,27 @@
     return known.reduce((sum, value) => sum + value, 0) / known.length / 2;
   }
 
+  /* ── 地区标签排除 ──
+     全站用户标签中，出现超过 10 人标注「国产 / 中国 / 欧美」的条目不参与
+     推荐。标签必须带标注人数（排行接口的 {name, count} 形状）才可判定。 */
+  const REGION_EXCLUSION_TAGS = new Set(['国产', '中国', '欧美']);
+  const REGION_EXCLUSION_COUNT = 10;
+  function regionExcluded(tags) {
+    for (const tag of tags || []) {
+      if (tag && typeof tag === 'object' && REGION_EXCLUSION_TAGS.has(tag.name) && Number(tag.count) > REGION_EXCLUSION_COUNT) return true;
+    }
+    return false;
+  }
+
   /* ── 候选池评分 ──
      rows 是排行榜接口的条目列表项（自带 platform / tags / rating）。
      排除：我已打分的条目（ratedIds；仅收藏未评分的照常参与）、全站评分
-     人数不足 500 的、platform 为 OVA 的。单项分数 1-5：全站分 ÷ 2；
-     标签分 = 标签均分 ÷ 2；推荐评分 = 两项加权平均（全站 3 : 标签 7，
-     标签分是探索因子，避免全站口碑主导排序），保留 2 位小数。
+     人数不足 500 的、platform 为 OVA 的、地区标签超阈值的。单项分数 1-5：
+     全站分 ÷ 2；标签分 = 标签均分 ÷ 2；推荐评分 = 两项加权平均（全站 1 :
+     标签 7，标签分是探索因子，避免全站口碑主导排序），保留 2 位小数。
      排序：推荐评分降序，同分按全站评分人数多者优先。 */
   const MIN_RATINGS = 500;
-  const SITE_WEIGHT = 3, TAG_WEIGHT = 7;
+  const SITE_WEIGHT = 1, TAG_WEIGHT = 7;
   function scoreCandidates(rows, tagDb, ratedIds, minRatings = MIN_RATINGS) {
     const floor = Number.isFinite(minRatings) ? minRatings : MIN_RATINGS;
     const scored = [];
@@ -139,6 +151,7 @@
       if (!Number.isSafeInteger(id) || id <= 0 || (ratedIds && ratedIds.has(id))) continue;
       if (total < floor) continue;
       if (subject.platform === 'OVA') continue;
+      if (regionExcluded(subject.tags)) continue;
       const site = (Number(rating.score) || 0) / 2;
       const tag = tagScore(subject.tags, tagDb);
       scored.push({
@@ -177,7 +190,7 @@
     return { selected, excluded };
   }
 
-  return { MIN_RATINGS, EXCLUDED_RELATION, buildTagDb, tagScore, scoreCandidates, selectTop };
+  return { MIN_RATINGS, EXCLUDED_RELATION, REGION_EXCLUSION_TAGS, REGION_EXCLUSION_COUNT, buildTagDb, tagScore, scoreCandidates, selectTop };
 });
 
 
@@ -185,7 +198,7 @@
   "use strict";
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
-  const APP_VERSION = "1.0.1";
+  const APP_VERSION = "1.0.2";
 
   const OWNER = "wylt";
   const PAGE_SIZE = 5;
@@ -277,7 +290,8 @@
           platform: subject.platform || "",
           images: subject.images || {},
           rating: { score: Number(subject.rating && subject.rating.score) || 0, total: Number(subject.rating && subject.rating.total) || 0 },
-          tags: Array.isArray(subject.tags) ? subject.tags.filter(tag => tag && typeof tag.name === "string").map(tag => tag.name) : [],
+          // 保留 {name, count} 形状：标签分用名字，地区排除规则用人数。
+          tags: Array.isArray(subject.tags) ? subject.tags.filter(tag => tag && typeof tag.name === "string" && tag.name).map(tag => ({ name: tag.name, count: Number(tag.count) || 0 })) : [],
         });
       }
       if (onProgress) onProgress(rows.length);
@@ -404,9 +418,9 @@
       const image = /^https?:\/\//.test(item.image || "") ? item.image : "";
       return `<article class="rec-card">
   <a class="cover" href="${url}" target="_blank" rel="noopener noreferrer" aria-label="查看《${escapeHtml(title)}》">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" width="140" height="196">` : ""}</a>
-  <h3 class="rec-name"><a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(title)}</a></h3>
+  <h3 class="rec-name"><a href="${url}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(title)}">${escapeHtml(title)}</a></h3>
   <p class="rec-final"><b>${item.final.toFixed(2)}</b></p>
-  <p class="rec-parts">全站评分 ${item.site.toFixed(2)} · 标签评分 ${item.tag == null ? "—" : item.tag.toFixed(2)}</p>
+  <p class="rec-parts">标签评分 ${item.tag == null ? "—" : item.tag.toFixed(2)} · 全站评分 ${item.site.toFixed(2)}</p>
 </article>`;
     }
 
@@ -469,7 +483,9 @@
     .rec-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px}
     .cover{display:block;aspect-ratio:140/196;background:var(--soft);border-radius:6px;overflow:hidden}
     .cover img{display:block;width:100%;height:100%;object-fit:cover}
-    .rec-name{margin:8px 0 0;font-size:13px;line-height:1.5}
+    /* 标题固定两行并截断：长名换行会把评分行顶得高低不齐，破坏整排卡片的
+       对齐；完整名字放在链接的 title 与 aria-label 里。 */
+    .rec-name{margin:8px 0 0;font-size:13px;line-height:1.5;height:3em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
     .rec-final{margin:6px 0 0;font-size:15px;color:var(--pink)}
     .rec-final b{font-weight:600}
     .rec-parts{margin:3px 0 0;font-size:11px;color:var(--muted)}

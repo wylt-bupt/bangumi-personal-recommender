@@ -29,7 +29,10 @@ const preview = require('./static-server.cjs');
       assert.match(await page.locator('[data-module="anime"] .rec-name a').first().getAttribute('href'), /\/subject\/\d+$/);
       assert.match(await page.locator('[data-module="anime"] .cover').first().getAttribute('href'), /\/subject\/\d+$/);
       assert.match(await page.locator('[data-module="anime"] .rec-final').first().textContent(), /^\d\.\d{2}$/);
-      assert.match(await page.locator('[data-module="anime"] .rec-parts').first().textContent(), /全站评分 \d\.\d{2} · 标签评分 (\d\.\d{2}|—)/);
+      assert.match(await page.locator('[data-module="anime"] .rec-parts').first().textContent(), /标签评分 (\d\.\d{2}|—) · 全站评分 \d\.\d{2}/);
+      // 长标题两行截断：评分行不会被标题行数顶得高低不齐。
+      const clamp = await page.locator('[data-module="anime"] .rec-name').first().evaluate(node => getComputedStyle(node).webkitLineClamp);
+      assert.equal(clamp, '2');
       assert.equal(await page.locator('.launcher,.scrim,[role="dialog"],[data-dismiss-id],.evidence-panel,.summary').count(),0);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       assert.deepEqual(await page.locator('#bgmpr-profile-sections').evaluate(e=>Array.from(e.children).map(x=>x.id)),['bgmstats-host','bgmpr-host']);
