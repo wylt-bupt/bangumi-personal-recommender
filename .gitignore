@@ -1,6 +1,7 @@
 # internal caches and session data
 .cache/
 .workbuddy/
+.zcode/
 
 # browser-test screenshots
 artifacts/
