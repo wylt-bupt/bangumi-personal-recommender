@@ -140,6 +140,8 @@ const html = theme => `<!doctype html><html data-theme="${theme}"><meta charset=
         const result = await stored(f, 'result:anime');
         assert.equal(result.items.length, 30, 'the anime module fills its 30-slot limit');
         assert.deepEqual(result.items.map(item => item.id), Array.from({ length: 30 }, (_, i) => 5000 + i), 'remakes, rated, thin and OVA candidates are excluded; ties break by rating count');
+        assert.equal(result.items[0].tag, 3.5, 'the tag score from my rated works feeds the final score');
+        assert.equal(result.items[0].final, 4, 'final = (site 4.5 + tag 3.5) / 2');
         assert.ok(result.items.every(item => item.id !== 5004 || true), 'a different-adaptation link to an unrated subject does not exclude');
         const collections = await stored(f, 'collections:anime');
         assert.equal(collections.length, 40, 'only rated rows feed the tag database');

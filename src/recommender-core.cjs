@@ -8,19 +8,26 @@
      数据来自我评过分的条目（rate > 0，不限收藏状态——想看/看过/抛弃都算，
      只要打了分）身上的全站用户标注标签（subject.tags，不是我自己的标注）。
      我对该作品的 10 分制评分就是每个标签在该作品下获得的分数；
-     标签分数 = 这些得分的均分（1-10）。 */
+     标签分数 = 这些得分的均分（1-10）。标签可以是字符串或 {name} 对象。 */
+  function tagNames(tags) {
+    const names = [];
+    for (const tag of tags || []) {
+      const name = typeof tag === 'string' ? tag : tag && typeof tag.name === 'string' && tag.name;
+      if (name) names.push(name);
+    }
+    return names;
+  }
   function buildTagDb(ratedRows) {
     const acc = new Map();
     for (const row of ratedRows || []) {
       const rate = Number(row && row.rate);
-      const tags = row && row.subject && Array.isArray(row.subject.tags) ? row.subject.tags : [];
-      if (!(rate > 0)) continue;
-      for (const tag of tags) {
-        if (!tag || typeof tag.name !== 'string' || !tag.name) continue;
-        const entry = acc.get(tag.name) || { sum: 0, n: 0 };
+      const tags = tagNames(row && row.subject && row.subject.tags);
+      if (!(rate > 0) || !tags.length) continue;
+      for (const name of tags) {
+        const entry = acc.get(name) || { sum: 0, n: 0 };
         entry.sum += rate;
         entry.n += 1;
-        acc.set(tag.name, entry);
+        acc.set(name, entry);
       }
     }
     const db = new Map();
@@ -32,9 +39,8 @@
      一个已知标签都没有时返回 null，届时推荐评分只由全站分构成。 */
   function tagScore(tags, tagDb) {
     const known = [];
-    for (const tag of tags || []) {
-      if (!tag || typeof tag.name !== 'string' || !tag.name) continue;
-      const score = tagDb ? tagDb.get(tag.name) : undefined;
+    for (const name of tagNames(tags)) {
+      const score = tagDb ? tagDb.get(name) : undefined;
       if (Number.isFinite(score)) known.push(score);
     }
     if (!known.length) return null;

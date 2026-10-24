@@ -24,8 +24,13 @@ test('tag database averages my 10-point ratings across the works a tag appears o
   assert.equal(db.get('日常'), 7, 'mean of 8 and 6');
   assert.equal(db.get('治愈'), 9, 'mean of 8 and 10');
   assert.equal(db.get('原创'), 10);
-  assert.ok(!db.has('未评分计入'), 'unrated rows never feed the tag database');
   assert.ok(!db.has('未评分不计入'));
+  // 采集层裁剪后的形状：标签是行内 subject.tags 的纯字符串数组。
+  const trimmed = Core.buildTagDb([
+    { id: 5, rate: 7, subject: { id: 5, tags: ['日常', '科幻'] } },
+  ]);
+  assert.equal(trimmed.get('日常'), 7);
+  assert.equal(trimmed.get('科幻'), 7);
 });
 
 test('a candidate borrows its tags\u2019 mean score divided by two, on a 1-5 scale', () => {

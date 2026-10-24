@@ -63,10 +63,11 @@
         const id = Number(row && row.subject_id);
         if (!Number.isSafeInteger(id) || id <= 0 || rows.some(existing => existing.id === id)) throw new Error("收藏分页重复或条目无效");
         const subject = row.subject || {};
+        // 保持 buildTagDb 消费的形状：评分挂在 rate，标签挂在 subject.tags。
         rows.push({
           id,
           rate: Number(row.rate) || 0,
-          tags: Array.isArray(subject.tags) ? subject.tags.filter(tag => tag && typeof tag.name === "string").map(tag => tag.name) : [],
+          subject: { id, tags: Array.isArray(subject.tags) ? subject.tags.filter(tag => tag && typeof tag.name === 'string' && tag.name).map(tag => tag.name) : [] },
         });
       }
       if (onProgress) onProgress(Math.min(rows.length, total), total);
