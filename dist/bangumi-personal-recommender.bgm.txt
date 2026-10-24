@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bangumi 个性推荐
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.0
+// @version      1.0.1
 // @description  个人主页的动画与书籍推荐：按标签均分与全站评分折算排序，仅手动更新。
 // @author       wylt
 // @match        https://bgm.tv/*
@@ -124,9 +124,11 @@
      rows 是排行榜接口的条目列表项（自带 platform / tags / rating）。
      排除：我已打分的条目（ratedIds；仅收藏未评分的照常参与）、全站评分
      人数不足 500 的、platform 为 OVA 的。单项分数 1-5：全站分 ÷ 2；
-     标签分 = 标签均分 ÷ 2；推荐评分 = 两项平均，保留 2 位小数。
+     标签分 = 标签均分 ÷ 2；推荐评分 = 两项加权平均（全站 3 : 标签 7，
+     标签分是探索因子，避免全站口碑主导排序），保留 2 位小数。
      排序：推荐评分降序，同分按全站评分人数多者优先。 */
   const MIN_RATINGS = 500;
+  const SITE_WEIGHT = 3, TAG_WEIGHT = 7;
   function scoreCandidates(rows, tagDb, ratedIds, minRatings = MIN_RATINGS) {
     const floor = Number.isFinite(minRatings) ? minRatings : MIN_RATINGS;
     const scored = [];
@@ -148,7 +150,7 @@
         site,
         tag,
         total,
-        final: Number(((tag == null ? site : (site + tag) / 2)).toFixed(2)),
+        final: Number((tag == null ? site : (site * SITE_WEIGHT + tag * TAG_WEIGHT) / (SITE_WEIGHT + TAG_WEIGHT)).toFixed(2)),
       });
     }
     scored.sort((a, b) => b.final - a.final || b.total - a.total || a.id - b.id);
@@ -183,7 +185,7 @@
   "use strict";
   const Core = globalThis.BangumiRecommenderCore;
   if (!Core || document.getElementById("bgmpr-host")) return;
-  const APP_VERSION = "1.0.0";
+  const APP_VERSION = "1.0.1";
 
   const OWNER = "wylt";
   const PAGE_SIZE = 5;

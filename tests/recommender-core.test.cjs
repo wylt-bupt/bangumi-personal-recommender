@@ -45,14 +45,14 @@ test('a candidate borrows its tags\u2019 mean score divided by two, on a 1-5 sca
   assert.equal(Core.tagScore([], db), null);
 });
 
-test('final score averages the site half and the tag score, kept to two decimals', () => {
+test('final score weights site 3 : tag 7, kept to two decimals', () => {
   const db = Core.buildTagDb([{ rate: 9, subject: { tags: [{ name: '科幻' }] } }]);
   const rows = [subject(10, { rating: { score: 7.6, total: 1000 }, tags: [{ name: '科幻' }] })];
   const scored = Core.scoreCandidates(rows, db, new Set());
   assert.equal(scored[0].site, 3.8);
   assert.equal(scored[0].tag, 4.5);
-  assert.equal(scored[0].final, 4.15);
-  // 只用全站分：没有已知标签时平均只有一项。
+  assert.equal(scored[0].final, 4.29, 'exploration factor: (3.8×3 + 4.5×7) / 10');
+  // 只用全站分：没有已知标签时没有可混合的第二项。
   const tagless = Core.scoreCandidates([subject(11, { tags: [{ name: '完全未知' }] })], db, new Set());
   assert.equal(tagless[0].tag, null);
   assert.equal(tagless[0].final, 4);

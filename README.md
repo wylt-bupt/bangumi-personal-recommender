@@ -13,11 +13,16 @@
 
 ## 当前版本
 
-- 个性推荐组件：`1.0.0`（标签均分制），对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
+- 个性推荐组件：`1.0.1`（标签均分制 + 探索因子），对应 [Bangumi 应用 6931](https://bgm.tv/dev/app/6931)；仅更新作者个人开发版本，不提交全站审核。
 - 独立动画回顾：`0.12.3`，对应 [Bangumi 应用 7382](https://bgm.tv/dev/app/7382)；产物为 [用户脚本](dist/bangumi-personal-stats.user.js)和逐字相同的[粘贴版](dist/bangumi-personal-stats.bgm.txt)；仅更新作者个人开发版本，不提交全站审核。
 - 独立活跃度热力图：`1.0.26`，对应 [Bangumi 应用 7057](https://bgm.tv/dev/app/7057)。
 - 独立我的放送表：`1.0.8`，对应 [Bangumi 应用 7211](https://bgm.tv/dev/app/7211)；产物为 [用户脚本](dist/bangumi-personal-calendar.user.js)和逐字相同的[粘贴版](dist/bangumi-personal-calendar.bgm.txt)。
 - 源码：[GitHub 仓库](https://github.com/wylt-bupt/bangumi-personal-recommender)。
+
+## 1.0.1：推荐评分加入探索因子（全站 3 : 标签 7）
+
+- 推荐评分从两项等平均改为加权：**全站评分权重 3、标签评分权重 7**（即 `final = 全站分×0.3 + 标签分×0.7`，仍保留 2 位小数）——标签分充当探索因子，避免全站口碑主导排序；没有已知标签的作品仍只用全站分。
+- 卡片上的两项小字展示不变；排序随之变化（标签契合度高的作品上升）。
 
 ## 1.0.0：彻底重写——标签均分制推荐，动画与书籍两个模块
 

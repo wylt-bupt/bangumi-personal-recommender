@@ -45,7 +45,7 @@ window.fetch = async (input) => {
 };
 /* 预置两份推荐结果缓存：页面一打开就有卡片，「更新」会走上面的夹具重新计算。 */
 const round2 = value => Number(value.toFixed(2));
-const seedItems = (prefix, n) => Array.from({length:n},(_,i)=>({id:9000+i, name:`${prefix}候选${i}`, nameCn:`${prefix}推荐·候选${i}`, image:fixtureImages[i%3], site:round2(4.3-i*0.02), tag:round2(3.9-i*0.015), total:1500-i*10, final:round2(((4.3-i*0.02)+(3.9-i*0.015))/2)}));
+const seedItems = (prefix, n) => Array.from({length:n},(_,i)=>({id:9000+i, name:`${prefix}候选${i}`, nameCn:`${prefix}推荐·候选${i}`, image:fixtureImages[i%3], site:round2(4.3-i*0.02), tag:round2(3.9-i*0.015), total:1500-i*10, final:round2(((4.3-i*0.02)*3+(3.9-i*0.015)*7)/10)}));
 if(!query.has('empty')){
   localStorage.setItem('bgmpr:v3:result:anime', JSON.stringify({storedAt:Date.now(), value:{generatedAt:Date.now(), items:seedItems('动画',30)}}));
   localStorage.setItem('bgmpr:v3:result:book', JSON.stringify({storedAt:Date.now(), value:{generatedAt:Date.now(), items:seedItems('书籍',20)}}));
