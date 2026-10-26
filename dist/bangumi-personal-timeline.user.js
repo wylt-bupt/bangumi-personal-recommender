@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.26
+// @version      1.0.27
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -266,18 +266,20 @@
     :host([data-theme=dark]){--hm-text:#999;--hm-text-dim:#777;--hm-text-strong:#ccc;--hm-heading:#bbb;--hm-accent:#e99aa7;--hm-accent-soft:rgba(233,154,167,.14);--hm-border:rgba(255,255,255,.08);--hm-cell-empty:rgba(255,255,255,.08);--hm-cell-l1:rgba(240,145,153,.32);--hm-cell-l2:rgba(240,112,137,.66);--hm-cell-l3:#ef6889;--hm-panel-bg:rgba(255,255,255,.03);--hm-readout-bg:#262626;--hm-panel-border:rgba(240,145,153,.12)}
     *{box-sizing:border-box}
     #hm-dashboard{min-width:0;color:var(--hm-text);font:12px/1.5 Arial,"Microsoft YaHei",sans-serif;container-type:inline-size}
-    /* 首页右栏空间紧，仍给一张轻卡片；个人主页与「动画回顾」一样无卡片、靠模块头分隔。 */
+    /* 首页右栏空间紧：一张轻卡片、单行标题——标题沿用站内小部件的
+       粉色常规字重，不再有黑色加粗的二级标题；个人主页无卡片、
+       靠模块头分隔。 */
     #hm-dashboard.home-layout{border-radius:10px;padding:12px 15px;background:var(--hm-panel-bg);border:1px solid var(--hm-panel-border);overflow:hidden}
-    /* 模块头：与「动画回顾」「个性推荐」同一套写法（18px 常规字重 + 下划线分隔） */
+    /* 模块头：与「动画回顾」「个性推荐」同一套写法（18px 常规字重 + 下划线分隔），仅个人主页有 */
     #hm-dashboard .module-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;padding:0 0 9px;border-bottom:1px solid var(--hm-border);margin:0 0 14px}
     #hm-dashboard .module-head h2{margin:0;font-size:18px;font-weight:400;line-height:1.4;color:var(--hm-heading)}
-    #hm-dashboard.home-layout .module-head{padding-bottom:8px;margin-bottom:10px}
-    #hm-dashboard.home-layout .module-head h2{font-size:14px;font-weight:700;color:var(--hm-accent)}
     /* 子图：热力图与柱状图共用一条头部行——左标题、中摘要、右图例与控件。 */
     #hm-dashboard .hm-figure{min-width:0}
     #hm-dashboard .hm-figure+.hm-figure{margin-top:16px;padding-top:14px;border-top:1px solid var(--hm-border)}
     #hm-dashboard .hm-fig-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;min-height:24px;margin-bottom:8px;padding-right:10px;font-size:11px;color:var(--hm-text-dim)}
     #hm-dashboard .hm-fig-title{margin:0;font-size:13px;font-weight:600;line-height:1.4;color:var(--hm-text-strong)}
+    /* 首页单行标题：站内小部件同款——粉色、常规字重，与摘要同行。 */
+    #hm-dashboard.home-layout .hm-fig-title{font-size:14px;font-weight:400;color:var(--hm-accent)}
     #hm-dashboard .hm-fig-meta{font-variant-numeric:tabular-nums}
     #hm-dashboard .hm-fig-meta b{font-weight:400;color:var(--hm-accent)}
     #hm-dashboard .hm-fig-meta .sep{color:var(--hm-border)}
@@ -366,9 +368,12 @@
     }
     if (!host.isConnected) return false;
     shadow = host.attachShadow({ mode: 'open' });
-    // 首页右栏只有 350px 宽，柱状图塞进去既挤又难读：首页只留热力图，
-    // 趋势图仅出现在个人主页。没有这块节点，drawTrend 自然不会被调用。
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="${homeLayout ? 'home-layout' : 'profile-layout'}" aria-labelledby="bgmtl-title"><header class="module-head"><h2 id="bgmtl-title">活跃度</h2></header><div class="hm-figure hm-figure-heat"><div class="hm-fig-head"><h3 class="hm-fig-title">活跃热力图</h3><span class="hm-fig-meta" data-role="heat-meta">正在统计…</span><div class="hm-fig-controls"><span class="hm-scale" role="img" aria-label="色块越深代表当日观看集数越多">少<i class="sw-empty"></i><i class="sw-l1"></i><i class="sw-l2"></i><i class="sw-l3"></i>多</span></div></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></div>${homeLayout ? '' : '<div class="hm-figure hm-figure-trend"><div class="hm-trend-area"></div></div>'}</section>`;
+    // 首页右栏只有 350px 宽：只留热力图，标题收成一行（「活跃热力图」沿用
+    // 站内小部件的粉色常规字重，不再叠一层「活跃度」模块头）；趋势图仅出现
+    // 在个人主页——没有这块节点，drawTrend 自然不会被调用。
+    const head = homeLayout ? '' : '<header class="module-head"><h2 id="bgmtl-title">活跃度</h2></header>';
+    const heatTitle = `<h3 class="hm-fig-title"${homeLayout ? ' id="bgmtl-title"' : ''}>活跃热力图</h3>`;
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="${homeLayout ? 'home-layout' : 'profile-layout'}" aria-labelledby="bgmtl-title">${head}<div class="hm-figure hm-figure-heat"><div class="hm-fig-head">${heatTitle}<span class="hm-fig-meta" data-role="heat-meta">正在统计…</span><div class="hm-fig-controls"><span class="hm-scale" role="img" aria-label="色块越深代表当日观看集数越多">少<i class="sw-empty"></i><i class="sw-l1"></i><i class="sw-l2"></i><i class="sw-l3"></i>多</span></div></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></div>${homeLayout ? '' : '<div class="hm-figure hm-figure-trend"><div class="hm-trend-area"></div></div>'}</section>`;
     if (homeLayout) {
       new ResizeObserver(entries => {
         const width = entries[0]?.contentRect.width || 0;

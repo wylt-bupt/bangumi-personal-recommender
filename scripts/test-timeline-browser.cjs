@@ -101,7 +101,9 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.ok(await page.locator('.hm-cell title').allTextContents().then(titles => titles.some(title => title.startsWith(core.dayKey(now)))), 'the current day must remain visible');
     assert.equal(await page.locator('nav,details,input,.platform-row,.week-row').count(), 0, 'the component exposes only the heatmap');
     assert.equal(await page.locator('.hm-trend-area').count(), 0, 'the homepage keeps the heatmap alone; the trend chart belongs to the profile');
-    assert.equal(await page.locator('#hm-dashboard .module-head h2').textContent(), '活跃度');
+    // 首页单行标题：不再有「活跃度」模块头与黑色加粗的二级标题。
+    assert.equal(await page.locator('#hm-dashboard .module-head').count(), 0, 'the homepage merges the title into one row');
+    assert.equal(await page.locator('#hm-dashboard .hm-fig-title').textContent(), '活跃热力图');
     assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-labelledby'), 'bgmtl-title');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
     assert.equal(await page.locator('.hm-scale i').count(), 4);
@@ -120,18 +122,18 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     await page.waitForFunction(() => /日均\s*0\.1\s*集/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-figure-heat .hm-fig-meta').textContent));
     assert.match(await page.locator('.hm-figure-heat .hm-fig-head').textContent(), /活跃热力图\s*近30天活跃\s*3\s*天\s*·\s*日均\s*0\.1\s*集\s*少\s*多/, 'the heatmap shares the sub-figure head row with the bar chart');
     assert.ok(!(await page.locator('.hm-chart-area').textContent()).includes('活跃率'));
-    // 模块头统一为「活跃度」，与「动画回顾」「个性推荐」同一套写法。
-    assert.equal(await page.locator('#hm-dashboard .module-head h2').textContent(), '活跃度');
+    // 首页只有热力图一个子图，标题即「活跃热力图」。
     assert.equal(await page.locator('#hm-dashboard .hm-fig-title').count(), 1, 'the homepage only carries the heatmap sub-figure');
     assert.equal(await page.locator('img').count(), 0, 'remote covers never enter live DOM');
     const style = await page.locator('#hm-dashboard').evaluate(element => {
       const computed = getComputedStyle(element);
-      const title = getComputedStyle(element.querySelector('h2'));
+      const title = getComputedStyle(element.querySelector('.hm-fig-title'));
       const cellWidth = element.querySelector('.hm-cell').getAttribute('width');
-      return { padding: computed.padding, radius: computed.borderRadius, titleSize: title.fontSize, titleColor: title.color, cellWidth };
+      return { padding: computed.padding, radius: computed.borderRadius, titleSize: title.fontSize, titleColor: title.color, titleWeight: title.fontWeight, cellWidth };
     });
     assert.equal(style.padding, '12px 15px'); assert.equal(style.radius, '10px');
     assert.equal(style.titleSize, '14px'); assert.equal(style.titleColor, 'rgb(240, 145, 153)');
+    assert.equal(style.titleWeight, '400', 'the one-line home title is pink regular weight, never black bold');
     assert.equal(style.cellWidth, '9.5');
     assert.ok(await page.locator('#hm-dashboard').evaluate(element => element.classList.contains('home-layout')));
     const heatColors = await page.locator('#hm-dashboard').evaluate(element => ['empty', 'l1', 'l2', 'l3'].map(level => getComputedStyle(element).getPropertyValue(`--hm-cell-${level}`).trim()));

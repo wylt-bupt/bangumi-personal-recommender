@@ -2,7 +2,7 @@
   "name": "bangumi-personal-recommender",
   "version": "1.0.2",
   "statsVersion": "0.12.3",
-  "timelineVersion": "1.0.26",
+  "timelineVersion": "1.0.27",
   "calendarVersion": "1.0.8",
   "private": true,
   "description": "A privacy-first personal recommendation component for Bangumi.",
