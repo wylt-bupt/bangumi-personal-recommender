@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         个人时光机
 // @namespace    https://bgm.tv/user/wylt
-// @version      1.0.27
+// @version      1.0.28
 // @description  活跃度热力图；仅统计每日标记看过的集数，数据保存在浏览器本地。
 // @author       Mikuorz（原版界面），wylt（本地数据适配）
 // @match        https://bgm.tv/*
@@ -373,7 +373,9 @@
     // 在个人主页——没有这块节点，drawTrend 自然不会被调用。
     const head = homeLayout ? '' : '<header class="module-head"><h2 id="bgmtl-title">活跃度</h2></header>';
     const heatTitle = `<h3 class="hm-fig-title"${homeLayout ? ' id="bgmtl-title"' : ''}>活跃热力图</h3>`;
-    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="${homeLayout ? 'home-layout' : 'profile-layout'}" aria-labelledby="bgmtl-title">${head}<div class="hm-figure hm-figure-heat"><div class="hm-fig-head">${heatTitle}<span class="hm-fig-meta" data-role="heat-meta">正在统计…</span><div class="hm-fig-controls"><span class="hm-scale" role="img" aria-label="色块越深代表当日观看集数越多">少<i class="sw-empty"></i><i class="sw-l1"></i><i class="sw-l2"></i><i class="sw-l3"></i>多</span></div></div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></div>${homeLayout ? '' : '<div class="hm-figure hm-figure-trend"><div class="hm-trend-area"></div></div>'}</section>`;
+    // 首页不需要「少→多」色阶图例：单行标题 + 数据摘要已经足够自解释。
+    const scale = homeLayout ? '' : '<div class="hm-fig-controls"><span class="hm-scale" role="img" aria-label="色块越深代表当日观看集数越多">少<i class="sw-empty"></i><i class="sw-l1"></i><i class="sw-l2"></i><i class="sw-l3"></i>多</span></div>';
+    shadow.innerHTML = `<style>${css}</style><section id="hm-dashboard" class="${homeLayout ? 'home-layout' : 'profile-layout'}" aria-labelledby="bgmtl-title">${head}<div class="hm-figure hm-figure-heat"><div class="hm-fig-head">${heatTitle}<span class="hm-fig-meta" data-role="heat-meta">正在统计…</span>${scale}</div><div class="hm-chart-area"><div class="hm-loading">正在整理你的观看进度…</div></div></div>${homeLayout ? '' : '<div class="hm-figure hm-figure-trend"><div class="hm-trend-area"></div></div>'}</section>`;
     if (homeLayout) {
       new ResizeObserver(entries => {
         const width = entries[0]?.contentRect.width || 0;

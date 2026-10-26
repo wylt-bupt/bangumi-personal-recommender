@@ -106,7 +106,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     assert.equal(await page.locator('#hm-dashboard .hm-fig-title').textContent(), '活跃热力图');
     assert.equal(await page.locator('#hm-dashboard').getAttribute('aria-labelledby'), 'bgmtl-title');
     assert.equal(await page.locator('#hm-dashboard p').count(), 0, 'no redundant subtitle copy');
-    assert.equal(await page.locator('.hm-scale i').count(), 4);
+    assert.equal(await page.locator('#hm-dashboard .hm-scale').count(), 0, 'the homepage does not carry the colour-scale legend');
     assert.match(await page.locator('.hm-cell').last().locator('title').textContent(), /\d{4}-\d{2}-\d{2}: \d+ 集/);
     const monthLabelBoxes = await page.locator('.hm-month-label').evaluateAll(labels => labels.map(label => {
       const box = label.getBBox(), date = label.getAttribute('data-date');
@@ -120,7 +120,7 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
     const firstDay = core.dayKey(now - core.DAY);
     assert.ok((await page.locator('.hm-cell title').allTextContents()).includes(`${firstDay}: 1 集`), 'a collection on the same day must not add another episode');
     await page.waitForFunction(() => /日均\s*0\.1\s*集/.test(document.querySelector('#bgmtl-personal').shadowRoot.querySelector('.hm-figure-heat .hm-fig-meta').textContent));
-    assert.match(await page.locator('.hm-figure-heat .hm-fig-head').textContent(), /活跃热力图\s*近30天活跃\s*3\s*天\s*·\s*日均\s*0\.1\s*集\s*少\s*多/, 'the heatmap shares the sub-figure head row with the bar chart');
+    assert.match(await page.locator('.hm-figure-heat .hm-fig-head').textContent(), /活跃热力图\s*近30天活跃\s*3\s*天\s*·\s*日均\s*0\.1\s*集/, 'the homepage head row is title + summary only');
     assert.ok(!(await page.locator('.hm-chart-area').textContent()).includes('活跃率'));
     // 首页只有热力图一个子图，标题即「活跃热力图」。
     assert.equal(await page.locator('#hm-dashboard .hm-fig-title').count(), 1, 'the homepage only carries the heatmap sub-figure');
@@ -168,9 +168,12 @@ const profileHTML = '<!doctype html><html lang="zh-CN" data-theme="light"><meta 
       assert.ok(await page.locator('.hm-figure-heat .hm-fig-head').evaluate(head => {
         const bounds = head.getBoundingClientRect();
         const meta = head.querySelector('.hm-fig-meta').getBoundingClientRect();
-        const controls = head.querySelector('.hm-fig-controls').getBoundingClientRect();
-        const overlap = !(meta.right <= controls.left || controls.right <= meta.left || meta.bottom <= controls.top || controls.bottom <= meta.top);
-        return !overlap && meta.right <= bounds.right + 1 && controls.right <= bounds.right + 1;
+        const controls = head.querySelector('.hm-fig-controls');
+        // 首页没有色阶图例：只要求摘要完整落在标题行内。
+        if (!controls) return meta.right <= bounds.right + 1;
+        const box = controls.getBoundingClientRect();
+        const overlap = !(meta.right <= box.left || box.right <= meta.left || meta.bottom <= box.top || box.bottom <= meta.top);
+        return !overlap && meta.right <= bounds.right + 1 && box.right <= bounds.right + 1;
       }), `${width}px ${theme} means and legend must fit without clipping or overlap`);
       await page.screenshot({ path: `artifacts/timeline-heatmap-${width}-${theme}.png`, fullPage: true });
     }
